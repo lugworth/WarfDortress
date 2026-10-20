@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidSave(data) {
+      return data.keys().hasAll([
+          'id', 'userId', 'worldName', 'dwarvenName', 'seed',
+          'ticks', 'year', 'season', 'wealth', 'population', 'resources', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'userId', 'worldName', 'dwarvenName', 'seed',
+          'ticks', 'year', 'season', 'wealth', 'population', 'resources', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.userId is string && data.userId.size() <= 128 && data.userId == request.auth.uid
+        && data.worldName is string && data.worldName.size() <= 120
+        && data.dwarvenName is string && data.dwarvenName.size() <= 80
+        && data.seed is string && data.seed.size() <= 64
+        && data.ticks is int && data.ticks >= 0
+        && data.year is int && data.year >= 1
+        && data.season is string && data.season.size() <= 40
+        && data.wealth is int && data.wealth >= 0
+        && data.population is int && data.population >= 0 && data.population <= 200
+        && data.resources is map && data.resources.size() <= 16
+        && data.updatedAt == request.time;
+    }
+
+    match /saves/{saveId} {
+      allow get: if isSignedIn() && isValidId(saveId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(saveId) && isValidSave(incoming());
+      allow update: if isSignedIn()
+        && isValidId(saveId)
+        && isValidSave(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'worldName', 'dwarvenName', 'seed', 'ticks', 'year',
+          'season', 'wealth', 'population', 'resources', 'updatedAt'
+        ]);
+      allow delete: if isSignedIn() && isValidId(saveId) && existing().userId == request.auth.uid;
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "ASCII Fortress",
+  "description": "A modern, intuitive dwarf fortress style game with ASCII graphics, voice advisors, and AI-driven storytelling.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
