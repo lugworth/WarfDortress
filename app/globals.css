@@ -1,10 +1,172 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Fortress Mono";
+  src: url("/fonts/DejaVuSansMono.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fortress Mono";
+  src: url("/fonts/DejaVuSansMono-Bold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+.fortress-ui {
+  --ui-bg: #080c0b;
+  --ui-panel: #101815;
+  --ui-border: #40534a;
+  --ui-selection: #25392f;
+  --ui-muted: #a0b0a7;
+  --ui-text: #d9e3dd;
+  --ui-bright: #ffffff;
+  --ui-accent: #ff8dc7;
+  --ui-success: #9fe4a4;
+  --ui-warning: #ffc285;
+  --ui-danger: #ff9999;
+  --ui-info: #82e3ec;
+  --ui-blue: #93baff;
+  --ui-violet: #d5b0ff;
+  --ui-good: var(--ui-success);
+  --ui-warm: var(--ui-warning);
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  font-family: "Fortress Mono", ui-monospace, monospace;
+  font-size: var(--ui-font-size, 14px);
+  color-scheme: dark;
+}
+.fortress-ui[data-theme="contrast"] {
+  --ui-bg: #000000;
+  --ui-panel: #080e16;
+  --ui-border: #a3b2c2;
+  --ui-selection: #25384f;
+  --ui-muted: #c5cdd6;
+  --ui-text: #ffffff;
+  --ui-accent: #ffe166;
+  --ui-success: #a5ffbd;
+  --ui-warning: #ffd49c;
+  --ui-danger: #ffaaaa;
+  --ui-info: #97ebff;
+  --ui-blue: #aecaff;
+  --ui-violet: #e4c7ff;
+}
+.fortress-ui .font-mono {
+  font-family: "Fortress Mono", ui-monospace, monospace;
+}
+.fortress-ui :is(.text-xs, .text-sm, .text-\[10px\], .text-\[11px\]) {
+  font-size: var(--ui-font-size, 14px);
+  line-height: 1.45;
+}
+.fortress-ui button {
+  min-height: 32px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.fortress-ui :is(button, input, select, textarea, canvas):focus-visible {
+  outline: 3px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+.fortress-ui :is(input, select, textarea) {
+  background: var(--ui-panel);
+  color: var(--ui-text);
+  border: 1px solid var(--ui-border);
+  border-radius: 0;
+  min-height: 36px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.3em 0.45em;
+  font: inherit;
+}
+.fortress-ui input[type="checkbox"] {
+  width: 22px;
+  min-height: 22px;
+  flex-shrink: 0;
+  accent-color: var(--ui-accent);
+}
+.fortress-ui button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.fortress-ui .orders-panel {
+  width: clamp(18rem, calc(var(--ui-font-size) * 22), 28rem);
+  max-width: 38vw;
+}
+.fortress-shell {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.fortress-status {
+  max-height: 28dvh;
+  overflow-y: auto;
+}
+.map-viewport > div:first-child {
+  flex-shrink: 0;
+}
+.fortress-ui summary {
+  cursor: pointer;
+  min-height: 30px;
+}
+@media (max-width: 1023px) {
+  .fortress-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    padding-bottom: 4px;
+  }
+  .fortress-actions button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .map-controls {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .map-controls > * {
+    flex-shrink: 0;
+  }
+  .map-controls button {
+    white-space: nowrap;
+  }
+  .map-depth-title {
+    max-width: 90vw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+.fortress-ui[data-reduced-motion="true"] *,
+.fortress-ui[data-reduced-motion="true"] *::before,
+.fortress-ui[data-reduced-motion="true"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fortress-ui *,
+  .fortress-ui *::before,
+  .fortress-ui *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+@media (pointer: coarse) {
+  .fortress-ui button {
+    min-height: 44px;
+  }
+}
+
 @layer base {
   body {
     background-color: #000000;
     color: #d0d0d0;
-    font-family: ui-monospace, SFMono-Regular, "Cascadia Code", "Roboto Mono", Menlo, Monaco, Consolas, monospace;
+    font-family:
+      ui-monospace, SFMono-Regular, "Cascadia Code", "Roboto Mono", Menlo,
+      Monaco, Consolas, monospace;
   }
 
   .custom-scrollbar::-webkit-scrollbar {
@@ -22,8 +184,8 @@
     background: #808080;
   }
 
-  button, [role="button"] {
+  button,
+  [role="button"] {
     white-space: nowrap;
   }
 }
-

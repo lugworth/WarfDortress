@@ -3,142 +3,13 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useGame } from './GameProvider';
 import {
-  DesignationType,
   DwarfLabor,
   LaborPresetId,
   MilitiaDoctrine,
 } from '@/lib/types';
 import { QUIRKS } from '@/lib/guild';
-import { TOOL_KEYS, TRAP_DAMAGE } from '@/lib/game-rules';
-import { getConstructionCost, scanWorldStrata } from '@/lib/game-engine';
-
-const DESIGNATION_TOOLS: {
-  id: DesignationType;
-  label: string;
-  color: string;
-  desc: string;
-}[] = [
-  {
-    id: 'MINE',
-    label: 'MINE ROCK / ORE',
-    color: 'text-[#ff9900]',
-    desc: 'Excavate rock and ore veins',
-  },
-  {
-    id: 'STAIRS',
-    label: 'CARVE STAIRS',
-    color: 'text-[#ff0099]',
-    desc: 'Link current Z-level with Z+1 cavern',
-  },
-  {
-    id: 'RECLAIM_RELIC',
-    label: 'RECLAIM RELIC (☼)',
-    color: 'text-[#00ffff]',
-    desc: 'Recover ancient subterranean artifact',
-  },
-  {
-    id: 'CHOP',
-    label: 'FELL TIMBER',
-    color: 'text-[#33ff00]',
-    desc: 'Chop trees for logs (+4 Wood)',
-  },
-  {
-    id: 'GATHER',
-    label: 'GATHER SHRUBS',
-    color: 'text-[#33ff00]',
-    desc: 'Forage plants (+4 Food)',
-  },
-  {
-    id: 'BUILD_SMELTER',
-    label: 'BUILD SMELTERY (£)',
-    color: 'text-[#ff9900]',
-    desc: 'Smelt Iron Ore into Steel Bars',
-  },
-  {
-    id: 'BUILD_FORGE',
-    label: 'BUILD FORGE (⚒)',
-    color: 'text-[#00ffff]',
-    desc: 'Forge Runed Weapons & Steel Armor',
-  },
-  {
-    id: 'BUILD_TAVERN',
-    label: 'BUILD TAVERN (♫)',
-    color: 'text-[#cc00ff]',
-    desc: 'Hearth hall for feasts & morale buffs',
-  },
-  {
-    id: 'BUILD_TEMPLE',
-    label: 'BUILD TEMPLE (Ψ)',
-    color: 'text-[#ff0099]',
-    desc: 'Sanctuary granting meditative serenity',
-  },
-  {
-    id: 'BUILD_DEPOT',
-    label: 'TRADE DEPOT (¤)',
-    color: 'text-[#00ffff]',
-    desc: 'Caravan plaza (+15% export trade value)',
-  },
-  {
-    id: 'BUILD_TRAP',
-    label: 'STONE TRAP (^)',
-    color: 'text-[#ff0000]',
-    desc: `Deadfall trap (${TRAP_DAMAGE} damage to hostiles)`,
-  },
-  {
-    id: 'BUILD_WALL',
-    label: 'STONE WALL',
-    color: 'text-[#ffffff]',
-    desc: 'Fortified masonry wall blocking raiders',
-  },
-  {
-    id: 'BUILD_DOOR',
-    label: 'STONE DOOR (+)',
-    color: 'text-[#d0d0d0]',
-    desc: 'Install secure gateway portal',
-  },
-  {
-    id: 'STOCKPILE',
-    label: 'STOCKPILE ZONE',
-    color: 'text-[#0066ff]',
-    desc: 'Central storage for fortress wares',
-  },
-  {
-    id: 'BUILD_FARM',
-    label: 'PLUMP HELMET FARM',
-    color: 'text-[#33ff00]',
-    desc: 'Subterranean mushrooms for food & ale',
-  },
-  {
-    id: 'BUILD_STILL',
-    label: 'BREWERY STILL',
-    color: 'text-[#cc00ff]',
-    desc: 'Distill Plump Helmets into Dwarven Ale',
-  },
-  {
-    id: 'BUILD_MASON',
-    label: 'MASON WORKSHOP',
-    color: 'text-[#00ffff]',
-    desc: 'Carve stone thrones, statues & coffers',
-  },
-  {
-    id: 'BUILD_CARPENTER',
-    label: 'CARPENTER SHOP',
-    color: 'text-[#ff9900]',
-    desc: 'Craft wooden beds, barrels & shields',
-  },
-  {
-    id: 'BUILD_BED',
-    label: 'DWARVEN BED',
-    color: 'text-[#33ff00]',
-    desc: 'Quarters for fast fatigue recovery',
-  },
-  {
-    id: 'CANCEL',
-    label: 'CLEAR ORDERS',
-    color: 'text-[#ff0000]',
-    desc: 'Remove pending designations in box',
-  },
-];
+import { scanWorldStrata } from '@/lib/game-engine';
+import ToolPicker from './ToolPicker';
 
 const ALL_LABORS: DwarfLabor[] = [
   'MINING',
@@ -156,8 +27,6 @@ export default function Sidebar() {
     gameState,
     currentZ,
     setCurrentZ,
-    selectedTool,
-    setSelectedTool,
     selectedDwarfId,
     setSelectedDwarfId,
     toggleDwarfLabor,
@@ -263,9 +132,9 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-full h-full bg-[#101010] flex flex-col font-mono text-xs select-none overflow-hidden text-[#d0d0d0]">
+    <aside className="w-full h-full bg-[var(--ui-panel)] flex flex-col font-mono text-xs select-none overflow-hidden text-[var(--ui-text)]">
       {/* Top 4-Tab Selector */}
-      <div className="grid grid-cols-4 border-b border-[#202020] bg-[#000000] shrink-0">
+      <div className="grid grid-cols-4 border-b border-[var(--ui-border)] bg-[var(--ui-bg)] shrink-0">
         {(
           [
             { id: 'DESIGNATE', label: '[BUILD]' },
@@ -278,10 +147,10 @@ export default function Sidebar() {
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`py-2 px-0.5 text-center transition-colors border-r border-[#202020] last:border-r-0 whitespace-nowrap flex items-center justify-center shrink-0 text-[11px] ${
+            className={`py-2 px-0.5 text-center transition-colors border-r border-[var(--ui-border)] last:border-r-0 whitespace-nowrap flex items-center justify-center shrink-0 text-[11px] ${
               activeTab === tab.id
-                ? 'bg-[#101010] text-[#ff0099] font-bold border-b-2 border-b-[#ff0099]'
-                : 'text-[#808080] hover:text-[#d0d0d0]'
+                ? 'bg-[var(--ui-panel)] text-[var(--ui-accent)] font-bold border-b-2 border-b-[var(--ui-accent)]'
+                : 'text-[var(--ui-muted)] hover:text-[var(--ui-text)]'
             }`}
           >
             {tab.label}
@@ -291,50 +160,16 @@ export default function Sidebar() {
 
       {/* Tab Content Area */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
-        {activeTab === 'DESIGNATE' && (
-          <div className="space-y-1.5">
-            <div className="text-[11px] text-[#808080] pb-1 border-b border-[#202020] flex items-center justify-between">
-              <span>SELECT TOOL &amp; DRAG ON MAP</span>
-              <span className="text-[#00ffff]">Z-{currentZ}</span>
-            </div>
-
-            {DESIGNATION_TOOLS.map((tool) => {
-              const keyHint = Object.entries(TOOL_KEYS).find(([, id]) => id === tool.id)?.[0].toUpperCase() || '';
-              const isSelected = selectedTool === tool.id;
-              return (
-                <button
-                  key={tool.id}
-                  type="button"
-                  onClick={() => setSelectedTool(tool.id)}
-                  className={`w-full text-left p-2 border transition-colors ${
-                    isSelected
-                      ? 'bg-[#202020] border-[#ff0099]'
-                      : 'bg-[#000000] border-[#202020] hover:border-[#808080]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className={`font-bold whitespace-nowrap shrink-0 ${tool.color}`}>
-                      [{keyHint}: {tool.label}]
-                    </span>
-                    <span className="text-[10px] text-[#808080] tabular-nums whitespace-nowrap shrink-0">
-                      {Object.entries(getConstructionCost(tool.id)).map(([key, value]) => `${value} ${key}`).join(', ') || 'Free'}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-[#808080] mt-0.5 leading-snug">{tool.desc}</div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {activeTab === 'DESIGNATE' && <ToolPicker />}
 
         {activeTab === 'DWARVES' && (
           <div className="space-y-2.5">
             {/* Militia Command & Doctrine Box */}
-            <div className="p-2 bg-[#000000] border border-[#ff0000]/60 space-y-1.5">
+            <div className="p-2 bg-[var(--ui-bg)] border border-[var(--ui-danger)]/60 space-y-1.5">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-[#ff0000] font-bold">⚔ MILITIA DOCTRINE</span>
-                <span className="text-[#808080] tabular-nums">
-                  HOSTILES: <strong className="text-[#ff0000]">{gameState.hostiles.length}</strong>
+                <span className="text-[var(--ui-danger)] font-bold">⚔ MILITIA DOCTRINE</span>
+                <span className="text-[var(--ui-muted)] tabular-nums">
+                  HOSTILES: <strong className="text-[var(--ui-danger)]">{gameState.hostiles.length}</strong>
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-1">
@@ -351,8 +186,8 @@ export default function Sidebar() {
                     onClick={() => setMilitiaDoctrine(doc.id)}
                     className={`py-1 px-1 text-[10px] border text-center whitespace-nowrap shrink-0 transition-colors ${
                       gameState.militiaDoctrine === doc.id
-                        ? 'border-[#ff0000] bg-[#202020] text-[#ff0000] font-bold'
-                        : 'border-[#202020] text-[#808080] hover:text-[#ffffff]'
+                        ? 'border-[var(--ui-danger)] bg-[var(--ui-border)] text-[var(--ui-danger)] font-bold'
+                        : 'border-[var(--ui-border)] text-[var(--ui-muted)] hover:text-[var(--ui-bright)]'
                     }`}
                   >
                     {doc.label}
@@ -362,31 +197,31 @@ export default function Sidebar() {
               <button
                 type="button"
                 onClick={triggerGoblinRaid}
-                className="w-full py-1 px-2 border border-[#ff9900] text-[#ff9900] hover:bg-[#202020] hover:text-[#ffffff] text-[10px] font-bold text-center whitespace-nowrap shrink-0"
+                className="w-full py-1 px-2 border border-[var(--ui-warning)] text-[var(--ui-warning)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] text-[10px] font-bold text-center whitespace-nowrap shrink-0"
               >
                 [ ! SOUND WAR HORN (TEST GOBLIN RAID) ]
               </button>
             </div>
 
             {/* Clan-Wide Labor Presets */}
-            <div className="p-2 bg-[#000000] border border-[#202020] space-y-1.5">
-              <div className="text-[11px] text-[#00ffff] font-bold">
+            <div className="p-2 bg-[var(--ui-bg)] border border-[var(--ui-border)] space-y-1.5">
+              <div className="text-[11px] text-[var(--ui-info)] font-bold">
                 CLAN-WIDE LABOR PRESETS (ONE-CLICK)
               </div>
               <div className="grid grid-cols-2 gap-1">
                 {(
                   [
-                    { id: 'ALL_HANDS', label: '[ ALL-HANDS ]', color: 'text-[#33ff00]' },
-                    { id: 'MINING_DELVE', label: '[ DEEP MINERS ]', color: 'text-[#ff9900]' },
-                    { id: 'SMITH_FORTIFY', label: '[ SMITH & ARMS ]', color: 'text-[#00ffff]' },
-                    { id: 'HARVEST_BREW', label: '[ FARM & BREW ]', color: 'text-[#cc00ff]' },
+                    { id: 'ALL_HANDS', label: '[ ALL-HANDS ]', color: 'text-[var(--ui-success)]' },
+                    { id: 'MINING_DELVE', label: '[ DEEP MINERS ]', color: 'text-[var(--ui-warning)]' },
+                    { id: 'SMITH_FORTIFY', label: '[ SMITH & ARMS ]', color: 'text-[var(--ui-info)]' },
+                    { id: 'HARVEST_BREW', label: '[ FARM & BREW ]', color: 'text-[var(--ui-violet)]' },
                   ] as { id: LaborPresetId; label: string; color: string }[]
                 ).map((preset) => (
                   <button
                     key={preset.id}
                     type="button"
                     onClick={() => applyPreset(preset.id)}
-                    className={`py-1 px-1.5 border border-[#202020] bg-[#101010] hover:bg-[#202020] text-[10px] font-bold whitespace-nowrap shrink-0 ${preset.color}`}
+                    className={`py-1 px-1.5 border border-[var(--ui-border)] bg-[var(--ui-panel)] hover:bg-[var(--ui-border)] text-[10px] font-bold whitespace-nowrap shrink-0 ${preset.color}`}
                   >
                     {preset.label}
                   </button>
@@ -403,12 +238,12 @@ export default function Sidebar() {
                   onClick={() => setSelectedDwarfId(dwarf.id)}
                   className={`p-2 border cursor-pointer transition-colors ${
                     isSelected
-                      ? 'bg-[#202020] border-[#ff0099]'
-                      : 'bg-[#000000] border-[#202020] hover:border-[#808080]'
+                      ? 'bg-[var(--ui-border)] border-[var(--ui-accent)]'
+                      : 'bg-[var(--ui-bg)] border-[var(--ui-border)] hover:border-[var(--ui-muted)]'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1">
-                    <div className="font-bold text-[#ffffff] flex items-center gap-1.5 min-w-0">
+                    <div className="font-bold text-[var(--ui-bright)] flex items-center gap-1.5 min-w-0">
                       <span style={{ color: dwarf.color }}>{dwarf.char}</span>
                       <span className="truncate">{dwarf.name}</span>
                     </div>
@@ -419,25 +254,25 @@ export default function Sidebar() {
                           e.stopPropagation();
                           jumpToLocation(dwarf.x, dwarf.y, dwarf.z);
                         }}
-                        className="text-[10px] text-[#00ffff] hover:text-[#ffffff] px-1 border border-[#202020] whitespace-nowrap shrink-0"
+                        className="text-[10px] text-[var(--ui-info)] hover:text-[var(--ui-bright)] px-1 border border-[var(--ui-border)] whitespace-nowrap shrink-0"
                       >
                         [Z-{dwarf.z}]
                       </button>
                     </div>
                   </div>
 
-                  <div className="text-[11px] text-[#00ffff] mt-0.5 flex items-center justify-between gap-1">
+                  <div className="text-[11px] text-[var(--ui-info)] mt-0.5 flex items-center justify-between gap-1">
                     <span className="truncate">
-                      {dwarf.title} {'//'} <span className="text-[#33ff00]">{dwarf.state}</span>
+                      {dwarf.title} {'//'} <span className="text-[var(--ui-success)]">{dwarf.state}</span>
                     </span>
                     <span className="text-[10px] tabular-nums flex items-center gap-1 shrink-0">
                       {dwarf.weaponEquipped && (
-                        <span className="text-[#ff9900] whitespace-nowrap shrink-0" title="Runed Battle Axe Equipped">
+                        <span className="text-[var(--ui-warning)] whitespace-nowrap shrink-0" title="Runed Battle Axe Equipped">
                           [⚔AXE]
                         </span>
                       )}
                       {dwarf.armorEquipped && (
-                        <span className="text-[#00ffff] whitespace-nowrap shrink-0" title="Steel Plate Mail Equipped">
+                        <span className="text-[var(--ui-info)] whitespace-nowrap shrink-0" title="Steel Plate Mail Equipped">
                           [🛡MAIL]
                         </span>
                       )}
@@ -445,36 +280,36 @@ export default function Sidebar() {
                   </div>
 
                   {/* Vital Needs & HP Readout */}
-                  <div className="grid grid-cols-3 gap-1 mt-2 text-[10px] tabular-nums bg-[#101010] p-1.5 border border-[#202020]">
+                  <div className="grid grid-cols-3 gap-1 mt-2 text-[10px] tabular-nums bg-[var(--ui-panel)] p-1.5 border border-[var(--ui-border)]">
                     <div>
-                      <span className="text-[#808080]">HP:</span>{' '}
-                      <span className={dwarf.hp < 50 ? 'text-[#ff0000]' : 'text-[#33ff00]'}>
+                      <span className="text-[var(--ui-muted)]">HP:</span>{' '}
+                      <span className={dwarf.hp < 50 ? 'text-[var(--ui-danger)]' : 'text-[var(--ui-success)]'}>
                         {dwarf.hp}/{dwarf.maxHp}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[#808080]">ALE:</span>{' '}
-                      <span className={dwarf.thirst < 30 ? 'text-[#ff0000]' : 'text-[#cc00ff]'}>
+                      <span className="text-[var(--ui-muted)]">ALE:</span>{' '}
+                      <span className={dwarf.thirst < 30 ? 'text-[var(--ui-danger)]' : 'text-[var(--ui-violet)]'}>
                         {Math.round(dwarf.thirst)}%
                       </span>
                     </div>
                     <div>
-                      <span className="text-[#808080]">MIRTH:</span>{' '}
-                      <span className="text-[#ff0099]">{Math.round(dwarf.happiness)}%</span>
+                      <span className="text-[var(--ui-muted)]">MIRTH:</span>{' '}
+                      <span className="text-[var(--ui-accent)]">{Math.round(dwarf.happiness)}%</span>
                     </div>
                   </div>
 
-                  {dwarf.quirk && <p className="mt-1 text-xs text-[#ff0099]" title={QUIRKS[dwarf.quirk].description}>{QUIRKS[dwarf.quirk].name}</p>}
+                  {dwarf.quirk && <p className="mt-1 text-xs text-[var(--ui-accent)]" title={QUIRKS[dwarf.quirk].description}>{QUIRKS[dwarf.quirk].name}</p>}
                   {/* Recent Thought */}
                   {dwarf.thought && (
-                    <div className="text-[10px] text-[#808080] italic mt-1.5 truncate">
+                    <div className="text-[10px] text-[var(--ui-muted)] italic mt-1.5 truncate">
                       &ldquo;{dwarf.thought}&rdquo;
                     </div>
                   )}
 
                   {/* Labor Toggles (8 Labors) */}
-                  <div className="mt-2 pt-1.5 border-t border-[#202020]">
-                    <div className="text-[10px] text-[#808080] mb-1">ASSIGNED LABORS:</div>
+                  <div className="mt-2 pt-1.5 border-t border-[var(--ui-border)]">
+                    <div className="text-[10px] text-[var(--ui-muted)] mb-1">ASSIGNED LABORS:</div>
                     <div className="flex flex-wrap gap-1">
                       {ALL_LABORS.map((labor) => {
                         const active = dwarf.labors[labor];
@@ -488,8 +323,8 @@ export default function Sidebar() {
                             }}
                             className={`px-1 py-0.5 text-[10px] border transition-colors whitespace-nowrap shrink-0 ${
                               active
-                                ? 'border-[#33ff00] text-[#33ff00] bg-[#101010]'
-                                : 'border-[#202020] text-[#808080]'
+                                ? 'border-[var(--ui-success)] text-[var(--ui-success)] bg-[var(--ui-panel)]'
+                                : 'border-[var(--ui-border)] text-[var(--ui-muted)]'
                             }`}
                           >
                             [{active ? 'X' : ' '} {labor.slice(0, 5)}]
@@ -507,74 +342,74 @@ export default function Sidebar() {
         {activeTab === 'STOCKS' && (
           <div className="space-y-3">
             {/* Full Stockpile & Armory Inventory */}
-            <div className="bg-[#000000] border border-[#202020] p-2.5">
-              <div className="text-[#ff0099] font-bold border-b border-[#202020] pb-1 mb-2 flex items-center justify-between">
+            <div className="bg-[var(--ui-bg)] border border-[var(--ui-border)] p-2.5">
+              <div className="text-[var(--ui-accent)] font-bold border-b border-[var(--ui-border)] pb-1 mb-2 flex items-center justify-between">
                 <span>FORTRESS VAULT &amp; ARMORY</span>
-                <span className="text-[#00ffff] tabular-nums">{gameState.resources.wealth} WLTH</span>
+                <span className="text-[var(--ui-info)] tabular-nums">{gameState.resources.wealth} WLTH</span>
               </div>
               <div className="space-y-1 tabular-nums text-xs">
                 <div className="flex justify-between">
-                  <span className="text-[#808080]">SMELTED STEEL BARS:</span>
-                  <span className="text-[#00ffff] font-bold">{gameState.resources.steelBars}</span>
+                  <span className="text-[var(--ui-muted)]">SMELTED STEEL BARS:</span>
+                  <span className="text-[var(--ui-info)] font-bold">{gameState.resources.steelBars}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#808080]">RUNED WEAPONS (⚔):</span>
-                  <span className="text-[#ff9900] font-bold">{gameState.resources.weapons}</span>
+                  <span className="text-[var(--ui-muted)]">RUNED WEAPONS (⚔):</span>
+                  <span className="text-[var(--ui-warning)] font-bold">{gameState.resources.weapons}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#808080]">STEEL PLATE ARMOR (🛡):</span>
-                  <span className="text-[#33ff00] font-bold">{gameState.resources.armor}</span>
+                  <span className="text-[var(--ui-muted)]">STEEL PLATE ARMOR (🛡):</span>
+                  <span className="text-[var(--ui-success)] font-bold">{gameState.resources.armor}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#808080]">RECLAIMED RELICS (☼):</span>
-                  <span className="text-[#ff0099] font-bold">{gameState.resources.relics}</span>
+                  <span className="text-[var(--ui-muted)]">RECLAIMED RELICS (☼):</span>
+                  <span className="text-[var(--ui-accent)] font-bold">{gameState.resources.relics}</span>
                 </div>
-                <div className="border-t border-[#202020] my-1 pt-1 flex justify-between">
-                  <span className="text-[#808080]">ROUGH STONE:</span>
-                  <span className="text-[#ffffff] font-bold">{gameState.resources.stone}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#808080]">TIMBER LOGS:</span>
-                  <span className="text-[#ff9900] font-bold">{gameState.resources.wood}</span>
+                <div className="border-t border-[var(--ui-border)] my-1 pt-1 flex justify-between">
+                  <span className="text-[var(--ui-muted)]">ROUGH STONE:</span>
+                  <span className="text-[var(--ui-bright)] font-bold">{gameState.resources.stone}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#808080]">IRON ORE:</span>
-                  <span className="text-[#ff9900] font-bold">{gameState.resources.ironOre}</span>
+                  <span className="text-[var(--ui-muted)]">TIMBER LOGS:</span>
+                  <span className="text-[var(--ui-warning)] font-bold">{gameState.resources.wood}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#808080]">GOLD ORE:</span>
-                  <span className="text-[#ff0099] font-bold">{gameState.resources.goldOre}</span>
+                  <span className="text-[var(--ui-muted)]">IRON ORE:</span>
+                  <span className="text-[var(--ui-warning)] font-bold">{gameState.resources.ironOre}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#808080]">PLUMP HELMET FOOD:</span>
-                  <span className="text-[#33ff00] font-bold">{gameState.resources.food}</span>
+                  <span className="text-[var(--ui-muted)]">GOLD ORE:</span>
+                  <span className="text-[var(--ui-accent)] font-bold">{gameState.resources.goldOre}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#808080]">DWARVEN ALE:</span>
-                  <span className="text-[#cc00ff] font-bold">{gameState.resources.ale}</span>
+                  <span className="text-[var(--ui-muted)]">PLUMP HELMET FOOD:</span>
+                  <span className="text-[var(--ui-success)] font-bold">{gameState.resources.food}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#808080]">CRAFTED FURNITURE:</span>
-                  <span className="text-[#00ffff] font-bold">{gameState.resources.furniture}</span>
+                  <span className="text-[var(--ui-muted)]">DWARVEN ALE:</span>
+                  <span className="text-[var(--ui-violet)] font-bold">{gameState.resources.ale}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--ui-muted)]">CRAFTED FURNITURE:</span>
+                  <span className="text-[var(--ui-info)] font-bold">{gameState.resources.furniture}</span>
                 </div>
               </div>
             </div>
 
             {/* Active Workshop Work Orders with AUTO-REPEAT Toggles */}
-            <div className="bg-[#000000] border border-[#202020] p-2.5">
-              <div className="text-[#00ffff] font-bold border-b border-[#202020] pb-1 mb-2">
+            <div className="bg-[var(--ui-bg)] border border-[var(--ui-border)] p-2.5">
+              <div className="text-[var(--ui-info)] font-bold border-b border-[var(--ui-border)] pb-1 mb-2">
                 WORKSHOP PRODUCTION QUEUE
               </div>
               <div className="space-y-1.5 mb-3">
                 {gameState.workOrders.map((order) => (
                   <div
                     key={order.id}
-                    className="flex items-center justify-between gap-1 bg-[#101010] p-1.5 border border-[#202020]"
+                    className="flex items-center justify-between gap-1 bg-[var(--ui-panel)] p-1.5 border border-[var(--ui-border)]"
                   >
                     <div className="min-w-0">
-                      <div className="text-[#ffffff] truncate text-[11px]">{order.title}</div>
-                      <div className="text-[10px] text-[#808080] tabular-nums">
-                        Left: <strong className="text-[#ff0099]">{order.remaining}x</strong> ·{' '}
+                      <div className="text-[var(--ui-bright)] truncate text-[11px]">{order.title}</div>
+                      <div className="text-[10px] text-[var(--ui-muted)] tabular-nums">
+                        Left: <strong className="text-[var(--ui-accent)]">{order.remaining}x</strong> ·{' '}
                         {order.workshop.replace('WORKSHOP_', '')}
                       </div>
                     </div>
@@ -584,8 +419,8 @@ export default function Sidebar() {
                         onClick={() => toggleWorkOrderAutoRepeat(order.id)}
                         className={`px-1 py-0.5 text-[10px] border whitespace-nowrap shrink-0 ${
                           order.autoRepeat
-                            ? 'border-[#33ff00] text-[#33ff00] bg-[#000000] font-bold'
-                            : 'border-[#202020] text-[#808080] hover:text-[#ffffff]'
+                            ? 'border-[var(--ui-success)] text-[var(--ui-success)] bg-[var(--ui-bg)] font-bold'
+                            : 'border-[var(--ui-border)] text-[var(--ui-muted)] hover:text-[var(--ui-bright)]'
                         }`}
                       >
                         [{order.autoRepeat ? 'AUTO:ON' : 'AUTO:OFF'}]
@@ -593,7 +428,7 @@ export default function Sidebar() {
                       <button
                         type="button"
                         onClick={() => removeWorkOrder(order.id)}
-                        className="px-1 py-0.5 text-[10px] border border-[#202020] text-[#ff0000] hover:bg-[#202020] whitespace-nowrap shrink-0"
+                        className="px-1 py-0.5 text-[10px] border border-[var(--ui-border)] text-[var(--ui-danger)] hover:bg-[var(--ui-border)] whitespace-nowrap shrink-0"
                       >
                         [X]
                       </button>
@@ -602,7 +437,7 @@ export default function Sidebar() {
                 ))}
               </div>
 
-              <div className="text-[11px] text-[#808080] mb-1.5">QUEUE NEW WORKSHOP ORDERS:</div>
+              <div className="text-[11px] text-[var(--ui-muted)] mb-1.5">QUEUE NEW WORKSHOP ORDERS:</div>
               <div className="space-y-1">
                 <button
                   type="button"
@@ -616,7 +451,7 @@ export default function Sidebar() {
                       autoRepeat: true,
                     })
                   }
-                  className="w-full py-1 px-2 border border-[#202020] bg-[#101010] text-[#ff9900] hover:bg-[#202020] text-left whitespace-nowrap shrink-0"
+                  className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-warning)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
                   [ + SMELT STEEL BARS (x3 · AUTO) ]
                 </button>
@@ -632,7 +467,7 @@ export default function Sidebar() {
                       autoRepeat: true,
                     })
                   }
-                  className="w-full py-1 px-2 border border-[#202020] bg-[#101010] text-[#00ffff] hover:bg-[#202020] text-left whitespace-nowrap shrink-0"
+                  className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-info)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
                   [ + FORGE RUNED AXES (x2 · AUTO) ]
                 </button>
@@ -648,7 +483,7 @@ export default function Sidebar() {
                       autoRepeat: false,
                     })
                   }
-                  className="w-full py-1 px-2 border border-[#202020] bg-[#101010] text-[#33ff00] hover:bg-[#202020] text-left whitespace-nowrap shrink-0"
+                  className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-success)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
                   [ + FORGE STEEL ARMOR (x2) ]
                 </button>
@@ -664,7 +499,7 @@ export default function Sidebar() {
                       autoRepeat: true,
                     })
                   }
-                  className="w-full py-1 px-2 border border-[#202020] bg-[#101010] text-[#cc00ff] hover:bg-[#202020] text-left whitespace-nowrap shrink-0"
+                  className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-violet)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
                   [ + BREW CASK ALE (x3 · AUTO) ]
                 </button>
@@ -680,7 +515,7 @@ export default function Sidebar() {
                       autoRepeat: false,
                     })
                   }
-                  className="w-full py-1 px-2 border border-[#202020] bg-[#101010] text-[#d0d0d0] hover:bg-[#202020] text-left whitespace-nowrap shrink-0"
+                  className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-text)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
                   [ + CARVE STONE FURNITURE (x3) ]
                 </button>
@@ -692,31 +527,31 @@ export default function Sidebar() {
         {activeTab === 'RADAR' && (
           <div className="space-y-3">
             {/* Live Spatial Mini-Map Radar */}
-            <div className="bg-[#000000] border border-[#202020] p-2">
-              <div className="flex items-center justify-between text-[11px] border-b border-[#202020] pb-1 mb-2">
-                <span className="text-[#33ff00] font-bold">SPATIAL RADAR {'//'} Z-{currentZ}</span>
-                <span className="text-[#808080] text-[10px]">CLICK TO PING</span>
+            <div className="bg-[var(--ui-bg)] border border-[var(--ui-border)] p-2">
+              <div className="flex items-center justify-between text-[11px] border-b border-[var(--ui-border)] pb-1 mb-2">
+                <span className="text-[var(--ui-success)] font-bold">SPATIAL RADAR {'//'} Z-{currentZ}</span>
+                <span className="text-[var(--ui-muted)] text-[10px]">CLICK TO PING</span>
               </div>
-              <div className="flex justify-center bg-[#050505] p-1 border border-[#202020]">
+              <div className="flex justify-center bg-[#050505] p-1 border border-[var(--ui-border)]">
                 <canvas
                   ref={radarCanvasRef}
                   width={gameState.world.width * 4}
                   height={gameState.world.height * 4}
                   onClick={handleRadarClick}
-                  className="w-full h-auto cursor-pointer border border-[#202020]"
+                  className="w-full h-auto cursor-pointer border border-[var(--ui-border)]"
                 />
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-1 mt-1.5 text-[10px] text-[#808080]">
-                <span className="text-[#33ff00]">■ Dwarf</span>
-                <span className="text-[#ff0000]">■ Hostile</span>
-                <span className="text-[#00ffff]">■ Relic</span>
-                <span className="text-[#ff9900]">■ Ore Vein</span>
+              <div className="flex flex-wrap items-center justify-between gap-1 mt-1.5 text-[10px] text-[var(--ui-muted)]">
+                <span className="text-[var(--ui-success)]">■ Dwarf</span>
+                <span className="text-[var(--ui-danger)]">■ Hostile</span>
+                <span className="text-[var(--ui-info)]">■ Relic</span>
+                <span className="text-[var(--ui-warning)]">■ Ore Vein</span>
               </div>
             </div>
 
             {/* 6-Strata Mineral, Relic & Threat Scanner */}
-            <div className="bg-[#000000] border border-[#202020] p-2">
-              <div className="text-[#00ffff] font-bold border-b border-[#202020] pb-1 mb-2">
+            <div className="bg-[var(--ui-bg)] border border-[var(--ui-border)] p-2">
+              <div className="text-[var(--ui-info)] font-bold border-b border-[var(--ui-border)] pb-1 mb-2">
                 DEEP STRATA ORE &amp; RELIC SCANNER
               </div>
               <div className="space-y-1.5">
@@ -728,32 +563,32 @@ export default function Sidebar() {
                       onClick={() => setCurrentZ(row.zLevel)}
                       className={`p-1.5 border cursor-pointer transition-colors ${
                         isCurrent
-                          ? 'bg-[#202020] border-[#00ffff]'
-                          : 'bg-[#101010] border-[#202020] hover:border-[#808080]'
+                          ? 'bg-[var(--ui-border)] border-[var(--ui-info)]'
+                          : 'bg-[var(--ui-panel)] border-[var(--ui-border)] hover:border-[var(--ui-muted)]'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-1 text-[11px]">
-                        <span className="font-bold text-[#ffffff] truncate">
+                        <span className="font-bold text-[var(--ui-bright)] truncate">
                           [Z-{row.zLevel}] {row.name}
                         </span>
                         {row.hostiles > 0 && (
-                          <span className="text-[#ff0000] font-bold text-[10px] whitespace-nowrap shrink-0">
+                          <span className="text-[var(--ui-danger)] font-bold text-[10px] whitespace-nowrap shrink-0">
                             [! {row.hostiles} HOSTILE]
                           </span>
                         )}
                       </div>
-                      <div className="grid grid-cols-4 gap-1 mt-1 text-[10px] tabular-nums text-[#808080]">
+                      <div className="grid grid-cols-4 gap-1 mt-1 text-[10px] tabular-nums text-[var(--ui-muted)]">
                         <div>
-                          IRN:<span className="text-[#ff9900] font-bold ml-0.5">{row.ironTiles}</span>
+                          IRN:<span className="text-[var(--ui-warning)] font-bold ml-0.5">{row.ironTiles}</span>
                         </div>
                         <div>
-                          GLD:<span className="text-[#ff0099] font-bold ml-0.5">{row.goldTiles}</span>
+                          GLD:<span className="text-[var(--ui-accent)] font-bold ml-0.5">{row.goldTiles}</span>
                         </div>
                         <div>
-                          MTH:<span className="text-[#00ffff] font-bold ml-0.5">{row.mithrilTiles}</span>
+                          MTH:<span className="text-[var(--ui-info)] font-bold ml-0.5">{row.mithrilTiles}</span>
                         </div>
                         <div>
-                          RLC:<span className="text-[#33ff00] font-bold ml-0.5">{row.relicTiles}</span>
+                          RLC:<span className="text-[var(--ui-success)] font-bold ml-0.5">{row.relicTiles}</span>
                         </div>
                       </div>
                     </div>

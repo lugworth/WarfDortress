@@ -54,6 +54,16 @@ These systems run entirely in the local simulation and do not require Gemini or 
 
 ## Controls and simulation
 
+**Display** provides independent 14–28px interface text and 60–200% map zoom (plus Fit), terminal/high-contrast themes, optional object labels, and reduced motion. Fonts are self-hosted; their license is in `public/fonts/LICENSE-DejaVu.txt`. Settings and tool favorites persist separately from fortress saves in this browser.
+
+Use **/ Commands** to search every tool, or filter the sidebar by Dig, Build, Food & Drink, Industry, Defense, and Favorites. Selecting a command preserves its existing shortcut. On narrow screens, the action and map-control rows scroll horizontally; the map can be scrolled in **Pan map** mode.
+
+Dragging previews `+` eligible and `×` blocked tiles, rejection reasons, and the estimated completion cost. Confirm eligible tiles to queue the order or cancel it. Material shortages are shown without preventing future work from being queued: materials are still consumed only when a job finishes. Existing queued orders are identified, and confirmation reports accepted/skipped counts.
+
+Focus the map and use arrows to inspect. In inspect mode, Tab/Shift+Tab cycle revealed objects; Escape exits inspection so Tab can leave the map normally. Shift+arrows select a rectangle; Enter previews it, then Enter or the confirmation button queues it. The Find selector also jumps to revealed dwarves, threats, buildings, stairs, and relics.
+
+The priorities strip links to current threats, low stock, blocked workers, and deliverable commissions. Active commissions show actual stored goods and support delivery from the HUD. The chronicle can be filtered by category and groups repeated entries with occurrence counts.
+
 Tool shortcuts appear in the command sidebar. B selects beds, W walls, M farms, and S stills; F toggles the sidebar and Ctrl/Cmd+S saves. Escape closes dialogs; numbered event choices work while their dialog has focus. Map designation supports mouse and touch/pointer input. Surface presets explicitly target Z-0 even when invoked underground.
 
 Dwarves route through walkable tiles, do not cut wall corners, and only change depth through paired stairs. Unreachable jobs remain unclaimed so they cannot strand workers. Labor changes cancel incompatible active jobs. Production has capacity per built workshop and rotates competing recipes fairly. Trade checks both current inventory and charter values at execution. Recruitment consumes issued gear and respects the 200-dwarf limit.
@@ -68,4 +78,6 @@ Existing relaxed survival rules are retained: this patch does not add dwarf deat
 - `lib/guild.ts`, `components/GuildHallModal.tsx`: commissions, relic transitions/effects, personality traits, and clan relationships.
 - `lib/ai-request.ts`, `event-validation.ts`, `gemini-server.ts`: request budgets, validation, and provider calls.
 - `components/GameProvider.tsx`: commands, simulation clock, async response ownership, and persistence UI.
+- `components/UIProvider.tsx`, `UIOverlay.tsx`, `ToolPicker.tsx`, `FortressNotices.tsx`: display preferences, command search, tool discovery, and actionable priorities.
+- `lib/tool-catalog.ts`, `ui-model.ts`, `ui-preferences.ts`: shared tool metadata, read-only previews/labels/notices, and validated UI preference storage.
 - `lib/*.test.ts`: engine regressions, round trips/backup recovery, AI validation/budgets, and audio encoding.

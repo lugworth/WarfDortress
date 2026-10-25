@@ -7,8 +7,8 @@ import { QUIRKS, RELIC_TEMPLATES } from '@/lib/guild';
 import type { Civilization, GuildAction } from '@/lib/types';
 
 const buttonClass =
-  'border border-[#404040] px-2 py-1 text-[#00ffff] hover:border-[#00ffff] focus-visible:outline-2 focus-visible:outline-[#ff0099] disabled:opacity-40 disabled:cursor-not-allowed';
-const cardClass = 'border border-[#303030] bg-[#101010] p-3 space-y-2';
+  'border border-[#404040] px-2 py-1 text-[var(--ui-info)] hover:border-[var(--ui-info)] focus-visible:outline-2 focus-visible:outline-[var(--ui-accent)] disabled:opacity-40 disabled:cursor-not-allowed';
+const cardClass = 'border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 space-y-2';
 const TAB_NAMES = {
   COMMISSIONS: 'Royal commissions',
   RELICS: 'Named relics',
@@ -61,13 +61,13 @@ export default function GuildHallModal({
       aria-modal="true"
       aria-label="Guild Hall"
       tabIndex={-1}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2 sm:p-4 font-mono text-[#d0d0d0]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2 sm:p-4 font-mono text-[var(--ui-text)]"
     >
-      <section className="flex max-h-[92dvh] w-full max-w-4xl flex-col border-2 border-[#ff0099] bg-black text-sm">
-        <header className="flex items-center justify-between gap-3 border-b border-[#303030] p-3">
+      <section className="flex max-h-[92dvh] w-full max-w-4xl flex-col border-2 border-[var(--ui-accent)] bg-black text-sm">
+        <header className="flex items-center justify-between gap-3 border-b border-[var(--ui-border)] p-3">
           <div>
-            <h2 className="font-bold text-[#ff0099]">[ GUILD HALL ]</h2>
-            <p className="text-xs text-[#a0a0a0]">
+            <h2 className="font-bold text-[var(--ui-accent)]">[ GUILD HALL ]</h2>
+            <p className="text-xs text-[var(--ui-muted)]">
               Commissions, heirlooms, and the stories of your clan · Clock
               paused
             </p>
@@ -78,7 +78,7 @@ export default function GuildHallModal({
         </header>
         <nav
           aria-label="Guild Hall sections"
-          className="grid grid-cols-3 gap-1 border-b border-[#303030] p-2"
+          className="grid grid-cols-3 gap-1 border-b border-[var(--ui-border)] p-2"
         >
           {Object.entries(TAB_NAMES).map(([id, name]) => (
             <button
@@ -89,7 +89,7 @@ export default function GuildHallModal({
                 setTab(id as keyof typeof TAB_NAMES);
                 setStatus('');
               }}
-              className={`${buttonClass} ${tab === id ? 'bg-[#202020] text-[#ff0099]' : ''}`}
+              className={`${buttonClass} ${tab === id ? 'bg-[var(--ui-border)] text-[var(--ui-accent)]' : ''}`}
               style={{ whiteSpace: 'normal' }}
             >
               {name}
@@ -99,7 +99,7 @@ export default function GuildHallModal({
         <p
           role="status"
           aria-live="polite"
-          className="px-3 pt-2 text-xs text-[#33ff00]"
+          className="px-3 pt-2 text-xs text-[var(--ui-success)]"
         >
           {status ||
             (active
@@ -109,7 +109,7 @@ export default function GuildHallModal({
         <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-3">
           {tab === 'COMMISSIONS' && (
             <>
-              <p className="text-xs text-[#a0a0a0]">
+              <p className="text-xs text-[var(--ui-muted)]">
                 Two new offers arrive each season. Accept one at a time;
                 delivery consumes the listed stock. An expired offer costs
                 nothing. Every completed charter awards wealth, favor, and a
@@ -121,14 +121,14 @@ export default function GuildHallModal({
               >
                 {gameState.world.civilizations.map((civ) => (
                   <div key={civ.id} className={cardClass}>
-                    <div className="text-[#00ffff]">{civ.race}</div>
+                    <div className="text-[var(--ui-info)]">{civ.race}</div>
                     <div className="text-xs">
                       Favor {guild.favor[civ.race]}/100 · {civ.stance}
                     </div>
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-[#a0a0a0]">
+              <p className="text-xs text-[var(--ui-muted)]">
                 Favor 15 turns neutral patrons into trade partners; favor 30
                 earns an alliance. Allied goblins stop sending automatic raids.
               </p>
@@ -149,10 +149,10 @@ export default function GuildHallModal({
                     aria-label={commission.title}
                   >
                     <div className="flex flex-wrap justify-between gap-2">
-                      <h3 className="font-bold text-[#ff0099]">
+                      <h3 className="font-bold text-[var(--ui-accent)]">
                         {commission.title}
                       </h3>
-                      <span className="text-xs text-[#00ffff]">
+                      <span className="text-xs text-[var(--ui-info)]">
                         {commission.status} · {commission.patron}
                       </span>
                     </div>
@@ -167,11 +167,11 @@ export default function GuildHallModal({
                       <>
                         <progress
                           aria-label={`${commission.title} delivery progress`}
-                          className="w-full h-2 accent-[#33ff00]"
+                          className="w-full h-2 accent-[var(--ui-success)]"
                           value={Math.min(amount, stock)}
                           max={amount}
                         />
-                        <p className="text-xs text-[#a0a0a0]">
+                        <p className="text-xs text-[var(--ui-muted)]">
                           In storage: {stock}/{amount}
                         </p>
                       </>
@@ -218,7 +218,7 @@ export default function GuildHallModal({
           )}
           {tab === 'RELICS' && (
             <>
-              <p className="text-xs text-[#a0a0a0]">
+              <p className="text-xs text-[var(--ui-muted)]">
                 Recover cavern artifacts or complete a royal commission. Display
                 a relic for a clan blessing, entrust it to a dwarf, or gift it
                 for favor. A dwarf can carry one relic. Gifting is permanent.
@@ -244,8 +244,8 @@ export default function GuildHallModal({
                     aria-label={relic.name}
                   >
                     <div className="flex flex-wrap justify-between gap-2">
-                      <h3 className="font-bold text-[#ff0099]">{relic.name}</h3>
-                      <span className="text-xs text-[#00ffff]">
+                      <h3 className="font-bold text-[var(--ui-accent)]">{relic.name}</h3>
+                      <span className="text-xs text-[var(--ui-info)]">
                         {relic.mode}
                         {relic.ownerId
                           ? ` · ${dwarves.find((d) => d.id === relic.ownerId)?.name}`
@@ -253,7 +253,7 @@ export default function GuildHallModal({
                         {relic.giftedTo ? ` · ${relic.giftedTo}` : ''}
                       </span>
                     </div>
-                    <p className="text-xs text-[#a0a0a0]">
+                    <p className="text-xs text-[var(--ui-muted)]">
                       Discovered by {relic.discoveredBy} at tick{' '}
                       {relic.discoveredAt}.
                     </p>
@@ -378,13 +378,13 @@ export default function GuildHallModal({
                       </div>
                     )}
                     <details className="text-xs">
-                      <summary className="cursor-pointer text-[#00ffff]">
+                      <summary className="cursor-pointer text-[var(--ui-info)]">
                         Relic history ({relic.history.length})
                       </summary>
                       <ol className="mt-2 space-y-1">
                         {relic.history.map((entry, i) => (
                           <li key={`${entry.tick}-${i}`}>
-                            <span className="text-[#a0a0a0]">
+                            <span className="text-[var(--ui-muted)]">
                               T{entry.tick}
                             </span>{' '}
                             · {entry.text}
@@ -399,7 +399,7 @@ export default function GuildHallModal({
           )}
           {tab === 'CLAN' && (
             <>
-              <p className="text-xs text-[#a0a0a0]">
+              <p className="text-xs text-[var(--ui-muted)]">
                 Each dwarf has a lasting quirk. Nearby tavern companions grow
                 closer, while loners and ale enthusiasts can clash. Shared
                 victories strengthen bonds. Nearby friends lift morale; nearby
@@ -418,17 +418,17 @@ export default function GuildHallModal({
                       className={cardClass}
                       aria-label={`${dwarf.name} story`}
                     >
-                      <h3 className="font-bold text-[#ff0099]">{dwarf.name}</h3>
+                      <h3 className="font-bold text-[var(--ui-accent)]">{dwarf.name}</h3>
                       <p className="text-xs">
                         {dwarf.title} · Morale {dwarf.happiness}%
                       </p>
-                      <p className="text-[#00ffff]">{quirk?.name}</p>
+                      <p className="text-[var(--ui-info)]">{quirk?.name}</p>
                       <p className="text-xs">{quirk?.description}</p>
-                      <p className="text-xs italic text-[#a0a0a0]">
+                      <p className="text-xs italic text-[var(--ui-muted)]">
                         “{dwarf.thought}”
                       </p>
                       {bonds.length === 0 && (
-                        <p className="text-xs text-[#a0a0a0]">
+                        <p className="text-xs text-[var(--ui-muted)]">
                           New to the clan. Shared experiences will build a
                           story.
                         </p>
@@ -441,15 +441,15 @@ export default function GuildHallModal({
                         return (
                           <div
                             key={`${bond.a}-${bond.b}`}
-                            className="border-t border-[#303030] pt-2 text-xs"
+                            className="border-t border-[var(--ui-border)] pt-2 text-xs"
                           >
                             <p
                               className={
                                 bond.score >= 5
-                                  ? 'text-[#33ff00]'
+                                  ? 'text-[var(--ui-success)]'
                                   : bond.score <= -5
-                                    ? 'text-[#ff9900]'
-                                    : 'text-[#00ffff]'
+                                    ? 'text-[var(--ui-warning)]'
+                                    : 'text-[var(--ui-info)]'
                               }
                             >
                               {bond.score >= 5
@@ -460,7 +460,7 @@ export default function GuildHallModal({
                               : {companion?.name} ({bond.score > 0 ? '+' : ''}
                               {bond.score})
                             </p>
-                            <p className="text-[#a0a0a0]">{bond.reason}</p>
+                            <p className="text-[var(--ui-muted)]">{bond.reason}</p>
                           </div>
                         );
                       })}
