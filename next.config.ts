@@ -1,5 +1,6 @@
 import type {NextConfig} from 'next';
 import {PHASE_DEVELOPMENT_SERVER} from 'next/constants';
+import path from 'path';
 
 export default function nextConfig(phase: string): NextConfig {
   const isDev = phase === PHASE_DEVELOPMENT_SERVER;
@@ -24,6 +25,7 @@ export default function nextConfig(phase: string): NextConfig {
       ],
     },
     output: 'standalone',
+    outputFileTracingRoot: path.join(__dirname),
     transpilePackages: ['motion'],
     webpack: (config, {dev}) => {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
