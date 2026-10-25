@@ -5,26 +5,87 @@
       "description": "Stores a player's saved Dwarven Fortress state and world metadata.",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "userId": { "type": "string", "maxLength": 128 },
-        "worldName": { "type": "string", "maxLength": 120 },
-        "dwarvenName": { "type": "string", "maxLength": 80 },
-        "seed": { "type": "string", "maxLength": 64 },
-        "ticks": { "type": "integer" },
-        "year": { "type": "integer" },
-        "season": { "type": "string", "maxLength": 40 },
-        "wealth": { "type": "integer" },
-        "population": { "type": "integer" },
-        "resources": { "type": "object" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "id": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "worldName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "dwarvenName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "seed": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "ticks": {
+          "type": "integer"
+        },
+        "year": {
+          "type": "integer"
+        },
+        "season": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "wealth": {
+          "type": "integer"
+        },
+        "population": {
+          "type": "integer"
+        },
+        "resources": {
+          "type": "object"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "enum": [
+            1
+          ]
+        },
+        "snapshot": {
+          "type": "string",
+          "maxLength": 900000
+        }
       },
-      "required": ["id", "userId", "worldName", "dwarvenName", "seed", "ticks", "year", "season", "wealth", "population", "resources", "updatedAt"]
+      "required": [
+        "id",
+        "userId",
+        "worldName",
+        "dwarvenName",
+        "seed",
+        "ticks",
+        "year",
+        "season",
+        "wealth",
+        "population",
+        "resources",
+        "updatedAt",
+        "schemaVersion",
+        "snapshot"
+      ]
     }
   },
   "firestore": {
     "/saves/{saveId}": {
       "schema": "CloudFortressSave",
-      "description": "Player fortress save slots"
+      "description": "Legacy summary-only saves; readable for migration"
+    },
+    "/users/{userId}/saves/{saveId}": {
+      "schema": "CloudFortressSave",
+      "description": "User-owned versioned full fortress snapshots"
     }
   }
 }

@@ -1,9 +1,12 @@
 'use client';
+import { speakFortressText } from '@/lib/audio';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGame } from './GameProvider';
 import { hasResources } from '@/lib/game-engine';
 import { NarrativeEventSeverity } from '@/lib/types';
+import { MAX_POPULATION } from '@/lib/game-rules';
+import { useDialog } from '@/hooks/use-dialog';
 import { ISOTOPE } from '@/lib/colors';
 
 interface NarrativeEventModalProps {
@@ -45,8 +48,20 @@ export default function NarrativeEventModal({ isOpen, onClose }: NarrativeEventM
     isGeneratingEvent,
   } = useGame();
 
+  const dialogRef = useDialog(isOpen, onClose);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const activeEvent = gameState.activeEvent;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      const choice = activeEvent?.choices[Number(e.key) - 1];
+      if (choice && /^[1-9]$/.test(e.key) && hasResources(gameState.resources, choice.cost) && gameState.dwarves.length + (choice.spawnMigrants || 0) <= MAX_POPULATION) { e.preventDefault(); resolveActiveEvent(choice.id); }
+    };
+    const dialog = dialogRef.current;
+    dialog?.addEventListener('keydown', handler);
+    return () => dialog?.removeEventListener('keydown', handler);
+  }, [isOpen, activeEvent, gameState.resources, gameState.dwarves.length, resolveActiveEvent, dialogRef]);
 
   if (!isOpen) return null;
 
@@ -58,24 +73,8 @@ export default function NarrativeEventModal({ isOpen, onClose }: NarrativeEventM
   const speakNarrative = async (text: string) => {
     if (!text || isSpeaking) return;
     setIsSpeaking(true);
-    try {
-      const res = await fetch('/api/advisor/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.slice(0, 420) }),
-      });
-      const data = await res.json();
-      if (data.audio) {
-        const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
-        audio.onended = () => setIsSpeaking(false);
-        audio.onerror = () => setIsSpeaking(false);
-        await audio.play();
-      } else {
-        setIsSpeaking(false);
-      }
-    } catch {
-      setIsSpeaking(false);
-    }
+    try { await speakFortressText(text); }
+    finally { setIsSpeaking(false); }
   };
 
   const formatResourceMap = (map?: Record<string, number>, prefix = '') => {
@@ -88,6 +87,8 @@ export default function NarrativeEventModal({ isOpen, onClose }: NarrativeEventM
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label="Fortress Narrative Events and Decrees"
@@ -203,7 +204,7 @@ export default function NarrativeEventModal({ isOpen, onClose }: NarrativeEventM
                   ┌─[ CHOOSE OVERSEER DECREE ]──────────────────────────────
                 </div>
                 {activeEvent.choices.map((choice, idx) => {
-                  const affordable = hasResources(gameState.resources, choice.cost);
+                  const affordable = hasResources(gameState.resources, choice.cost) && gameState.dwarves.length + (choice.spawnMigrants || 0) <= MAX_POPULATION;
                   const costStr = formatResourceMap(choice.cost as Record<string, number>, '-');
                   const rewardStr = formatResourceMap(
                     choice.reward as Record<string, number>,

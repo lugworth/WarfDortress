@@ -4,6 +4,8 @@ import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useGame } from './GameProvider';
 import { DesignationType, DwarfEntity, HostileEntity } from '@/lib/types';
 import { ISOTOPE } from '@/lib/colors';
+import { canDesignateTile } from '@/lib/game-engine';
+import { TOOL_KEYS } from '@/lib/game-rules';
 
 const CELL_W = 14;
 const CELL_H = 18;
@@ -82,7 +84,7 @@ export default function ASCIIViewport() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.ctrlKey || e.metaKey || document.querySelector('[aria-modal="true"]')) return;
 
       if (e.key === ' ') {
         e.preventDefault();
@@ -93,18 +95,8 @@ export default function ASCIIViewport() {
         setCurrentZ((z) => Math.min(gameState.world.depth - 1, z + 1));
       } else if (e.key.toLowerCase() === 'i' || e.key === '?') {
         setInspectMode((v) => !v);
-      } else if (e.key.toLowerCase() === 'd') {
-        setSelectedTool('MINE');
-      } else if (e.key.toLowerCase() === 't') {
-        setSelectedTool('CHOP');
-      } else if (e.key.toLowerCase() === 'g') {
-        setSelectedTool('GATHER');
-      } else if (e.key.toLowerCase() === 'x') {
-        setSelectedTool('STAIRS');
-      } else if (e.key.toLowerCase() === 'p') {
-        setSelectedTool('STOCKPILE');
-      } else if (e.key.toLowerCase() === 'b') {
-        setSelectedTool('BUILD_WALL');
+      } else if (TOOL_KEYS[e.key.toLowerCase()]) {
+        setSelectedTool(TOOL_KEYS[e.key.toLowerCase()]);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -276,7 +268,7 @@ export default function ASCIIViewport() {
     pingTarget,
   ]);
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const coord = clientToGrid(e.clientX, e.clientY);
     if (!coord) return;
 
@@ -302,7 +294,7 @@ export default function ASCIIViewport() {
     setDragCurrent(coord);
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const coord = clientToGrid(e.clientX, e.clientY);
     if (!coord) return;
     if (dragStart && !inspectMode) {
@@ -325,21 +317,25 @@ export default function ASCIIViewport() {
     const cx = Math.floor(gridWidth / 2);
     const cy = Math.floor(gridHeight / 2);
     setCurrentZ(0);
-    designateBox(cx + 5, cy - 2, cx + 9, cy + 2, 'MINE');
+    designateBox(cx + 5, cy - 2, cx + 9, cy + 2, 'MINE', 0);
   };
 
   const handleQuickChop = () => {
     setCurrentZ(0);
-    designateBox(4, 4, gridWidth - 5, gridHeight - 5, 'CHOP');
+    designateBox(4, 4, gridWidth - 5, gridHeight - 5, 'CHOP', 0);
   };
 
   const handleQuickBuildForge = () => {
     const cx = Math.floor(gridWidth / 2);
     const cy = Math.floor(gridHeight / 2);
     setCurrentZ(0);
-    designateBox(cx - 4, cy - 2, cx - 4, cy - 2, 'BUILD_SMELTER');
-    designateBox(cx - 2, cy - 2, cx - 2, cy - 2, 'BUILD_FORGE');
-    designateBox(cx - 3, cy + 2, cx - 3, cy + 2, 'BUILD_TAVERN');
+    const sites = gameState.grid[0].flat().filter((tile) =>
+      Math.max(Math.abs(tile.x - cx), Math.abs(tile.y - cy)) <= 3 && canDesignateTile(tile, 'BUILD_SMELTER')
+    ).sort((a, b) => (Math.abs(a.x - cx) + Math.abs(a.y - cy)) - (Math.abs(b.x - cx) + Math.abs(b.y - cy)));
+    (['BUILD_SMELTER', 'BUILD_FORGE', 'BUILD_TAVERN'] as const).forEach((tool, index) => {
+      const site = sites[index];
+      if (site) designateBox(site.x, site.y, site.x, site.y, tool, 0);
+    });
   };
 
   const currentStratum = gameState.world.strata[currentZ] || gameState.world.strata[0];
@@ -395,21 +391,21 @@ export default function ASCIIViewport() {
             onClick={handleQuickExcavate}
             className="text-[#ff9900] hover:bg-[#202020] hover:text-[#ffffff] px-1 transition-colors whitespace-nowrap shrink-0"
           >
-            [ D: MINE CLIFF ]
+            [ MINE CLIFF ]
           </button>
           <button
             type="button"
             onClick={handleQuickChop}
             className="text-[#33ff00] hover:bg-[#202020] hover:text-[#ffffff] px-1 transition-colors whitespace-nowrap shrink-0"
           >
-            [ T: CHOP TIMBER ]
+            [ CHOP TIMBER ]
           </button>
           <button
             type="button"
             onClick={handleQuickBuildForge}
             className="text-[#cc00ff] hover:bg-[#202020] hover:text-[#ffffff] px-1 transition-colors hidden sm:inline whitespace-nowrap shrink-0"
           >
-            [ F: SMELTER &amp; TAVERN ]
+            [ SMELTER &amp; TAVERN ]
           </button>
 
           <span className="text-[#808080]">|</span>
@@ -445,9 +441,13 @@ export default function ASCIIViewport() {
           data-testid="ascii-map-canvas"
           width={gridWidth * CELL_W}
           height={gridHeight * CELL_H}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
+          aria-label="Fortress map. Drag to designate; right-click to inspect."
+          tabIndex={0}
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); handleMouseDown(e); }}
+          onPointerMove={handleMouseMove}
+          onPointerUp={handleMouseUp}
+          onPointerCancel={() => { setDragStart(null); setDragCurrent(null); }}
+          style={{ touchAction: 'none' }}
           onContextMenu={(e) => {
             e.preventDefault();
             const coord = clientToGrid(e.clientX, e.clientY);
@@ -456,7 +456,8 @@ export default function ASCIIViewport() {
               setInspectMode(true);
             }
           }}
-          onMouseLeave={() => {
+          onPointerLeave={() => {
+            if (dragStart) return;
             setDragStart(null);
             setDragCurrent(null);
           }}
@@ -484,7 +485,7 @@ export default function ASCIIViewport() {
               )}
               {activeInspect.tile.terrain === 'CAVERN_RELIC' && (
                 <span className="text-[#33ff00] font-bold whitespace-nowrap">
-                  · ☼ ANCIENT RELIC (+250 WEALTH &amp; CLAN MIRTH)
+                  · ☼ ANCIENT RELIC (+300 WEALTH &amp; CLAN MIRTH)
                 </span>
               )}
             </div>
@@ -498,7 +499,7 @@ export default function ASCIIViewport() {
                     activeInspect.coord.y,
                     activeInspect.coord.x,
                     activeInspect.coord.y,
-                    'MINE'
+                    'MINE', activeInspect.coord.z
                   )
                 }
                 className="px-1.5 py-0.5 border border-[#202020] text-[#ff9900] hover:bg-[#202020] whitespace-nowrap shrink-0"
@@ -513,7 +514,7 @@ export default function ASCIIViewport() {
                     activeInspect.coord.y,
                     activeInspect.coord.x,
                     activeInspect.coord.y,
-                    'BUILD_TRAP'
+                    'BUILD_TRAP', activeInspect.coord.z
                   )
                 }
                 className="px-1.5 py-0.5 border border-[#202020] text-[#ff0000] hover:bg-[#202020] whitespace-nowrap shrink-0"

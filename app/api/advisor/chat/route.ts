@@ -1,3 +1,5 @@
+import { readAiRequest, textField, aiErrorResponse, AiRequestError } from '@/lib/ai-request';
+import { CHAT_REQUEST_MAX_BYTES } from '@/lib/advisor-request';
 import { NextRequest, NextResponse } from 'next/server';
 import { generateWithModelFallback } from '@/lib/gemini-server';
 
@@ -67,7 +69,14 @@ export async function POST(req: NextRequest) {
   } = {};
 
   try {
-    body = await req.json();
+    const payload = await readAiRequest(req, CHAT_REQUEST_MAX_BYTES);
+    if (!Array.isArray(payload.messages) || payload.messages.length === 0 || payload.messages.length > 40) throw new AiRequestError('Expected 1–40 chat messages.');
+    payload.messages.forEach((message) => {
+      if (!message || !['user', 'model'].includes(message.role) || !Array.isArray(message.parts) || message.parts.length !== 1) throw new AiRequestError('Invalid chat message.');
+      textField(message.parts[0]?.text, 4000);
+    });
+    if (payload.fortressSummary !== undefined && (!payload.fortressSummary || typeof payload.fortressSummary !== 'object' || Array.isArray(payload.fortressSummary))) throw new AiRequestError('Invalid fortress summary.');
+    body = payload;
     const { messages = [], fortressSummary, model } = body;
     const preferredModel = ALLOWED_MODELS.has(model || '') ? String(model) : 'gemini-3.1-flash-lite';
     const fallbackOrder = Array.from(
@@ -104,12 +113,14 @@ Role & Tone:
       text: buildDeterministicAdvisorReply(fortressSummary, lastUserMsg),
       modelUsed: 'deterministic-chronicler',
     });
-  } catch {
+  } catch (error) {
+    const invalid = aiErrorResponse(error); if (invalid) return invalid;
     const lastUserMsg =
       body.messages?.[body.messages.length - 1]?.parts?.[0]?.text || '';
     return NextResponse.json(
       {
         text: buildDeterministicAdvisorReply(body.fortressSummary, lastUserMsg),
+        modelUsed: 'deterministic-chronicler',
       },
       { status: 200 }
     );

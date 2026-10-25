@@ -1,0 +1,20 @@
+name: Checks
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+      - run: bun install --frozen-lockfile
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint -- --max-warnings=0
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'

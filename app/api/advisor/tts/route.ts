@@ -1,3 +1,4 @@
+import { readAiRequest, textField, aiErrorResponse, AiRequestError } from '@/lib/ai-request';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getGeminiClient,
@@ -10,7 +11,8 @@ const TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
 
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json();
+    const body = await readAiRequest(req, 4000);
+    const text = textField(body.text, 420);
     const client = getGeminiClient();
     if (!text || !client) {
       return NextResponse.json({ audio: null, fallback: true }, { status: 200 });
@@ -23,6 +25,7 @@ export async function POST(req: NextRequest) {
           model,
           contents: [{ role: 'user', parts: [{ text: String(text).slice(0, 420) }] }],
           config: {
+            httpOptions: { timeout: 15_000 },
             responseModalities: ['AUDIO'],
             speechConfig: {
               voiceConfig: {
@@ -32,9 +35,10 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        const audioPart = response.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data)?.inlineData;
+        const base64Audio = audioPart?.data;
         if (base64Audio) {
-          return NextResponse.json({ audio: base64Audio, modelUsed: model });
+          return NextResponse.json({ audio: base64Audio, mimeType: audioPart?.mimeType, modelUsed: model });
         }
       } catch (err) {
         if (isQuotaOrRateLimitError(err)) {
@@ -46,7 +50,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ audio: null, fallback: true }, { status: 200 });
-  } catch {
+  } catch (error) {
+    const invalid = aiErrorResponse(error); if (invalid) return invalid;
     return NextResponse.json({ audio: null, fallback: true }, { status: 200 });
   }
 }

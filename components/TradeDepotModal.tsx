@@ -3,6 +3,9 @@
 import React, { useState, useMemo } from 'react';
 import { useGame } from './GameProvider';
 import { FortressResources } from '@/lib/types';
+import { hasResources } from '@/lib/game-engine';
+import { EXPORT_VALUES, IMPORT_VALUES, MAX_POPULATION, tradeValues } from '@/lib/game-rules';
+import { useDialog } from '@/hooks/use-dialog';
 
 interface TradeDepotModalProps {
   isOpen: boolean;
@@ -15,12 +18,12 @@ const EXPORT_ITEMS: {
   unitValue: number;
   color: string;
 }[] = [
-  { key: 'stone', label: 'Rough Stone', unitValue: 2, color: 'text-[#d0d0d0]' },
-  { key: 'furniture', label: 'Masterwork Furniture', unitValue: 18, color: 'text-[#00ffff]' },
-  { key: 'steelBars', label: 'Smelted Steel Bars', unitValue: 25, color: 'text-[#00ffff]' },
-  { key: 'weapons', label: 'Runed Battle Axes', unitValue: 40, color: 'text-[#ff9900]' },
-  { key: 'armor', label: 'Steel Plate Mail', unitValue: 45, color: 'text-[#33ff00]' },
-  { key: 'goldOre', label: 'Gold Nuggets', unitValue: 35, color: 'text-[#ff0099]' },
+  { key: 'stone', label: 'Rough Stone', unitValue: EXPORT_VALUES.stone, color: 'text-[#d0d0d0]' },
+  { key: 'furniture', label: 'Masterwork Furniture', unitValue: EXPORT_VALUES.furniture, color: 'text-[#00ffff]' },
+  { key: 'steelBars', label: 'Smelted Steel Bars', unitValue: EXPORT_VALUES.steelBars, color: 'text-[#00ffff]' },
+  { key: 'weapons', label: 'Runed Battle Axes', unitValue: EXPORT_VALUES.weapons, color: 'text-[#ff9900]' },
+  { key: 'armor', label: 'Steel Plate Mail', unitValue: EXPORT_VALUES.armor, color: 'text-[#33ff00]' },
+  { key: 'goldOre', label: 'Gold Nuggets', unitValue: EXPORT_VALUES.goldOre, color: 'text-[#ff0099]' },
 ];
 
 const IMPORT_ITEMS: {
@@ -29,15 +32,17 @@ const IMPORT_ITEMS: {
   unitValue: number;
   color: string;
 }[] = [
-  { key: 'food', label: 'Plump Helmet Rations', unitValue: 5, color: 'text-[#33ff00]' },
-  { key: 'ale', label: 'Dwarven Cask Ale', unitValue: 6, color: 'text-[#cc00ff]' },
-  { key: 'wood', label: 'Surface Timber Logs', unitValue: 5, color: 'text-[#ff9900]' },
-  { key: 'ironOre', label: 'Hematite Iron Ore', unitValue: 14, color: 'text-[#ff9900]' },
-  { key: 'steelBars', label: 'Imported Steel Ingots', unitValue: 30, color: 'text-[#00ffff]' },
+  { key: 'food', label: 'Plump Helmet Rations', unitValue: IMPORT_VALUES.food, color: 'text-[#33ff00]' },
+  { key: 'ale', label: 'Dwarven Cask Ale', unitValue: IMPORT_VALUES.ale, color: 'text-[#cc00ff]' },
+  { key: 'wood', label: 'Surface Timber Logs', unitValue: IMPORT_VALUES.wood, color: 'text-[#ff9900]' },
+  { key: 'ironOre', label: 'Hematite Iron Ore', unitValue: IMPORT_VALUES.ironOre, color: 'text-[#ff9900]' },
+  { key: 'steelBars', label: 'Imported Steel Ingots', unitValue: IMPORT_VALUES.steelBars, color: 'text-[#00ffff]' },
 ];
 
 export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
   const { gameState, performTradeBarter } = useGame();
+  const dialogRef = useDialog(isOpen, onClose);
+  const [tradeError, setTradeError] = useState('');
   const [giveAmounts, setGiveAmounts] = useState<Partial<Record<keyof FortressResources, number>>>({});
   const [receiveAmounts, setReceiveAmounts] = useState<Partial<Record<keyof FortressResources, number>>>({});
   const [recruitMigrant, setRecruitMigrant] = useState<boolean>(false);
@@ -55,23 +60,9 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
   if (!isOpen) return null;
 
   const isAutumnCaravan = gameState.season.includes('Autumn') || gameState.season.includes('Summer');
-  const depotBonus = hasBuiltDepot ? 1.15 : 1.0;
-
-  const offeredValue = Math.floor(
-    EXPORT_ITEMS.reduce((acc, item) => {
-      const qty = giveAmounts[item.key] || 0;
-      return acc + qty * item.unitValue;
-    }, 0) * depotBonus
-  );
-
-  const requestedValue =
-    IMPORT_ITEMS.reduce((acc, item) => {
-      const qty = receiveAmounts[item.key] || 0;
-      return acc + qty * item.unitValue;
-    }, 0) + (recruitMigrant ? 90 : 0);
-
+  const { offered: offeredValue, requested: requestedValue } = tradeValues(giveAmounts, receiveAmounts, recruitMigrant, hasBuiltDepot);
   const netBalance = offeredValue - requestedValue;
-  const canExecute = offeredValue > 0 && requestedValue > 0 && netBalance >= 0;
+  const canExecute = offeredValue > 0 && requestedValue > 0 && netBalance >= 0 && hasResources(gameState.resources, giveAmounts) && (!recruitMigrant || gameState.dwarves.length < MAX_POPULATION);
 
   const adjustGive = (key: keyof FortressResources, delta: number) => {
     const current = giveAmounts[key] || 0;
@@ -94,13 +85,17 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
 
   const handleConfirmTrade = () => {
     if (!canExecute) return;
-    performTradeBarter(giveAmounts, receiveAmounts, recruitMigrant);
+    if (!performTradeBarter(giveAmounts, receiveAmounts, recruitMigrant)) {
+      setTradeError('Stock or trade conditions changed. Adjust your offer and try again.');
+      return;
+    }
+    setTradeError('');
     handleReset();
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 font-mono text-xs select-none">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Trade exchange" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 font-mono text-xs select-none">
       <div className="w-full max-w-3xl bg-[#000000] border-2 border-[#00ffff] text-[#d0d0d0] flex flex-col max-h-[90vh] overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-3 py-2 bg-[#101010] border-b border-[#202020]">
@@ -288,6 +283,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
           </div>
         </div>
 
+        {tradeError && <p role="alert" className="p-2 text-red-400">{tradeError}</p>}
         {/* Footer Summary & Execute Button */}
         <div className="p-3 bg-[#101010] border-t border-[#202020] flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3 tabular-nums">

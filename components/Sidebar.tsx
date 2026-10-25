@@ -8,173 +8,133 @@ import {
   LaborPresetId,
   MilitiaDoctrine,
 } from '@/lib/types';
-import { scanWorldStrata } from '@/lib/game-engine';
+import { QUIRKS } from '@/lib/guild';
+import { TOOL_KEYS, TRAP_DAMAGE } from '@/lib/game-rules';
+import { getConstructionCost, scanWorldStrata } from '@/lib/game-engine';
 
 const DESIGNATION_TOOLS: {
   id: DesignationType;
   label: string;
-  keyHint: string;
-  cost: string;
   color: string;
   desc: string;
 }[] = [
   {
     id: 'MINE',
     label: 'MINE ROCK / ORE',
-    keyHint: 'D',
-    cost: 'Free',
     color: 'text-[#ff9900]',
-    desc: 'Excavate rock, ores & cavern relics (☼)',
+    desc: 'Excavate rock and ore veins',
   },
   {
     id: 'STAIRS',
     label: 'CARVE STAIRS',
-    keyHint: 'X',
-    cost: '2 Stone',
     color: 'text-[#ff0099]',
     desc: 'Link current Z-level with Z+1 cavern',
   },
   {
     id: 'RECLAIM_RELIC',
     label: 'RECLAIM RELIC (☼)',
-    keyHint: 'V',
-    cost: 'Free',
     color: 'text-[#00ffff]',
     desc: 'Recover ancient subterranean artifact',
   },
   {
     id: 'CHOP',
     label: 'FELL TIMBER',
-    keyHint: 'T',
-    cost: 'Free',
     color: 'text-[#33ff00]',
-    desc: 'Chop surface trees for logs (+6 Wood)',
+    desc: 'Chop trees for logs (+4 Wood)',
   },
   {
     id: 'GATHER',
     label: 'GATHER SHRUBS',
-    keyHint: 'G',
-    cost: 'Free',
     color: 'text-[#33ff00]',
-    desc: 'Forage surface plants (+5 Food, +1 Ale)',
+    desc: 'Forage plants (+4 Food)',
   },
   {
     id: 'BUILD_SMELTER',
     label: 'BUILD SMELTERY (£)',
-    keyHint: 'E',
-    cost: '8 Stone',
     color: 'text-[#ff9900]',
-    desc: 'Smelt Iron & Gold Ore into Steel Bars',
+    desc: 'Smelt Iron Ore into Steel Bars',
   },
   {
     id: 'BUILD_FORGE',
     label: 'BUILD FORGE (⚒)',
-    keyHint: 'R',
-    cost: '6 Stn, 2 Steel',
     color: 'text-[#00ffff]',
     desc: 'Forge Runed Weapons & Steel Armor',
   },
   {
     id: 'BUILD_TAVERN',
     label: 'BUILD TAVERN (♫)',
-    keyHint: 'H',
-    cost: '6 Wood, 4 Stn',
     color: 'text-[#cc00ff]',
     desc: 'Hearth hall for feasts & morale buffs',
   },
   {
     id: 'BUILD_TEMPLE',
     label: 'BUILD TEMPLE (Ψ)',
-    keyHint: 'Y',
-    cost: '8 Stn, 1 Gold',
     color: 'text-[#ff0099]',
     desc: 'Sanctuary granting meditative serenity',
   },
   {
     id: 'BUILD_DEPOT',
     label: 'TRADE DEPOT (¤)',
-    keyHint: 'O',
-    cost: '8 Wood, 8 Stn',
     color: 'text-[#00ffff]',
     desc: 'Caravan plaza (+15% export trade value)',
   },
   {
     id: 'BUILD_TRAP',
     label: 'STONE TRAP (^)',
-    keyHint: 'Z',
-    cost: '3 Stone',
     color: 'text-[#ff0000]',
-    desc: 'Deadfall trap (65 dmg to Raiders)',
+    desc: `Deadfall trap (${TRAP_DAMAGE} damage to hostiles)`,
   },
   {
     id: 'BUILD_WALL',
     label: 'STONE WALL',
-    keyHint: 'W',
-    cost: '4 Stone',
     color: 'text-[#ffffff]',
     desc: 'Fortified masonry wall blocking raiders',
   },
   {
     id: 'BUILD_DOOR',
     label: 'STONE DOOR (+)',
-    keyHint: 'K',
-    cost: '2 Stone',
     color: 'text-[#d0d0d0]',
     desc: 'Install secure gateway portal',
   },
   {
     id: 'STOCKPILE',
     label: 'STOCKPILE ZONE',
-    keyHint: 'P',
-    cost: 'Free',
     color: 'text-[#0066ff]',
     desc: 'Central storage for fortress wares',
   },
   {
     id: 'BUILD_FARM',
     label: 'PLUMP HELMET FARM',
-    keyHint: 'M',
-    cost: '2 Wood',
     color: 'text-[#33ff00]',
     desc: 'Subterranean mushrooms for food & ale',
   },
   {
     id: 'BUILD_STILL',
     label: 'BREWERY STILL',
-    keyHint: 'S',
-    cost: '4 Wood, 2 Stn',
     color: 'text-[#cc00ff]',
     desc: 'Distill Plump Helmets into Dwarven Ale',
   },
   {
     id: 'BUILD_MASON',
     label: 'MASON WORKSHOP',
-    keyHint: 'N',
-    cost: '6 Stone',
     color: 'text-[#00ffff]',
     desc: 'Carve stone thrones, statues & coffers',
   },
   {
     id: 'BUILD_CARPENTER',
     label: 'CARPENTER SHOP',
-    keyHint: 'C',
-    cost: '6 Wood',
     color: 'text-[#ff9900]',
     desc: 'Craft wooden beds, barrels & shields',
   },
   {
     id: 'BUILD_BED',
     label: 'DWARVEN BED',
-    keyHint: 'B',
-    cost: '3 Wood',
     color: 'text-[#33ff00]',
     desc: 'Quarters for fast fatigue recovery',
   },
   {
     id: 'CANCEL',
     label: 'CLEAR ORDERS',
-    keyHint: 'Q',
-    cost: 'Free',
     color: 'text-[#ff0000]',
     desc: 'Remove pending designations in box',
   },
@@ -339,6 +299,7 @@ export default function Sidebar() {
             </div>
 
             {DESIGNATION_TOOLS.map((tool) => {
+              const keyHint = Object.entries(TOOL_KEYS).find(([, id]) => id === tool.id)?.[0].toUpperCase() || '';
               const isSelected = selectedTool === tool.id;
               return (
                 <button
@@ -353,10 +314,10 @@ export default function Sidebar() {
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className={`font-bold whitespace-nowrap shrink-0 ${tool.color}`}>
-                      [{tool.keyHint}: {tool.label}]
+                      [{keyHint}: {tool.label}]
                     </span>
                     <span className="text-[10px] text-[#808080] tabular-nums whitespace-nowrap shrink-0">
-                      {tool.cost}
+                      {Object.entries(getConstructionCost(tool.id)).map(([key, value]) => `${value} ${key}`).join(', ') || 'Free'}
                     </span>
                   </div>
                   <div className="text-[11px] text-[#808080] mt-0.5 leading-snug">{tool.desc}</div>
@@ -503,6 +464,7 @@ export default function Sidebar() {
                     </div>
                   </div>
 
+                  {dwarf.quirk && <p className="mt-1 text-xs text-[#ff0099]" title={QUIRKS[dwarf.quirk].description}>{QUIRKS[dwarf.quirk].name}</p>}
                   {/* Recent Thought */}
                   {dwarf.thought && (
                     <div className="text-[10px] text-[#808080] italic mt-1.5 truncate">

@@ -1,4 +1,6 @@
 'use client';
+import { speakFortressText } from '@/lib/audio';
+import { serializeAdvisorRequest } from '@/lib/advisor-request';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useGame } from './GameProvider';
@@ -19,6 +21,7 @@ export default function AdvisorPanel() {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [advisorStatus, setAdvisorStatus] = useState('');
   const [autoSpeak, setAutoSpeak] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -31,35 +34,8 @@ export default function AdvisorPanel() {
   const speakText = async (text: string) => {
     if (!text || isSpeaking) return;
     setIsSpeaking(true);
-    const cleanText = text.replace(/[*#_`]/g, '').slice(0, 420);
-    try {
-      const res = await fetch('/api/advisor/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: cleanText }),
-      });
-      const data = await res.json();
-      if (data.audio) {
-        const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
-        audio.onended = () => setIsSpeaking(false);
-        audio.onerror = () => setIsSpeaking(false);
-        await audio.play();
-        return;
-      }
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(cleanText);
-        utter.pitch = 0.8;
-        utter.rate = 0.95;
-        utter.onend = () => setIsSpeaking(false);
-        utter.onerror = () => setIsSpeaking(false);
-        window.speechSynthesis.speak(utter);
-        return;
-      }
-      setIsSpeaking(false);
-    } catch {
-      setIsSpeaking(false);
-    }
+    try { await speakFortressText(text); }
+    finally { setIsSpeaking(false); }
   };
 
   const sendMessage = async (promptText?: string) => {
@@ -79,27 +55,25 @@ export default function AdvisorPanel() {
         season: gameState.season,
         resources: gameState.resources,
         population: gameState.dwarves.length,
-        dwarvesStates: gameState.dwarves.map((d) => ({
+        activeCommission: gameState.guild.commissions.find((c) => c.status === 'ACTIVE'),
+        factionFavor: gameState.guild.favor,
+        carriedRelics: gameState.guild.relics.filter((r) => r.mode === 'EQUIPPED').slice(0, 10).map((r) => ({ name: r.name, ownerId: r.ownerId })),
+        dwarvesStates: gameState.dwarves.slice(0, 20).map((d) => ({
           name: d.name,
           state: d.state,
+          quirk: d.quirk,
           z: d.z,
-          thought: d.thought,
+          thought: d.thought.slice(0, 160),
         })),
       };
 
       const res = await fetch('/api/advisor/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: updatedMessages.map((m) => ({
-            role: m.role,
-            parts: [{ text: m.content }],
-          })),
-          fortressSummary,
-        }),
+        body: serializeAdvisorRequest(selectedModel, updatedMessages, fortressSummary),
       });
       const data = await res.json();
+      setAdvisorStatus(data.modelUsed === 'deterministic-chronicler' || data.fallback || !res.ok ? 'Offline advice · AI unavailable' : 'AI advisor');
       const reply =
         data.text ||
         'Keep the picks ringing in the granite and ensure our Plump Helmet stores never run dry!';
@@ -107,7 +81,8 @@ export default function AdvisorPanel() {
       if (autoSpeak) {
         speakText(reply);
       }
-    } catch {
+    } catch (error) {
+      setAdvisorStatus(error instanceof RangeError ? error.message : 'Offline advice · AI unavailable');
       setMessages((prev) => [
         ...prev,
         {
@@ -123,7 +98,8 @@ export default function AdvisorPanel() {
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || isTyping) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2_000_000) { setAdvisorStatus('Choose a PNG, JPEG, or WebP image under 2 MB.'); return; }
 
     const reader = new FileReader();
     reader.onload = async () => {
@@ -140,11 +116,13 @@ export default function AdvisorPanel() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             image: base64,
+            mimeType: file.type,
             prompt:
               'Analyze this image as a Dwarven Master Architect. Suggest how it inspires a fortress hall layout, defense trap, or legendary artifact.',
           }),
         });
         const data = await res.json();
+        setAdvisorStatus(data.fallback || !res.ok ? 'Offline advice · image was not analyzed' : 'AI image analysis');
         const reply = data.text || 'A worthy blueprint for our subterranean halls!';
         setMessages((prev) => [...prev, { role: 'model', content: reply }]);
         if (autoSpeak) speakText(reply);
@@ -251,6 +229,7 @@ export default function AdvisorPanel() {
           </button>
         </div>
 
+        {advisorStatus && <p role="status" className="px-2 text-[#808080]">{advisorStatus}</p>}
         {/* Chat Stream */}
         <div
           ref={scrollRef}
@@ -295,9 +274,10 @@ export default function AdvisorPanel() {
         <div className="p-2 border-t border-[#202020] bg-[#101010] flex items-center gap-1.5">
           <input
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/webp"
             className="hidden"
             id="advisor-img-input"
+            disabled={isTyping}
             onChange={handleImageUpload}
           />
           <label
@@ -310,6 +290,7 @@ export default function AdvisorPanel() {
 
           <input
             type="text"
+            maxLength={3000}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage()}

@@ -135,7 +135,56 @@ export interface DwarfEntity {
   weaponEquipped?: boolean;
   armorEquipped?: boolean;
   kills?: number;
+  quirk?: DwarfQuirk;
 }
+
+export type DwarfQuirk = 'STONEWISE' | 'ALE_LOVER' | 'BRAVE' | 'LONER';
+export type RelicTemplate = 'EMBER_CROWN' | 'STONE_SONG' | 'OATH_AXE';
+export type RelicMode = 'STORED' | 'DISPLAYED' | 'EQUIPPED' | 'GIFTED';
+
+export interface NamedRelic {
+  id: string;
+  name: string;
+  template: RelicTemplate;
+  discoveredBy: string;
+  discoveredAt: number;
+  mode: RelicMode;
+  ownerId?: string;
+  giftedTo?: Civilization['race'];
+  history: Array<{ tick: number; text: string }>;
+}
+
+export interface RoyalCommission {
+  id: string;
+  title: string;
+  patron: Civilization['race'];
+  requirement: { resource: keyof FortressResources; amount: number };
+  reward: { wealth: number; favor: number; relic: RelicTemplate };
+  offeredAt: number;
+  deadline: number;
+  status: 'OFFERED' | 'ACTIVE' | 'COMPLETED' | 'EXPIRED';
+}
+
+export interface DwarfRelationship {
+  a: string;
+  b: string;
+  score: number;
+  lastTick: number;
+  reason: string;
+}
+
+export interface GuildState {
+  seasonIndex: number;
+  commissions: RoyalCommission[];
+  relics: NamedRelic[];
+  favor: Record<Civilization['race'], number>;
+  relationships: DwarfRelationship[];
+}
+
+export type GuildAction =
+  | { type: 'ACCEPT_COMMISSION' | 'DELIVER_COMMISSION'; id: string }
+  | { type: 'SET_RELIC_MODE'; id: string; mode: Exclude<RelicMode, 'GIFTED'>; ownerId?: string }
+  | { type: 'GIFT_RELIC'; id: string; patron: Civilization['race'] };
 
 export type HostileKind =
   | 'GOBLIN_RAIDER'
@@ -299,6 +348,7 @@ export interface NarrativeEvent {
 }
 
 export interface GameState {
+  guild: GuildState;
   id: string;
   world: WorldData;
   grid: Tile[][][]; // [z][y][x]

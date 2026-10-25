@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { GameProvider, useGame } from '@/components/GameProvider';
 import ASCIIViewport from '@/components/ASCIIViewport';
 import Sidebar from '@/components/Sidebar';
 import AdvisorPanel from '@/components/AdvisorPanel';
+import GuildHallModal from '@/components/GuildHallModal';
 import NarrativeEventModal from '@/components/NarrativeEventModal';
 import { TradeDepotModal } from '@/components/TradeDepotModal';
 import {
@@ -12,7 +13,8 @@ import {
   generateRandomWorldSeed,
   getSurfaceArchetype,
 } from '@/lib/world-gen';
-import { ISOTOPE } from '@/lib/colors';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MAX_SEED_LENGTH } from '@/lib/game-rules';
 
 function AsciiCrest() {
   return (
@@ -31,6 +33,7 @@ function AsciiCrest() {
 
 function FortressShell() {
   const {
+    hasLocalSave, loadLocalSave,
     screen,
     setScreen,
     gameState,
@@ -49,38 +52,44 @@ function FortressShell() {
     jumpToLocation,
   } = useGame();
 
+  const isMobile = useIsMobile(1024);
+  const [embarkError, setEmbarkError] = useState('');
   const [customSeedInput, setSeedInput] = useState<string | null>(null);
   const seedInput = customSeedInput ?? gameState.world.seed ?? 'Khazad-251';
   const [isEmbarking, setIsEmbarking] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<'MAP' | 'MANAGE' | 'ADVISOR'>('MAP');
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
+  const [isGuildModalOpen, setIsGuildModalOpen] = useState(false);
 
   // Desktop side panel toggles to maximize ASCII map area
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(false); // default closed so map is HUGE!
 
-  const previewWorld = generateDeterministicWorldMeta(seedInput || 'Khazad-251');
+  const previewWorld = useMemo(() => generateDeterministicWorldMeta(seedInput || 'Khazad-251'), [seedInput]);
   const previewArchetype = getSurfaceArchetype(seedInput || 'Khazad-251');
 
   const handleStartEmbark = async () => {
     setIsEmbarking(true);
-    await embarkNewWorld(seedInput, true);
-    setIsEmbarking(false);
+    try { await embarkNewWorld(seedInput, true); setEmbarkError(''); }
+    catch (error) { setEmbarkError(error instanceof Error ? error.message : 'Embark failed.'); }
+    finally { setIsEmbarking(false); }
   };
 
-  // Keyboard shortcut: 'F' or 'M' to toggle Full Map mode
+  // F toggles the command sidebar; Ctrl/Cmd+S saves.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (e.key.toLowerCase() === 'm' && screen === 'playing') {
+      if (e.key.toLowerCase() === 's' && (e.ctrlKey || e.metaKey) && screen === 'playing') { e.preventDefault(); handleCloudSave(); return; }
+      if (document.querySelector('[aria-modal="true"]')) return;
+      if (e.key.toLowerCase() === 'f' && screen === 'playing') {
         setShowLeftSidebar((prev) => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [screen]);
+  }, [screen, handleCloudSave]);
 
   if (screen === 'title') {
     return (
@@ -113,6 +122,7 @@ function FortressShell() {
                   <div className="flex gap-1.5">
                     <input
                       id="world-seed-input"
+                      maxLength={MAX_SEED_LENGTH}
                       type="text"
                       value={seedInput}
                       onChange={(e) => setSeedInput(e.target.value)}
@@ -191,6 +201,9 @@ function FortressShell() {
                 </button>
               </div>
 
+              {embarkError && <p role="alert">{embarkError}</p>}
+              {hasLocalSave && <button type="button" onClick={loadLocalSave} className="p-2 border text-[#33ff00]">[ CONTINUE LOCAL FORTRESS ]</button>}
+              {saveStatus && <p role="status">{saveStatus}</p>}
               {/* Firebase Cloud Saves Section */}
               <div className="pt-3 border-t border-[#202020] space-y-2 text-xs">
                 <div className="flex items-center justify-between">
@@ -235,7 +248,7 @@ function FortressShell() {
                 ) : (
                   <p className="text-[11px] text-[#808080]">
                     {user
-                      ? 'No cloud archives. Embark and press [ S: SAVE ] in-game!'
+                      ? 'No cloud archives. Embark and press [ Ctrl+S: SAVE ] in-game!'
                       : 'Play immediately with deterministic seed data, or sign in to sync fortresses.'}
                   </p>
                 )}
@@ -365,6 +378,9 @@ function FortressShell() {
 
         {/* Clickable Terminal Action Text Buttons */}
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <button type="button" onClick={() => setIsGuildModalOpen(true)} className="px-1.5 py-0.5 border border-[#ff0099] text-[#ff0099] hover:bg-[#202020] whitespace-nowrap">
+            [ GUILD HALL{gameState.guild.commissions.some((c) => c.status === 'ACTIVE') ? ' · CHARTER ACTIVE' : ''} ]
+          </button>
           {/* Trade Depot Barter Modal Button */}
           <button
             type="button"
@@ -439,7 +455,7 @@ function FortressShell() {
             onClick={handleCloudSave}
             className="px-1.5 py-0.5 border border-[#202020] text-[#00ffff] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
           >
-            [ S: SAVE ]
+            [ Ctrl+S: SAVE ]
           </button>
 
           {/* Reroll Random Map Button */}
@@ -565,7 +581,7 @@ function FortressShell() {
           >
             {!showLeftSidebar && !showRightSidebar
               ? '[ [X] FULL MAP MODE (100%) ]'
-              : '[ [ ] FULL MAP MODE (HOTKEY: M) ]'}
+              : '[ [ ] FULL MAP MODE (HOTKEY: F) ]'}
           </button>
         </div>
 
@@ -587,7 +603,7 @@ function FortressShell() {
       {/* Main Screen Layout: MAP IS THE DOMINANT/BIGGEST PART */}
       <div className="flex-1 flex min-h-0 overflow-hidden bg-[#000000]">
         {/* Left Sidebar: Compact width, collapsible */}
-        {showLeftSidebar && (
+        {!isMobile && showLeftSidebar && (
           <div className="hidden lg:flex w-72 xl:w-80 h-full shrink-0 border-r border-[#202020]">
             <Sidebar />
           </div>
@@ -599,7 +615,7 @@ function FortressShell() {
             mobilePanel === 'MANAGE' ? 'flex w-full' : 'hidden'
           } lg:hidden h-full`}
         >
-          <Sidebar />
+          {isMobile && <Sidebar />}
         </div>
 
         {/* Center ASCII Viewport: DOMINANT - takes 100% of remaining width and height! */}
@@ -617,11 +633,11 @@ function FortressShell() {
             mobilePanel === 'ADVISOR' ? 'flex w-full' : 'hidden'
           } lg:hidden h-full`}
         >
-          <AdvisorPanel />
+          {isMobile && <AdvisorPanel />}
         </div>
 
         {/* Right Advisor & Chronicle Panel: Slender, collapsible */}
-        {showRightSidebar && (
+        {!isMobile && showRightSidebar && (
           <div className="hidden lg:flex w-72 xl:w-80 h-full shrink-0 border-l border-[#202020]">
             <AdvisorPanel />
           </div>
@@ -664,6 +680,8 @@ function FortressShell() {
           [ 3: LORE &amp; AI ]
         </button>
       </div>
+
+      <GuildHallModal isOpen={isGuildModalOpen} onClose={() => setIsGuildModalOpen(false)} />
 
       {/* Narrative Event & Decree Modal */}
       <NarrativeEventModal

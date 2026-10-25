@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { GameState } from './types';
+import { cloudSavePath, serializeFortress, SAVE_VERSION } from './save-system';
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -73,7 +74,7 @@ export function handleFirestoreError(
     path,
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  throw new Error('Cloud storage could not complete this request. Please check your sign-in and try again.');
 }
 
 let connectionTested = false;
@@ -111,8 +112,8 @@ export interface CloudFortressSave {
   wealth: number;
   population: number;
   resources: GameState['resources'];
-  dwarves: GameState['dwarves'];
-  world: GameState['world'];
+  schemaVersion?: number;
+  snapshot?: string;
 }
 
 export async function saveFortressToCloud(state: GameState): Promise<string> {
@@ -121,16 +122,19 @@ export async function saveFortressToCloud(state: GameState): Promise<string> {
     throw new Error('Sign in with Google to save fortresses to the cloud.');
   }
 
-  const saveId = state.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || `fort-${Date.now()}`;
-  const path = `saves/${saveId}`;
+  const saveId = state.id;
+  const path = cloudSavePath(user.uid, saveId);
+  const snapshot = serializeFortress(state);
 
   try {
-    await setDoc(doc(db, 'saves', saveId), {
+    await setDoc(doc(db, path), {
+      schemaVersion: SAVE_VERSION,
+      snapshot,
       id: saveId,
       userId: user.uid,
       worldName: state.world.name.slice(0, 120),
       dwarvenName: state.world.dwarvenName.slice(0, 80),
-      seed: state.world.seed.slice(0, 64),
+      seed: state.world.seed,
       ticks: state.ticks,
       year: state.year,
       season: state.season.slice(0, 40),
@@ -150,9 +154,11 @@ export async function listUserCloudSaves(): Promise<CloudFortressSave[]> {
   if (!user) return [];
   const path = 'saves';
   try {
-    const q = query(collection(db, 'saves'), where('userId', '==', user.uid));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data() as CloudFortressSave);
+    const [current, legacy] = await Promise.all([
+      getDocs(collection(db, 'users', user.uid, 'saves')),
+      getDocs(query(collection(db, 'saves'), where('userId', '==', user.uid))),
+    ]);
+    return [...current.docs, ...legacy.docs].map((d) => d.data() as CloudFortressSave);
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
   }

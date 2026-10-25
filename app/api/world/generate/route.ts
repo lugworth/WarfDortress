@@ -1,3 +1,4 @@
+import { readAiRequest, textField, aiErrorResponse, AiRequestError } from '@/lib/ai-request';
 import { Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 import { generateWithModelFallback } from '@/lib/gemini-server';
@@ -6,8 +7,9 @@ const loreCache = new Map<string, { backstory: string; history: unknown[] }>();
 
 export async function POST(req: NextRequest) {
   try {
-    const { seed, dwarvenName, name, civilizations } = await req.json();
-    const cacheKey = String(seed || name || 'default');
+    const { seed, dwarvenName, name, civilizations } = await readAiRequest(req, 16000);
+    textField(seed, 1024); textField(dwarvenName, 80); textField(name, 120);
+    const cacheKey = JSON.stringify([seed, dwarvenName, name, civilizations]);
 
     if (loreCache.has(cacheKey)) {
       return NextResponse.json(loreCache.get(cacheKey));
@@ -54,11 +56,14 @@ Civilizations present: ${JSON.stringify(civilizations)}.`;
     }
 
     const parsed = JSON.parse(result.text || '{}');
+    if (typeof parsed.backstory !== 'string' || parsed.backstory.length > 8000 || !Array.isArray(parsed.history) || parsed.history.length > 10 || parsed.history.length === 0 || !parsed.history.every((event: Record<string, unknown>) => event && Number.isSafeInteger(event.year) && ['Age of Myth', 'Age of Stone', 'Age of Anvils'].includes(String(event.era)) && ['FOUNDING', 'WAR', 'ARTIFACT', 'BEAST', 'DISCOVERY'].includes(String(event.category)) && typeof event.title === 'string' && typeof event.description === 'string' && event.title.length < 300 && event.description.length < 2000)) return NextResponse.json({ fallback: true });
     if (parsed.backstory && Array.isArray(parsed.history)) {
+      if (loreCache.size >= 100) loreCache.delete(loreCache.keys().next().value!);
       loreCache.set(cacheKey, parsed);
     }
     return NextResponse.json(parsed);
-  } catch {
+  } catch (error) {
+    const invalid = aiErrorResponse(error); if (invalid) return invalid;
     return NextResponse.json({ fallback: true }, { status: 200 });
   }
 }
