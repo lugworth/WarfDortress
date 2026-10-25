@@ -92,6 +92,7 @@ export default function ResearchPanel({
                 <button
                   type="button"
                   disabled={blockers.length > 0}
+                  aria-label={`Start ${project.title}`}
                   aria-describedby={
                     blockers.length
                       ? `research-blockers-${project.id}`
@@ -109,7 +110,7 @@ export default function ResearchPanel({
                     )
                   }
                 >
-                  Start {project.title}
+                  Start project
                 </button>
                 {blockers.length > 0 && (
                   <p

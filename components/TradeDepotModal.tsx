@@ -98,8 +98,8 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Trade exchange" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 font-mono text-xs select-none">
       <div className="w-full max-w-3xl bg-[var(--ui-bg)] border-2 border-[var(--ui-info)] text-[var(--ui-text)] flex flex-col max-h-[90vh] overflow-hidden">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-3 py-2 bg-[var(--ui-panel)] border-b border-[var(--ui-border)]">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between px-3 py-2 bg-[var(--ui-panel)] border-b border-[var(--ui-border)]">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-[var(--ui-info)] font-bold">
               ┌─[ ¤ MERCHANT CARAVAN &amp; TRADE DEPOT EXCHANGE ]
             </span>
@@ -112,7 +112,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
             onClick={onClose}
             className="text-[var(--ui-muted)] hover:text-[var(--ui-bright)] px-1.5 py-0.5 border border-[var(--ui-border)] whitespace-nowrap shrink-0"
           >
-            [ ESC / CLOSE ]
+            Close
           </button>
         </div>
 
@@ -139,7 +139,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
         <div className="flex-1 overflow-y-auto p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Left Column: Fortress Exports (What You Offer) */}
           <div className="border border-[var(--ui-border)] bg-[var(--ui-panel)] p-2.5 flex flex-col">
-            <div className="text-[var(--ui-warning)] font-bold border-b border-[var(--ui-border)] pb-1.5 mb-2 flex items-center justify-between">
+            <div className="text-[var(--ui-warning)] font-bold border-b border-[var(--ui-border)] pb-1.5 mb-2 flex flex-wrap items-center justify-between">
               <span>1. FORTRESS EXPORTS (OFFER)</span>
               <span className="text-[10px] text-[var(--ui-muted)]">STOCK // OFFER</span>
             </div>
@@ -151,7 +151,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
                 return (
                   <div
                     key={item.key}
-                    className="flex items-center justify-between gap-2 p-1.5 bg-[var(--ui-bg)] border border-[var(--ui-border)]"
+                    className="flex flex-wrap items-center justify-between gap-2 p-1.5 bg-[var(--ui-bg)] border border-[var(--ui-border)]"
                   >
                     <div className="min-w-0">
                       <div className={`font-bold truncate ${item.color}`}>{item.label}</div>
@@ -202,7 +202,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
 
           {/* Right Column: Caravan Imports (What You Receive) */}
           <div className="border border-[var(--ui-border)] bg-[var(--ui-panel)] p-2.5 flex flex-col">
-            <div className="text-[var(--ui-success)] font-bold border-b border-[var(--ui-border)] pb-1.5 mb-2 flex items-center justify-between">
+            <div className="text-[var(--ui-success)] font-bold border-b border-[var(--ui-border)] pb-1.5 mb-2 flex flex-wrap items-center justify-between">
               <span>2. CARAVAN IMPORTS (REQUEST)</span>
               <span className="text-[10px] text-[var(--ui-muted)]">COST // QTY</span>
             </div>
@@ -213,7 +213,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
                 return (
                   <div
                     key={item.key}
-                    className="flex items-center justify-between gap-2 p-1.5 bg-[var(--ui-bg)] border border-[var(--ui-border)]"
+                    className="flex flex-wrap items-center justify-between gap-2 p-1.5 bg-[var(--ui-bg)] border border-[var(--ui-border)]"
                   >
                     <div className="min-w-0">
                       <div className={`font-bold truncate ${item.color}`}>{item.label}</div>
@@ -260,7 +260,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
               })}
 
               {/* Recruit Pioneer Option */}
-              <div className="p-2 bg-[var(--ui-bg)] border border-[var(--ui-accent)]/50 flex items-center justify-between gap-2">
+              <div className="p-2 bg-[var(--ui-bg)] border border-[var(--ui-accent)]/50 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="text-[var(--ui-accent)] font-bold">Hire Caravan Artisan / Mercenary</div>
                   <div className="text-[10px] text-[var(--ui-muted)]">
@@ -309,7 +309,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={handleReset}
@@ -323,7 +323,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
               onClick={handleConfirmTrade}
               className="px-3 py-1 border border-[var(--ui-success)] bg-[var(--ui-panel)] text-[var(--ui-success)] hover:bg-[var(--ui-success)] hover:text-[var(--ui-bg)] disabled:border-[var(--ui-border)] disabled:text-[var(--ui-muted)] disabled:bg-transparent font-bold transition-colors whitespace-nowrap shrink-0"
             >
-              [ ¤ SIGN BARTER CHARTER ]
+              Confirm trade
             </button>
           </div>
         </div>

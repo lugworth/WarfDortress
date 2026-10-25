@@ -134,19 +134,20 @@ export default function Sidebar() {
   return (
     <aside className="w-full h-full bg-[var(--ui-panel)] flex flex-col font-mono text-xs select-none overflow-hidden text-[var(--ui-text)]">
       {/* Top 4-Tab Selector */}
-      <div className="grid grid-cols-4 border-b border-[var(--ui-border)] bg-[var(--ui-bg)] shrink-0">
+      <div className="sidebar-tabs border-b border-[var(--ui-border)] bg-[var(--ui-bg)] shrink-0">
         {(
           [
-            { id: 'DESIGNATE', label: '[BUILD]' },
-            { id: 'DWARVES', label: `[CLAN:${gameState.dwarves.length}]` },
-            { id: 'STOCKS', label: '[STOCKS]' },
-            { id: 'RADAR', label: '[RADAR]' },
+            { id: 'DESIGNATE', label: 'Tools' },
+            { id: 'DWARVES', label: 'Clan' },
+            { id: 'STOCKS', label: 'Stocks' },
+            { id: 'RADAR', label: 'Radar' },
           ] as const
         ).map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
+            aria-pressed={activeTab === tab.id}
             className={`py-2 px-0.5 text-center transition-colors border-r border-[var(--ui-border)] last:border-r-0 whitespace-nowrap flex items-center justify-center shrink-0 text-[11px] ${
               activeTab === tab.id
                 ? 'bg-[var(--ui-panel)] text-[var(--ui-accent)] font-bold border-b-2 border-b-[var(--ui-accent)]'
@@ -172,12 +173,12 @@ export default function Sidebar() {
                   HOSTILES: <strong className="text-[var(--ui-danger)]">{gameState.hostiles.length}</strong>
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="button-grid">
                 {(
                   [
-                    { id: 'DEFENSIVE', label: '[DEFEND]' },
-                    { id: 'PATROL', label: '[PATROL]' },
-                    { id: 'SALLY_FORTH', label: '[SALLY]' },
+                    { id: 'DEFENSIVE', label: 'Defend' },
+                    { id: 'PATROL', label: 'Patrol' },
+                    { id: 'SALLY_FORTH', label: 'Sally' },
                   ] as { id: MilitiaDoctrine; label: string }[]
                 ).map((doc) => (
                   <button
@@ -199,7 +200,7 @@ export default function Sidebar() {
                 onClick={triggerGoblinRaid}
                 className="w-full py-1 px-2 border border-[var(--ui-warning)] text-[var(--ui-warning)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] text-[10px] font-bold text-center whitespace-nowrap shrink-0"
               >
-                [ ! SOUND WAR HORN (TEST GOBLIN RAID) ]
+                Sound war horn
               </button>
             </div>
 
@@ -208,13 +209,13 @@ export default function Sidebar() {
               <div className="text-[11px] text-[var(--ui-info)] font-bold">
                 CLAN-WIDE LABOR PRESETS (ONE-CLICK)
               </div>
-              <div className="grid grid-cols-2 gap-1">
+              <div className="button-grid">
                 {(
                   [
-                    { id: 'ALL_HANDS', label: '[ ALL-HANDS ]', color: 'text-[var(--ui-success)]' },
-                    { id: 'MINING_DELVE', label: '[ DEEP MINERS ]', color: 'text-[var(--ui-warning)]' },
-                    { id: 'SMITH_FORTIFY', label: '[ SMITH & ARMS ]', color: 'text-[var(--ui-info)]' },
-                    { id: 'HARVEST_BREW', label: '[ FARM & BREW ]', color: 'text-[var(--ui-violet)]' },
+                    { id: 'ALL_HANDS', label: 'All hands', color: 'text-[var(--ui-success)]' },
+                    { id: 'MINING_DELVE', label: 'Miners', color: 'text-[var(--ui-warning)]' },
+                    { id: 'SMITH_FORTIFY', label: 'Smiths', color: 'text-[var(--ui-info)]' },
+                    { id: 'HARVEST_BREW', label: 'Farmers', color: 'text-[var(--ui-violet)]' },
                   ] as { id: LaborPresetId; label: string; color: string }[]
                 ).map((preset) => (
                   <button
@@ -280,7 +281,7 @@ export default function Sidebar() {
                   </div>
 
                   {/* Vital Needs & HP Readout */}
-                  <div className="grid grid-cols-3 gap-1 mt-2 text-[10px] tabular-nums bg-[var(--ui-panel)] p-1.5 border border-[var(--ui-border)]">
+                  <div className="clan-stats mt-2 text-[10px] tabular-nums bg-[var(--ui-panel)] p-1.5 border border-[var(--ui-border)]">
                     <div>
                       <span className="text-[var(--ui-muted)]">HP:</span>{' '}
                       <span className={dwarf.hp < 50 ? 'text-[var(--ui-danger)]' : 'text-[var(--ui-success)]'}>
@@ -453,7 +454,7 @@ export default function Sidebar() {
                   }
                   className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-warning)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
-                  [ + SMELT STEEL BARS (x3 · AUTO) ]
+                  Smelt steel
                 </button>
                 <button
                   type="button"
@@ -469,7 +470,7 @@ export default function Sidebar() {
                   }
                   className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-info)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
-                  [ + FORGE RUNED AXES (x2 · AUTO) ]
+                  Forge axes
                 </button>
                 <button
                   type="button"
@@ -485,7 +486,7 @@ export default function Sidebar() {
                   }
                   className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-success)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
-                  [ + FORGE STEEL ARMOR (x2) ]
+                  Forge armor
                 </button>
                 <button
                   type="button"
@@ -501,7 +502,7 @@ export default function Sidebar() {
                   }
                   className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-violet)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
-                  [ + BREW CASK ALE (x3 · AUTO) ]
+                  Brew ale
                 </button>
                 <button
                   type="button"
@@ -517,7 +518,7 @@ export default function Sidebar() {
                   }
                   className="w-full py-1 px-2 border border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-text)] hover:bg-[var(--ui-border)] text-left whitespace-nowrap shrink-0"
                 >
-                  [ + CARVE STONE FURNITURE (x3) ]
+                  Carve furniture
                 </button>
               </div>
             </div>

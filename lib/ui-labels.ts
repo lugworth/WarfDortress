@@ -1,0 +1,23 @@
+import type { DesignationType } from "./types.ts";
+export const TOOL_NAMES: Record<DesignationType, string> = {
+  MINE: "Mine",
+  STAIRS: "Stairs",
+  RECLAIM_RELIC: "Reclaim relic",
+  CHOP: "Chop trees",
+  GATHER: "Gather plants",
+  BUILD_SMELTER: "Smelter",
+  BUILD_FORGE: "Forge",
+  BUILD_TAVERN: "Tavern",
+  BUILD_TEMPLE: "Temple",
+  BUILD_DEPOT: "Trade depot",
+  BUILD_TRAP: "Stone trap",
+  BUILD_WALL: "Stone wall",
+  BUILD_DOOR: "Door",
+  STOCKPILE: "Stockpile",
+  BUILD_FARM: "Farm",
+  BUILD_STILL: "Brewery",
+  BUILD_MASON: "Mason",
+  BUILD_CARPENTER: "Carpenter",
+  BUILD_BED: "Bed",
+  CANCEL: "Cancel orders",
+};

@@ -14,6 +14,7 @@ import { canDesignateTile } from "@/lib/game-engine";
 import { TOOL_KEYS } from "@/lib/game-rules";
 import { getDesignationPreview, getMapPoints } from "@/lib/ui-model";
 import { formatCost, getTool } from "@/lib/tool-catalog";
+import { TOOL_NAMES } from "@/lib/ui-labels";
 import { MAP_ZOOMS } from "@/lib/ui-preferences";
 import { useUI } from "./UIProvider";
 
@@ -63,11 +64,13 @@ export default function ASCIIViewport() {
     designateBox,
     toggleDwarfLabor,
     togglePause,
+    jumpToLocation,
   } = useGame();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ width: 800, height: 600, dpr: 1 });
+  const [mapOptions, setMapOptions] = useState(false);
   const [panMode, setPanMode] = useState(false);
   const [focusedPointId, setFocusedPointId] = useState<string | null>(null);
   const [fontReady, setFontReady] = useState(false);
@@ -162,13 +165,13 @@ export default function ASCIIViewport() {
             dim: "#8894a0",
           }
         : {
-            accent: "#ff62b5",
-            info: "#73d8df",
-            danger: "#ff8585",
-            good: "#8fda92",
-            terrain: "#8c9991",
-            bg: "#080c0b",
-            dim: "#52625b",
+            accent: ISOTOPE.base0A,
+            info: ISOTOPE.base0C,
+            danger: ISOTOPE.base08,
+            good: ISOTOPE.base0B,
+            terrain: ISOTOPE.base05,
+            bg: ISOTOPE.base00,
+            dim: ISOTOPE.base02,
           },
     [preferences.theme],
   );
@@ -318,6 +321,7 @@ export default function ASCIIViewport() {
     setInspectMode,
     setSelectedTool,
     togglePause,
+    jumpToLocation,
   ]);
 
   // Draw the ASCII Grid, Designations, Selection Box, Hostiles, and Dwarves
@@ -381,13 +385,12 @@ export default function ASCIIViewport() {
             ["TAVERN_HALL", "TEMPLE_ALTAR", "TRADE_DEPOT"].includes(
               tile.terrain,
             );
-          ctx.fillStyle = landmark
-            ? palette.info
-            : preferences.theme === "contrast"
-              ? palette.terrain
+          ctx.fillStyle =
+            preferences.theme === "contrast"
+              ? landmark
+                ? palette.info
+                : palette.terrain
               : tile.fg;
-          ctx.globalAlpha =
-            preferences.theme === "terminal" && !landmark ? 0.66 : 1;
           ctx.fillText(tile.char, px + CELL_W / 2, py + CELL_H / 2);
           ctx.globalAlpha = 1;
         }
@@ -802,157 +805,187 @@ export default function ASCIIViewport() {
 
   return (
     <div className="map-viewport flex flex-col h-full w-full min-h-0 bg-[var(--ui-bg)] font-mono select-none overflow-y-auto text-[var(--ui-text)]">
-      {/* Top ASCII Viewport Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-[var(--ui-panel)] border-b border-[var(--ui-border)] text-xs">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="map-depth-title text-[var(--ui-accent)] font-bold">
-            ┌─[ DEPTH Z-{currentZ}: {currentStratum.name.toUpperCase()} ]
-          </span>
-          <span className="text-[var(--ui-muted)] hidden sm:inline whitespace-nowrap">
-            {"//"} STRATA: {currentStratum.primaryRock.toUpperCase()}
-          </span>
-        </div>
-
-        {/* Pure colored clickable text commands */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <div className="map-toolbar" aria-label="Map controls">
+        <span
+          className="ui-caption mr-2 text-[var(--ui-muted)]"
+          title={currentStratum.name}
+        >
+          Z-{currentZ} ·{" "}
+          {currentZ === 0 ? "Surface" : currentStratum.primaryRock}
+        </span>
+        <button
+          type="button"
+          className="ui-button"
+          aria-label="Ascend Z-Level"
+          disabled={currentZ === 0}
+          onClick={() => setCurrentZ((z) => Math.max(0, z - 1))}
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          className="ui-button"
+          aria-label="Descend Z-Level"
+          disabled={currentZ >= gameState.world.depth - 1}
+          onClick={() =>
+            setCurrentZ((z) => Math.min(gameState.world.depth - 1, z + 1))
+          }
+        >
+          ↓
+        </button>
+        <button
+          type="button"
+          className="ui-button"
+          aria-pressed={inspectMode}
+          onClick={() => setInspectMode((v) => !v)}
+        >
+          Inspect
+        </button>
+        <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setInspectMode((v) => !v)}
-            className={`px-1.5 py-0.5 border transition-colors whitespace-nowrap shrink-0 ${
-              inspectMode
-                ? "border-[var(--ui-accent)] bg-[var(--ui-border)] text-[var(--ui-accent)] font-bold"
-                : "border-[var(--ui-border)] text-[var(--ui-info)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)]"
-            }`}
-          >
-            {inspectMode ? "[ ? INSPECT: ON ]" : "[ ? INSPECT ]"}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleQuickExcavate}
-            className="hidden sm:inline text-[var(--ui-warning)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] px-1 transition-colors whitespace-nowrap shrink-0"
-          >
-            [ MINE CLIFF ]
-          </button>
-          <button
-            type="button"
-            onClick={handleQuickChop}
-            className="hidden sm:inline text-[var(--ui-success)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] px-1 transition-colors whitespace-nowrap shrink-0"
-          >
-            [ CHOP TIMBER ]
-          </button>
-          <button
-            type="button"
-            onClick={handleQuickBuildForge}
-            className="text-[var(--ui-violet)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] px-1 transition-colors hidden sm:inline whitespace-nowrap shrink-0"
-          >
-            [ SMELTER &amp; TAVERN ]
-          </button>
-
-          <span className="text-[var(--ui-muted)]">|</span>
-
-          <button
-            type="button"
-            aria-label="Ascend Z-Level"
-            disabled={currentZ === 0}
-            onClick={() => setCurrentZ((z) => Math.max(0, z - 1))}
-            className="text-[var(--ui-accent)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] disabled:text-[var(--ui-muted)] px-1 transition-colors whitespace-nowrap shrink-0"
-          >
-            [ ▲ UP ( &lt; ) ]
-          </button>
-          <span className="text-[var(--ui-info)] font-bold px-0.5 whitespace-nowrap shrink-0">
-            Z-{currentZ}
-          </span>
-          <button
-            type="button"
-            aria-label="Descend Z-Level"
-            disabled={currentZ >= gameState.world.depth - 1}
+            className="ui-button"
+            aria-label="Zoom map out"
             onClick={() =>
-              setCurrentZ((z) => Math.min(gameState.world.depth - 1, z + 1))
+              updatePreferences({
+                mapZoom:
+                  [...MAP_ZOOMS].reverse().find((z) => z < scale * 100 - 1) ||
+                  MAP_ZOOMS[0],
+              })
             }
-            className="text-[var(--ui-accent)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] disabled:text-[var(--ui-muted)] px-1 transition-colors whitespace-nowrap shrink-0"
           >
-            [ ▼ DOWN ( &gt; ) ]
+            −
+          </button>
+          <output className="ui-caption" aria-label="Current map zoom">
+            {Math.round(scale * 100)}%
+          </output>
+          <button
+            type="button"
+            className="ui-button"
+            aria-label="Zoom map in"
+            onClick={() =>
+              updatePreferences({
+                mapZoom: MAP_ZOOMS.find((z) => z > scale * 100 + 1) || 200,
+              })
+            }
+          >
+            +
           </button>
         </div>
-      </div>
-
-      <div
-        className="map-controls flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-1 text-xs"
-        aria-label="Map controls"
-      >
         <button
           type="button"
-          aria-label="Zoom map out"
-          onClick={() =>
-            updatePreferences({
-              mapZoom:
-                [...MAP_ZOOMS].reverse().find((z) => z < scale * 100 - 1) ||
-                MAP_ZOOMS[0],
-            })
-          }
-        >
-          [ − ]
-        </button>
-        <output aria-label="Current map zoom">
-          {preferences.mapZoom === "fit" ? "Fit · " : ""}
-          {Math.round(scale * 100)}%
-        </output>
-        <button
-          type="button"
-          aria-label="Zoom map in"
-          onClick={() =>
-            updatePreferences({
-              mapZoom: MAP_ZOOMS.find((z) => z > scale * 100 + 1) || 200,
-            })
-          }
-        >
-          [ + ]
-        </button>
-        <button
-          type="button"
+          className="ui-button"
           onClick={() => updatePreferences({ mapZoom: "fit" })}
         >
-          [ Fit map ]
+          Fit
         </button>
         <button
           type="button"
-          aria-pressed={preferences.labels}
-          onClick={() => updatePreferences({ labels: !preferences.labels })}
+          className="ui-button"
+          aria-expanded={mapOptions}
+          aria-controls="map-options"
+          onClick={() => setMapOptions((v) => !v)}
         >
-          [ Labels: {preferences.labels ? "on" : "off"} ]
+          Options {mapOptions ? "▴" : "▾"}
         </button>
-        <button
-          type="button"
-          aria-pressed={panMode}
-          onClick={() => setPanMode((v) => !v)}
-        >
-          [ {panMode ? "Pan map" : "Draw orders"} ]
-        </button>
-        <label className="flex min-w-0 items-center gap-1">
-          Find
-          <select
-            aria-label="Find map object"
-            value=""
-            className="max-w-[15rem]"
-            onChange={(e) => {
-              const point = points.find((p) => p.id === e.target.value);
-              if (point) {
-                inspectPoint(point);
-                canvasRef.current?.focus();
-              }
-            }}
-          >
-            <option value="">Visible objects ({points.length})</option>
-            {points.map((point) => (
-              <option key={point.id} value={point.id}>
-                {point.kind === "HOSTILE" ? "! " : ""}
-                {point.label} ({point.x},{point.y})
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
+      {mapOptions && (
+        <section
+          id="map-options"
+          aria-label="Map options"
+          className="map-settings space-y-3"
+        >
+          <p className="ui-caption text-[var(--ui-muted)]">
+            {currentStratum.name} · {currentStratum.primaryRock}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="ui-button"
+              aria-pressed={preferences.labels}
+              onClick={() => updatePreferences({ labels: !preferences.labels })}
+            >
+              Labels {preferences.labels ? "on" : "off"}
+            </button>
+            <button
+              type="button"
+              className="ui-button"
+              aria-pressed={panMode}
+              onClick={() => setPanMode((v) => !v)}
+            >
+              {panMode ? "Pan mode" : "Draw mode"}
+            </button>
+            <button
+              type="button"
+              className="ui-button"
+              onClick={handleQuickExcavate}
+            >
+              Mine cliff
+            </button>
+            <button
+              type="button"
+              className="ui-button"
+              onClick={handleQuickChop}
+            >
+              Chop timber
+            </button>
+            <button
+              type="button"
+              className="ui-button"
+              onClick={handleQuickBuildForge}
+            >
+              Starter workshops
+            </button>
+          </div>
+          <label className="flex flex-wrap items-center gap-2 ui-caption">
+            Find
+            <select
+              aria-label="Find map object"
+              value=""
+              className="min-w-0 max-w-full"
+              onChange={(event) => {
+                const point = points.find((p) => p.id === event.target.value);
+                if (point) {
+                  inspectPoint(point);
+                  canvasRef.current?.focus();
+                }
+              }}
+            >
+              <option value="">Visible objects ({points.length})</option>
+              {points.map((point) => (
+                <option key={point.id} value={point.id}>
+                  {point.label} ({point.x},{point.y})
+                </option>
+              ))}
+            </select>
+          </label>
+          <details>
+            <summary className="ui-caption">Landmarks &amp; map legend</summary>
+            <ul className="mt-2 space-y-2">
+              {gameState.alerts.slice(0, 6).map((alert) => (
+                <li
+                  key={alert.id}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="ui-caption">{alert.title}</span>
+                  <button
+                    type="button"
+                    className="ui-button"
+                    aria-label={`Jump to ${alert.title}`}
+                    onClick={() => jumpToLocation(alert.x, alert.y, alert.z)}
+                  >
+                    Go
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="ui-caption mt-2">
+              ☺ Dwarf · g Raider · ☼ Relic · £ Smelter · ⚒ Forge · ♫ Tavern · Ψ
+              Temple · ^ Trap
+            </p>
+          </details>
+        </section>
+      )}
 
       {/* Native-size canvas scrolls instead of shrinking glyphs to fit. */}
       <div
@@ -1057,10 +1090,11 @@ export default function ASCIIViewport() {
                 className="border border-[var(--ui-success)] px-3 py-1"
                 onClick={commitSelection}
               >
-                [ Confirm {preview.accepted} eligible tiles ]
+                Queue {preview.accepted}{" "}
+                {preview.accepted === 1 ? "tile" : "tiles"}
               </button>
               <button type="button" onClick={() => setPending(null)}>
-                [ Cancel selection ]
+                Cancel
               </button>
             </div>
           )}
@@ -1145,7 +1179,7 @@ export default function ASCIIViewport() {
                 onClick={() => setInspectMode(false)}
                 className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-muted)] hover:text-[var(--ui-bright)] whitespace-nowrap shrink-0"
               >
-                [ CLOSE INSPECTOR ]
+                Close
               </button>
             </div>
           </div>
@@ -1196,8 +1230,8 @@ export default function ASCIIViewport() {
                   }`}
                 >
                   {activeInspect.dwarf.labors.COMBAT
-                    ? "[⚔ MILITIA: ON]"
-                    : "[⚔ DRAFT MILITIA]"}
+                    ? "Militia on"
+                    : "Draft militia"}
                 </button>
               </div>
             ) : (
@@ -1240,43 +1274,15 @@ export default function ASCIIViewport() {
         </div>
       )}
 
-      {/* Bottom ASCII Viewport Telemetry Bar */}
-      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 px-3 py-1 bg-[var(--ui-panel)] border-t border-[var(--ui-border)] text-xs text-[var(--ui-muted)]">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[var(--ui-info)] whitespace-nowrap shrink-0">
-            └─[ MODE:{" "}
-            <strong className="text-[var(--ui-accent)]">
-              {inspectMode ? "INSPECTOR" : selectedTool.replace("BUILD_", "")}
-            </strong>{" "}
-            ]
-          </span>
-          {hoveredTile ? (
-            <span className="text-[var(--ui-text)] truncate whitespace-nowrap">
-              ──[ POS: ({hoveredTile.x},{hoveredTile.y},Z-{hoveredTile.z}) //{" "}
-              {hoveredTile.revealed ? hoveredTile.terrain : "UNEXPLORED"}{" "}
-              {hoveredTile.designation
-                ? `// ORDER: ${hoveredTile.designation}`
-                : ""}{" "}
-              ]
-            </span>
-          ) : (
-            <span className="text-[var(--ui-muted)] truncate whitespace-nowrap">
-              ──[ Click or drag to designate orders · Right-click or [? INSPECT]
-              to examine ]
-            </span>
-          )}
-        </div>
-
-        <div className="hidden xl:flex items-center gap-2 text-[11px] text-[var(--ui-muted)] whitespace-nowrap shrink-0">
-          <span className="text-[var(--ui-accent)]">☺ Dwarf</span>
-          <span className="text-[var(--ui-danger)]">g Raider</span>
-          <span className="text-[var(--ui-info)]">☼ Relic</span>
-          <span className="text-[var(--ui-warning)]">£ Smelter</span>
-          <span className="text-[var(--ui-info)]">⚒ Forge</span>
-          <span className="text-[var(--ui-violet)]">♫ Tavern</span>
-          <span className="text-[var(--ui-accent)]">Ψ Temple</span>
-          <span className="text-[var(--ui-danger)]">^ Trap</span>
-        </div>
+      <div className="ui-caption flex shrink-0 items-center gap-3 overflow-hidden border-t border-[var(--ui-border)] px-3 py-1 text-[var(--ui-muted)]">
+        <span className="shrink-0 text-[var(--ui-accent)]">
+          {inspectMode ? "Inspect" : TOOL_NAMES[selectedTool]}
+        </span>
+        <span className="truncate">
+          {hoveredTile
+            ? `${hoveredTile.x},${hoveredTile.y} · ${hoveredTile.revealed ? hoveredTile.terrain.replaceAll("_", " ").toLowerCase() : "unexplored"}`
+            : "Drag to queue · I to inspect"}
+        </span>
       </div>
     </div>
   );

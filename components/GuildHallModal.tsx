@@ -1,18 +1,19 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useGame } from './GameProvider';
-import { useDialog } from '@/hooks/use-dialog';
-import { QUIRKS, RELIC_TEMPLATES } from '@/lib/guild';
-import type { Civilization, GuildAction } from '@/lib/types';
+import { useEffect, useState } from "react";
+import { useGame } from "./GameProvider";
+import { useDialog } from "@/hooks/use-dialog";
+import { QUIRKS, RELIC_TEMPLATES } from "@/lib/guild";
+import type { Civilization, GuildAction } from "@/lib/types";
 
 const buttonClass =
-  'border border-[#404040] px-2 py-1 text-[var(--ui-info)] hover:border-[var(--ui-info)] focus-visible:outline-2 focus-visible:outline-[var(--ui-accent)] disabled:opacity-40 disabled:cursor-not-allowed';
-const cardClass = 'border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 space-y-2';
+  "border border-[#404040] px-2 py-1 text-[var(--ui-info)] hover:border-[var(--ui-info)] focus-visible:outline-2 focus-visible:outline-[var(--ui-accent)] disabled:opacity-40 disabled:cursor-not-allowed";
+const cardClass =
+  "border border-[var(--ui-border)] bg-[var(--ui-panel)] p-3 space-y-2";
 const TAB_NAMES = {
-  COMMISSIONS: 'Royal commissions',
-  RELICS: 'Named relics',
-  CLAN: 'Clan stories',
+  COMMISSIONS: "Royal commissions",
+  RELICS: "Named relics",
+  CLAN: "Clan stories",
 } as const;
 
 export default function GuildHallModal({
@@ -24,11 +25,11 @@ export default function GuildHallModal({
 }) {
   const { gameState, setGameState, performGuildAction } = useGame();
   const dialogRef = useDialog(isOpen, onClose);
-  const [tab, setTab] = useState<keyof typeof TAB_NAMES>('COMMISSIONS');
-  const [status, setStatus] = useState('');
+  const [tab, setTab] = useState<keyof typeof TAB_NAMES>("COMMISSIONS");
+  const [status, setStatus] = useState("");
   const [owners, setOwners] = useState<Record<string, string>>({});
-  const [patrons, setPatrons] = useState<Record<string, Civilization['race']>>(
-    {}
+  const [patrons, setPatrons] = useState<Record<string, Civilization["race"]>>(
+    {},
   );
 
   // Guild decisions pause the clock. Restore the prior pause state on closing.
@@ -45,12 +46,12 @@ export default function GuildHallModal({
 
   if (!isOpen) return null;
   const { guild, resources, dwarves } = gameState;
-  const active = guild.commissions.find((c) => c.status === 'ACTIVE');
+  const active = guild.commissions.find((c) => c.status === "ACTIVE");
   const act = (action: GuildAction, message: string) => {
     setStatus(
       performGuildAction(action)
         ? message
-        : 'Conditions changed. Check your stocks, deadline, or chosen bearer and try again.'
+        : "Conditions changed. Check your stocks, deadline, or chosen bearer and try again.",
     );
   };
 
@@ -66,19 +67,21 @@ export default function GuildHallModal({
       <section className="flex max-h-[92dvh] w-full max-w-4xl flex-col border-2 border-[var(--ui-accent)] bg-black text-sm">
         <header className="flex items-center justify-between gap-3 border-b border-[var(--ui-border)] p-3">
           <div>
-            <h2 className="font-bold text-[var(--ui-accent)]">[ GUILD HALL ]</h2>
+            <h2 className="font-bold text-[var(--ui-accent)]">
+              [ GUILD HALL ]
+            </h2>
             <p className="text-xs text-[var(--ui-muted)]">
               Commissions, heirlooms, and the stories of your clan · Clock
               paused
             </p>
           </div>
           <button type="button" onClick={onClose} className={buttonClass}>
-            [ ESC / CLOSE ]
+            Close
           </button>
         </header>
         <nav
           aria-label="Guild Hall sections"
-          className="grid grid-cols-3 gap-1 border-b border-[var(--ui-border)] p-2"
+          className="button-grid border-b border-[var(--ui-border)] p-2"
         >
           {Object.entries(TAB_NAMES).map(([id, name]) => (
             <button
@@ -87,12 +90,16 @@ export default function GuildHallModal({
               aria-pressed={tab === id}
               onClick={() => {
                 setTab(id as keyof typeof TAB_NAMES);
-                setStatus('');
+                setStatus("");
               }}
-              className={`${buttonClass} ${tab === id ? 'bg-[var(--ui-border)] text-[var(--ui-accent)]' : ''}`}
-              style={{ whiteSpace: 'normal' }}
+              className={`${buttonClass} ${tab === id ? "bg-[var(--ui-border)] text-[var(--ui-accent)]" : ""}`}
+              aria-label={name}
             >
-              {name}
+              {id === "COMMISSIONS"
+                ? "Commissions"
+                : id === "RELICS"
+                  ? "Relics"
+                  : "Clan"}
             </button>
           ))}
         </nav>
@@ -104,10 +111,10 @@ export default function GuildHallModal({
           {status ||
             (active
               ? `Active charter: ${active.title}`
-              : 'No active commission. Choose a charter or explore your clan stories.')}
+              : "No active commission. Choose a charter or explore your clan stories.")}
         </p>
         <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-3">
-          {tab === 'COMMISSIONS' && (
+          {tab === "COMMISSIONS" && (
             <>
               <p className="text-xs text-[var(--ui-muted)]">
                 Two new offers arrive each season. Accept one at a time;
@@ -136,11 +143,11 @@ export default function GuildHallModal({
                 const { resource, amount } = commission.requirement;
                 const stock = resources[resource];
                 const open =
-                  commission.status === 'OFFERED' ||
-                  commission.status === 'ACTIVE';
+                  commission.status === "OFFERED" ||
+                  commission.status === "ACTIVE";
                 const remaining = Math.max(
                   0,
-                  commission.deadline - gameState.ticks
+                  commission.deadline - gameState.ticks,
                 );
                 return (
                   <article
@@ -157,11 +164,11 @@ export default function GuildHallModal({
                       </span>
                     </div>
                     <p>
-                      Deliver{' '}
+                      Deliver{" "}
                       <strong>
                         {amount} {resource}
                       </strong>
-                      {open ? ` · ${remaining} ticks left in the season` : ''}
+                      {open ? ` · ${remaining} ticks left in the season` : ""}
                     </p>
                     {open && (
                       <>
@@ -177,38 +184,38 @@ export default function GuildHallModal({
                       </>
                     )}
                     <p className="text-xs">
-                      Reward: {commission.reward.wealth} wealth ·{' '}
-                      {commission.reward.favor} favor ·{' '}
+                      Reward: {commission.reward.wealth} wealth ·{" "}
+                      {commission.reward.favor} favor ·{" "}
                       {RELIC_TEMPLATES[commission.reward.relic].name}
                     </p>
-                    {commission.status === 'OFFERED' && (
+                    {commission.status === "OFFERED" && (
                       <button
                         type="button"
                         className={buttonClass}
                         disabled={Boolean(active) || remaining === 0}
                         onClick={() =>
                           act(
-                            { type: 'ACCEPT_COMMISSION', id: commission.id },
-                            `Accepted ${commission.title}. Gather the goods, then deliver them here.`
+                            { type: "ACCEPT_COMMISSION", id: commission.id },
+                            `Accepted ${commission.title}. Gather the goods, then deliver them here.`,
                           )
                         }
                       >
                         Accept commission
                       </button>
                     )}
-                    {commission.status === 'ACTIVE' && (
+                    {commission.status === "ACTIVE" && (
                       <button
                         type="button"
                         className={buttonClass}
                         disabled={stock < amount || remaining === 0}
                         onClick={() =>
                           act(
-                            { type: 'DELIVER_COMMISSION', id: commission.id },
-                            'Delivery accepted. Your named relic is waiting in the relic vault.'
+                            { type: "DELIVER_COMMISSION", id: commission.id },
+                            "Delivery accepted. Your named relic is waiting in the relic vault.",
                           )
                         }
                       >
-                        Deliver goods & claim reward
+                        Deliver goods
                       </button>
                     )}
                   </article>
@@ -216,7 +223,7 @@ export default function GuildHallModal({
               })}
             </>
           )}
-          {tab === 'RELICS' && (
+          {tab === "RELICS" && (
             <>
               <p className="text-xs text-[var(--ui-muted)]">
                 Recover cavern artifacts or complete a royal commission. Display
@@ -232,11 +239,11 @@ export default function GuildHallModal({
               {guild.relics.map((relic) => {
                 const template = RELIC_TEMPLATES[relic.template];
                 const selectedOwner =
-                  owners[relic.id] || relic.ownerId || dwarves[0]?.id || '';
+                  owners[relic.id] || relic.ownerId || dwarves[0]?.id || "";
                 const ownerId = dwarves.some((d) => d.id === selectedOwner)
                   ? selectedOwner
-                  : dwarves[0]?.id || '';
-                const patron = patrons[relic.id] || 'Dwarves';
+                  : dwarves[0]?.id || "";
+                const patron = patrons[relic.id] || "Dwarves";
                 return (
                   <article
                     key={relic.id}
@@ -244,17 +251,19 @@ export default function GuildHallModal({
                     aria-label={relic.name}
                   >
                     <div className="flex flex-wrap justify-between gap-2">
-                      <h3 className="font-bold text-[var(--ui-accent)]">{relic.name}</h3>
+                      <h3 className="font-bold text-[var(--ui-accent)]">
+                        {relic.name}
+                      </h3>
                       <span className="text-xs text-[var(--ui-info)]">
                         {relic.mode}
                         {relic.ownerId
                           ? ` · ${dwarves.find((d) => d.id === relic.ownerId)?.name}`
-                          : ''}
-                        {relic.giftedTo ? ` · ${relic.giftedTo}` : ''}
+                          : ""}
+                        {relic.giftedTo ? ` · ${relic.giftedTo}` : ""}
                       </span>
                     </div>
                     <p className="text-xs text-[var(--ui-muted)]">
-                      Discovered by {relic.discoveredBy} at tick{' '}
+                      Discovered by {relic.discoveredBy} at tick{" "}
                       {relic.discoveredAt}.
                     </p>
                     <p className="text-xs">
@@ -263,21 +272,21 @@ export default function GuildHallModal({
                     <p className="text-xs">
                       <strong>Carry:</strong> {template.equip}
                     </p>
-                    {relic.mode !== 'GIFTED' && (
+                    {relic.mode !== "GIFTED" && (
                       <div className="space-y-2 pt-1">
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             className={buttonClass}
-                            disabled={relic.mode === 'DISPLAYED'}
+                            disabled={relic.mode === "DISPLAYED"}
                             onClick={() =>
                               act(
                                 {
-                                  type: 'SET_RELIC_MODE',
+                                  type: "SET_RELIC_MODE",
                                   id: relic.id,
-                                  mode: 'DISPLAYED',
+                                  mode: "DISPLAYED",
                                 },
-                                'Relic placed on display. Its blessing and upkeep apply every 20 ticks.'
+                                "Relic placed on display. Its blessing and upkeep apply every 20 ticks.",
                               )
                             }
                           >
@@ -286,15 +295,15 @@ export default function GuildHallModal({
                           <button
                             type="button"
                             className={buttonClass}
-                            disabled={relic.mode === 'STORED'}
+                            disabled={relic.mode === "STORED"}
                             onClick={() =>
                               act(
                                 {
-                                  type: 'SET_RELIC_MODE',
+                                  type: "SET_RELIC_MODE",
                                   id: relic.id,
-                                  mode: 'STORED',
+                                  mode: "STORED",
                                 },
-                                'Relic safely returned to storage. Its effects are inactive.'
+                                "Relic safely returned to storage. Its effects are inactive.",
                               )
                             }
                           >
@@ -303,7 +312,7 @@ export default function GuildHallModal({
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <label className="text-xs">
-                            Bearer{' '}
+                            Bearer{" "}
                             <select
                               aria-label={`Bearer for ${relic.name}`}
                               value={ownerId}
@@ -328,12 +337,12 @@ export default function GuildHallModal({
                             onClick={() =>
                               act(
                                 {
-                                  type: 'SET_RELIC_MODE',
+                                  type: "SET_RELIC_MODE",
                                   id: relic.id,
-                                  mode: 'EQUIPPED',
+                                  mode: "EQUIPPED",
                                   ownerId,
                                 },
-                                'Relic entrusted to its bearer. Any previous relic they carried was stored.'
+                                "Relic entrusted to its bearer. Any previous relic they carried was stored.",
                               )
                             }
                           >
@@ -342,7 +351,7 @@ export default function GuildHallModal({
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <label className="text-xs">
-                            Recipient{' '}
+                            Recipient{" "}
                             <select
                               aria-label={`Gift recipient for ${relic.name}`}
                               value={patron}
@@ -350,7 +359,7 @@ export default function GuildHallModal({
                                 setPatrons((previous) => ({
                                   ...previous,
                                   [relic.id]: e.target
-                                    .value as Civilization['race'],
+                                    .value as Civilization["race"],
                                 }))
                               }
                               className="ml-2 border border-[#404040] bg-black p-1"
@@ -367,12 +376,12 @@ export default function GuildHallModal({
                             className={buttonClass}
                             onClick={() =>
                               act(
-                                { type: 'GIFT_RELIC', id: relic.id, patron },
-                                'Relic gifted permanently. Gained 15 favor; its history remains in the archive.'
+                                { type: "GIFT_RELIC", id: relic.id, patron },
+                                "Relic gifted permanently. Gained 15 favor; its history remains in the archive.",
                               )
                             }
                           >
-                            Gift permanently (+15 favor)
+                            Gift (+15 favor)
                           </button>
                         </div>
                       </div>
@@ -386,7 +395,7 @@ export default function GuildHallModal({
                           <li key={`${entry.tick}-${i}`}>
                             <span className="text-[var(--ui-muted)]">
                               T{entry.tick}
-                            </span>{' '}
+                            </span>{" "}
                             · {entry.text}
                           </li>
                         ))}
@@ -397,7 +406,7 @@ export default function GuildHallModal({
               })}
             </>
           )}
-          {tab === 'CLAN' && (
+          {tab === "CLAN" && (
             <>
               <p className="text-xs text-[var(--ui-muted)]">
                 Each dwarf has a lasting quirk. Nearby tavern companions grow
@@ -418,7 +427,9 @@ export default function GuildHallModal({
                       className={cardClass}
                       aria-label={`${dwarf.name} story`}
                     >
-                      <h3 className="font-bold text-[var(--ui-accent)]">{dwarf.name}</h3>
+                      <h3 className="font-bold text-[var(--ui-accent)]">
+                        {dwarf.name}
+                      </h3>
                       <p className="text-xs">
                         {dwarf.title} · Morale {dwarf.happiness}%
                       </p>
@@ -436,7 +447,7 @@ export default function GuildHallModal({
                       {bonds.map((bond) => {
                         const companion = dwarves.find(
                           (d) =>
-                            d.id === (bond.a === dwarf.id ? bond.b : bond.a)
+                            d.id === (bond.a === dwarf.id ? bond.b : bond.a),
                         );
                         return (
                           <div
@@ -446,21 +457,23 @@ export default function GuildHallModal({
                             <p
                               className={
                                 bond.score >= 5
-                                  ? 'text-[var(--ui-success)]'
+                                  ? "text-[var(--ui-success)]"
                                   : bond.score <= -5
-                                    ? 'text-[var(--ui-warning)]'
-                                    : 'text-[var(--ui-info)]'
+                                    ? "text-[var(--ui-warning)]"
+                                    : "text-[var(--ui-info)]"
                               }
                             >
                               {bond.score >= 5
-                                ? 'Friend'
+                                ? "Friend"
                                 : bond.score <= -5
-                                  ? 'Rival'
-                                  : 'Acquaintance'}
-                              : {companion?.name} ({bond.score > 0 ? '+' : ''}
+                                  ? "Rival"
+                                  : "Acquaintance"}
+                              : {companion?.name} ({bond.score > 0 ? "+" : ""}
                               {bond.score})
                             </p>
-                            <p className="text-[var(--ui-muted)]">{bond.reason}</p>
+                            <p className="text-[var(--ui-muted)]">
+                              {bond.reason}
+                            </p>
                           </div>
                         );
                       })}

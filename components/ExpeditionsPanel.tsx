@@ -75,7 +75,7 @@ export default function ExpeditionsPanel({
               )
             }
           >
-            Claim returned cargo
+            Claim cargo
           </button>
         </div>
       )}
@@ -125,6 +125,7 @@ export default function ExpeditionsPanel({
                   approach,
                 })
               }
+              aria-label={`Launch ${route.name}`}
               onClick={() =>
                 act(
                   { type: "START_EXPEDITION", routeId: route.id, approach },
@@ -132,7 +133,7 @@ export default function ExpeditionsPanel({
                 )
               }
             >
-              Launch {route.name}
+              Launch scouts
             </button>
             {active && (
               <p className="text-xs text-[var(--ui-muted)]">

@@ -96,7 +96,7 @@ export default function NarrativeEventModal({ isOpen, onClose }: NarrativeEventM
     >
       <div className="w-full max-w-3xl bg-[var(--ui-bg)] border-2 border-[var(--ui-accent)] shadow-none flex flex-col max-h-[92vh] text-xs text-[var(--ui-text)]">
         {/* Terminal Header with ASCII Border Frame */}
-        <div className="px-3 py-2 bg-[var(--ui-panel)] border-b border-[var(--ui-border)] flex items-center justify-between gap-2">
+        <div className="px-3 py-2 bg-[var(--ui-panel)] border-b border-[var(--ui-border)] flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[var(--ui-accent)] font-bold whitespace-nowrap truncate">
               ╔═[ ROYAL DECREES &amp; NARRATIVE EVENTS ]═
@@ -217,7 +217,7 @@ export default function NarrativeEventModal({ isOpen, onClose }: NarrativeEventM
                       type="button"
                       disabled={!affordable}
                       onClick={() => resolveActiveEvent(choice.id)}
-                      className={`w-full text-left p-2 border transition-colors flex flex-col gap-1 ${
+                      className={`narrative-choice w-full text-left p-2 border transition-colors flex flex-col gap-1 ${
                         affordable
                           ? 'border-[var(--ui-border)] bg-[var(--ui-bg)] hover:border-[var(--ui-accent)] hover:bg-[var(--ui-border)] text-[var(--ui-text)]'
                           : 'border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-muted)] opacity-50 cursor-not-allowed'
@@ -287,7 +287,7 @@ export default function NarrativeEventModal({ isOpen, onClose }: NarrativeEventM
         </div>
 
         {/* Modal Bottom Footer */}
-        <div className="px-3 py-1.5 bg-[var(--ui-panel)] border-t border-[var(--ui-border)] flex items-center justify-between text-[11px] text-[var(--ui-muted)] gap-2">
+        <div className="px-3 py-1.5 bg-[var(--ui-panel)] border-t border-[var(--ui-border)] flex flex-wrap items-center justify-between text-[11px] text-[var(--ui-muted)] gap-2">
           <span className="whitespace-nowrap truncate">╚═[ PRESS ESC TO CLOSE // 1-3 TO ISSUE DECREE ]</span>
           <button
             type="button"

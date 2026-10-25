@@ -58,71 +58,88 @@ export default function FortressNotices({
     commission && remaining > 0 && stock >= commission.requirement.amount,
   );
 
+  if (
+    !notices.length &&
+    !commission &&
+    deliveryStatus?.worldId !== gameState.id
+  )
+    return null;
+
   return (
     <section
       aria-label="Fortress priorities"
       className="shrink-0 border-b border-[var(--ui-border)] bg-[var(--ui-panel)] px-3 py-2 font-mono text-xs"
     >
-      <div className="flex min-w-0 items-center gap-3 overflow-x-auto pb-1">
-        <h2 className="shrink-0 font-bold text-[var(--ui-accent)]">
-          [ PRIORITIES ]
-        </h2>
-        <ul
-          className="flex min-w-0 flex-1 items-stretch gap-2"
-          aria-label="Current notices"
-        >
-          {notices.map((notice) => {
-            const style = noticeStyle[notice.severity];
-            return (
-              <li
-                key={notice.id}
-                className="flex shrink-0 items-center gap-2 border border-[var(--ui-border)] px-2 py-1"
-              >
-                <span className={`font-bold ${style.color}`}>
-                  <span aria-hidden="true">{style.symbol} </span>
-                  {style.name}:
-                </span>
-                <span className="max-w-64 truncate" title={notice.label}>
-                  {notice.label}
-                </span>
-                {notice.coord && (
-                  <button
-                    type="button"
-                    className={actionClass}
-                    aria-label={`Show on map: ${notice.label}`}
-                    onClick={() => {
-                      const target = notice.coord;
-                      if (!target) return;
-                      onShowMap();
-                      const { x, y, z } = target;
-                      jumpToLocation(x, y, z);
-                    }}
-                  >
-                    Map · Z-{notice.coord.z}
-                  </button>
-                )}
-                {notice.action === "GUILD" && (
-                  <button
-                    type="button"
-                    className={actionClass}
-                    onClick={onOpenGuild}
-                  >
-                    Open guild
-                  </button>
-                )}
-                {notice.action === 'ADVENTURE' && onOpenAdventure && <button type="button" className={actionClass} onClick={onOpenAdventure}>Claim cargo</button>}
+      {notices.length > 0 && (
+        <div className="flex min-w-0 items-center gap-3 overflow-x-auto pb-1">
+          <h2 className="shrink-0 font-bold text-[var(--ui-accent)]">
+            [ PRIORITIES ]
+          </h2>
+          <ul
+            className="flex min-w-0 flex-1 items-stretch gap-2"
+            aria-label="Current notices"
+          >
+            {notices.map((notice) => {
+              const style = noticeStyle[notice.severity];
+              return (
+                <li
+                  key={notice.id}
+                  className="flex shrink-0 items-center gap-2 border border-[var(--ui-border)] px-2 py-1"
+                >
+                  <span className={`font-bold ${style.color}`}>
+                    <span aria-hidden="true">{style.symbol} </span>
+                    {style.name}:
+                  </span>
+                  <span className="max-w-64 truncate" title={notice.label}>
+                    {notice.label}
+                  </span>
+                  {notice.coord && (
+                    <button
+                      type="button"
+                      className={actionClass}
+                      aria-label={`Show on map: ${notice.label}`}
+                      onClick={() => {
+                        const target = notice.coord;
+                        if (!target) return;
+                        onShowMap();
+                        const { x, y, z } = target;
+                        jumpToLocation(x, y, z);
+                      }}
+                    >
+                      Map
+                    </button>
+                  )}
+                  {notice.action === "GUILD" && (
+                    <button
+                      type="button"
+                      className={actionClass}
+                      onClick={onOpenGuild}
+                    >
+                      Open guild
+                    </button>
+                  )}
+                  {notice.action === "ADVENTURE" && onOpenAdventure && (
+                    <button
+                      type="button"
+                      className={actionClass}
+                      onClick={onOpenAdventure}
+                    >
+                      Claim cargo
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+            {notices.length === 0 && (
+              <li className="shrink-0 py-1 text-[var(--ui-muted)]">
+                No urgent notices.
               </li>
-            );
-          })}
-          {notices.length === 0 && (
-            <li className="shrink-0 py-1 text-[var(--ui-muted)]">
-              No urgent notices.
-            </li>
-          )}
-        </ul>
-      </div>
+            )}
+          </ul>
+        </div>
+      )}
 
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {commission ? (
           <>
             <button
@@ -130,7 +147,7 @@ export default function FortressNotices({
               className="text-left text-[var(--ui-info)] underline underline-offset-2"
               onClick={onOpenGuild}
             >
-              {commission.title}
+              Commission
             </button>
             <label className="flex items-center gap-2">
               <span>
@@ -166,19 +183,10 @@ export default function FortressNotices({
                 });
               }}
             >
-              Deliver {commission.requirement.amount}{" "}
-              {commission.requirement.resource}
+              Deliver
             </button>
           </>
-        ) : (
-          <button
-            type="button"
-            className="text-[var(--ui-info)] underline underline-offset-2"
-            onClick={onOpenGuild}
-          >
-            Open guild hall · commissions, relics, and clan stories
-          </button>
-        )}
+        ) : null}
         {deliveryStatus?.worldId === gameState.id && (
           <p
             role="status"

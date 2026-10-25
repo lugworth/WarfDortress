@@ -5,6 +5,7 @@ import { useDialog } from "@/hooks/use-dialog";
 import { FONT_SIZES, MAP_ZOOMS } from "@/lib/ui-preferences";
 import { TOOL_KEYS } from "@/lib/game-rules";
 import { getConstructionCost } from "@/lib/game-engine";
+import { TOOL_NAMES } from "@/lib/ui-labels";
 import { TOOLS, formatCost } from "@/lib/tool-catalog";
 import { useGame } from "./GameProvider";
 import { useUI } from "./UIProvider";
@@ -95,7 +96,7 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
             ]
           </h2>
           <button className={button} onClick={closeOverlay}>
-            [ Esc / Close ]
+            Close
           </button>
         </header>
         {overlay === "commands" ? (
@@ -152,14 +153,14 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
                   <button
                     key={tool.id}
                     data-command-active={i === activeIndex}
-                    className={`${button} w-full ${i === activeIndex ? "border-[var(--ui-accent)] bg-[var(--ui-selection)]" : ""}`}
+                    className={`${button} command-result w-full ${i === activeIndex ? "border-[var(--ui-accent)] bg-[var(--ui-selection)]" : ""}`}
                     onClick={() => choose(i)}
                     aria-label={`${tool.label}: ${tool.desc}`}
                   >
                     <span className="flex flex-wrap justify-between gap-2">
                       <strong>
                         {i === activeIndex ? "> " : ""}
-                        {tool.label}
+                        {TOOL_NAMES[tool.id]}
                       </strong>
                       <kbd>
                         {Object.entries(TOOL_KEYS)
@@ -231,7 +232,7 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
                   })
                 }
               >
-                <option value="terminal">Terminal</option>
+                <option value="terminal">Isotope Dark</option>
                 <option value="contrast">High contrast</option>
               </select>
             </label>

@@ -64,9 +64,11 @@ Activities use a validated, optional `activities` extension inside the existing 
 
 ## Controls and simulation
 
+The default palette is standard **Isotope Dark**. The compact header keeps essential stores, command search, pause, and save in view; **More** contains trade, decrees, display settings, simulation speed, full stores, and world controls. Guild and Adventure are also in More on small screens. **Map → Options** holds labels, panning, quick orders, object lookup, and the map legend. Tool categories use a selector and the list opens to your saved favorites; typing in tool search searches all tools. See [UI verification notes](docs/isotope-ui-2026-10-25.md).
+
 **Display** provides independent 14–28px interface text and 60–200% map zoom (plus Fit), terminal/high-contrast themes, optional object labels, and reduced motion. Fonts are self-hosted; their license is in `public/fonts/LICENSE-DejaVu.txt`. Settings and tool favorites persist separately from fortress saves in this browser.
 
-Use **/ Commands** to search every tool, or filter the sidebar by Dig, Build, Food & Drink, Industry, Defense, and Favorites. Selecting a command preserves its existing shortcut. On narrow screens, the action and map-control rows scroll horizontally; the map can be scrolled in **Pan map** mode.
+Use **/ Commands** to search every tool, or filter the sidebar by Dig, Build, Food & Drink, Industry, Defense, and Favorites. Selecting a command preserves its existing shortcut. On narrow screens, secondary actions are in More and the map-control row scrolls horizontally; the map can be scrolled in **Pan map** mode.
 
 Dragging previews `+` eligible and `×` blocked tiles, rejection reasons, and the estimated completion cost. Confirm eligible tiles to queue the order or cancel it. Material shortages are shown without preventing future work from being queued: materials are still consumed only when a job finishes. Existing queued orders are identified, and confirmation reports accepted/skipped counts.
 

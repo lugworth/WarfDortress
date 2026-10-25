@@ -66,23 +66,34 @@ export default function AdventureHallModal({
               [ +1 tick ]
             </button>
             <button type="button" className={button} onClick={onClose}>
-              [ Esc / Close ]
+              Close
             </button>
           </div>
         </header>
         <nav
           aria-label="Adventure Hall sections"
-          className="grid grid-cols-3 gap-1 border-b border-[var(--ui-border)] p-2"
+          className="button-grid border-b border-[var(--ui-border)] p-2"
         >
           {Object.entries(sections).map(([id, label]) => (
             <button
               type="button"
               key={id}
               aria-pressed={section === id}
+              aria-label={
+                id === "EXPEDITIONS"
+                  ? "Expeditions"
+                  : id === "FESTIVALS"
+                    ? "Feasts"
+                    : "Research"
+              }
               className={`${button} ${section === id ? "border-[var(--ui-accent)] text-[var(--ui-accent)] bg-[var(--ui-selection)]" : ""}`}
               onClick={() => setSection(id as keyof typeof sections)}
             >
-              {label}
+              {id === "EXPEDITIONS"
+                ? "Expeditions"
+                : id === "FESTIVALS"
+                  ? "Feasts"
+                  : "Research"}
             </button>
           ))}
         </nav>

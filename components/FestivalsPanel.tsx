@@ -59,6 +59,7 @@ export default function FestivalsPanel({
               type="button"
               className="border border-[var(--ui-info)] px-3 py-2"
               disabled={blockers.length > 0}
+              aria-label={`Hold ${festival.title}`}
               aria-describedby={
                 blockers.length ? `festival-${festival.id}-blockers` : undefined
               }
@@ -70,7 +71,7 @@ export default function FestivalsPanel({
                 )
               }
             >
-              Hold {festival.title}
+              Celebrate
             </button>
             {blockers.length > 0 && (
               <p

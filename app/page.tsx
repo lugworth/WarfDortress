@@ -19,10 +19,11 @@ import { UIProvider, useUI } from '@/components/UIProvider';
 import UIOverlay from '@/components/UIOverlay';
 import FortressNotices from '@/components/FortressNotices';
 import AdventureHallModal from '@/components/AdventureHallModal';
+import FortressHeader from '@/components/FortressHeader';
 
 function AsciiCrest() {
   return (
-    <pre className="text-[var(--ui-accent)] text-[10px] sm:text-xs leading-none select-none font-mono text-center mx-auto">
+    <pre className="ascii-crest text-[var(--ui-accent)] text-[10px] sm:text-xs leading-none select-none font-mono text-center mx-auto">
 {`   /\\                                                          /\\
   /  \\          +====================================+        /  \\
  / /\\ \\         |    ASCII FORTRESS: DEEP ANVIL      |       / /\\ \\
@@ -54,7 +55,6 @@ function FortressShell() {
     handleGoogleSignIn,
     handleSignOut,
     loadCloudSave,
-    jumpToLocation,
   } = useGame();
 
   const isMobile = useIsMobile(1024);
@@ -118,7 +118,7 @@ function FortressShell() {
             <div className="lg:col-span-5 bg-[var(--ui-panel)] border border-[var(--ui-border)] p-3 sm:p-4 flex flex-col justify-between space-y-4">
               <div className="space-y-3">
                 <div className="text-[var(--ui-accent)] text-xs font-bold">
-                  +---[ PROCEDURAL WORLD SEED ]------------------------+
+                  WORLD SEED
                 </div>
 
                 <div>
@@ -205,13 +205,13 @@ function FortressShell() {
                   <span className="whitespace-nowrap">
                     {isEmbarking
                       ? '[ ... STRIKING THE EARTH ... ]'
-                      : '[ ▶ STRIKE THE EARTH — EMBARK COLONY ]'}
+                      : 'Strike the earth'}
                   </span>
                 </button>
               </div>
 
               {embarkError && <p role="alert">{embarkError}</p>}
-              {hasLocalSave && <button type="button" onClick={loadLocalSave} className="p-2 border text-[var(--ui-success)]">[ CONTINUE LOCAL FORTRESS ]</button>}
+              {hasLocalSave && <button type="button" onClick={loadLocalSave} className="p-2 border text-[var(--ui-success)]">Continue</button>}
               {saveStatus && <p role="status">{saveStatus}</p>}
               {/* Firebase Cloud Saves Section */}
               <div className="pt-3 border-t border-[var(--ui-border)] space-y-2 text-xs">
@@ -233,7 +233,7 @@ function FortressShell() {
                       onClick={handleGoogleSignIn}
                       className="text-[var(--ui-info)] hover:text-[var(--ui-bright)] hover:bg-[var(--ui-border)] px-1 text-[11px] whitespace-nowrap shrink-0"
                     >
-                      [ SIGN IN WITH GOOGLE ]
+                      Google sign-in
                     </button>
                   )}
                 </div>
@@ -268,7 +268,7 @@ function FortressShell() {
             <div className="lg:col-span-7 bg-[var(--ui-panel)] border border-[var(--ui-border)] p-3 sm:p-4 flex flex-col justify-between space-y-3">
               <div>
                 <div className="text-[var(--ui-accent)] text-xs font-bold mb-1">
-                  +---[ WORLD CHRONICLE: {previewWorld.name.toUpperCase()} ]----------------
+                  WORLD CHRONICLE: {previewWorld.name.toUpperCase()}
                 </div>
                 <p className="text-xs text-[var(--ui-text)] leading-relaxed p-2 bg-[var(--ui-bg)] border border-[var(--ui-border)]">
                   {previewWorld.backstory}
@@ -295,7 +295,7 @@ function FortressShell() {
 
               <div>
                 <div className="text-[var(--ui-accent)] text-xs font-bold mb-1">
-                  +---[ HISTORICAL ANNALS ({previewWorld.history.length} ERAS) ]-------------------
+                  HISTORICAL ANNALS ({previewWorld.history.length} ERAS)
                 </div>
                 <div className="space-y-1 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
                   {previewWorld.history.map((ev, i) => (
@@ -326,291 +326,16 @@ function FortressShell() {
   // PLAYING SCREEN
   return (
     <div className="fortress-shell h-dvh w-full bg-[var(--ui-bg)] text-[var(--ui-text)] flex flex-col overflow-hidden select-none font-mono">
-      {/* Top Terminal Status & Control Bar */}
-      <div className="fortress-status bg-[var(--ui-panel)] border-b border-[var(--ui-border)] px-2 py-1 flex flex-wrap items-center justify-between gap-x-2.5 gap-y-1 shrink-0 text-xs">
-        {/* Fortress Identity & Calendar */}
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="font-bold text-[var(--ui-accent)] whitespace-nowrap">
-            [{gameState.world.dwarvenName}]
-          </span>
-          <span className="text-[var(--ui-muted)]">|</span>
-          <span className="text-[var(--ui-info)] tabular-nums whitespace-nowrap">
-            Y{gameState.year}·{gameState.season}·T{gameState.ticks}
-          </span>
-        </div>
-
-        {/* Live Resource Counters (Tabular Base16 Isotope Colored Text) */}
-        <div className="flex flex-wrap items-center gap-2 md:gap-2.5 tabular-nums text-xs">
-          <div className="whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">STN:</span>
-            <span className="text-[var(--ui-bright)] font-bold">{gameState.resources.stone}</span>
-          </div>
-          <div className="whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">WOD:</span>
-            <span className="text-[var(--ui-warning)] font-bold">{gameState.resources.wood}</span>
-          </div>
-          <div className="whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">IRN:</span>
-            <span className="text-[var(--ui-warning)] font-bold">{gameState.resources.ironOre}</span>
-          </div>
-          <div className="hidden sm:block whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">GLD:</span>
-            <span className="text-[var(--ui-accent)] font-bold">{gameState.resources.goldOre}</span>
-          </div>
-          <div className="whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">STL:</span>
-            <span className="text-[var(--ui-info)] font-bold">{gameState.resources.steelBars}</span>
-          </div>
-          <div className="hidden md:block whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">ARM:</span>
-            <span className="text-[var(--ui-warning)] font-bold">
-              {gameState.resources.weapons + gameState.resources.armor}
-            </span>
-          </div>
-          <div className="hidden md:block whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">RLC:</span>
-            <span className="text-[var(--ui-accent)] font-bold">{gameState.resources.relics}</span>
-          </div>
-          <div className="whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">FOD:</span>
-            <span className="text-[var(--ui-success)] font-bold">{gameState.resources.food}</span>
-          </div>
-          <div className="whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">ALE:</span>
-            <span className="text-[var(--ui-violet)] font-bold">{gameState.resources.ale}</span>
-          </div>
-          <div className="whitespace-nowrap shrink-0">
-            <span className="text-[var(--ui-muted)] text-[10px] mr-0.5">WLTH:</span>
-            <span className="text-[var(--ui-accent)] font-bold">{gameState.resources.wealth}</span>
-          </div>
-        </div>
-
-        {/* Clickable Terminal Action Text Buttons */}
-        <div className="fortress-actions flex flex-wrap items-center gap-1.5 text-xs">
-          <button type="button" onClick={() => openOverlay('commands')} className="border border-[var(--ui-info)] px-2 py-1 text-[var(--ui-info)]">[ / COMMANDS ]</button>
-          <button type="button" onClick={() => openOverlay('settings')} className="border border-[var(--ui-border)] px-2 py-1">[ DISPLAY ]</button>
-          <button type="button" onClick={() => setIsAdventureModalOpen(true)} className="border border-[var(--ui-info)] px-2 py-1 text-[var(--ui-info)]">[ ADVENTURE HALL{gameState.activities?.expeditions.active && gameState.ticks >= gameState.activities.expeditions.active.returnsAt ? ' · CARGO READY' : ''} ]</button>
-          <button type="button" onClick={() => setIsGuildModalOpen(true)} className="px-1.5 py-0.5 border border-[var(--ui-accent)] text-[var(--ui-accent)] hover:bg-[var(--ui-border)] whitespace-nowrap">
-            [ GUILD HALL{gameState.guild.commissions.some((c) => c.status === 'ACTIVE') ? ' · CHARTER ACTIVE' : ''} ]
-          </button>
-          {/* Trade Depot Barter Modal Button */}
-          <button
-            type="button"
-            onClick={() => setIsTradeModalOpen(true)}
-            className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-info)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] transition-colors whitespace-nowrap shrink-0"
-          >
-            [ ¤ TRADE ]
-          </button>
-
-          {/* Decree / Narrative Event Button */}
-          <button
-            type="button"
-            onClick={() => {
-              if (!gameState.activeEvent) {
-                triggerNarrativeEvent(undefined, true);
-              }
-              setIsEventModalOpen(true);
-            }}
-            className={`px-1.5 py-0.5 border transition-colors whitespace-nowrap shrink-0 ${
-              gameState.activeEvent
-                ? 'border-[var(--ui-danger)] bg-[var(--ui-border)] text-[var(--ui-danger)] font-bold animate-pulse'
-                : 'border-[var(--ui-border)] text-[var(--ui-accent)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)]'
-            }`}
-          >
-            {gameState.activeEvent ? '[ ! DECREE AWAITS ]' : '[ ! DECREES ]'}
-          </button>
-
-          {/* Pause / Resume */}
-          <button
-            type="button"
-            onClick={togglePause}
-            className={`px-1.5 py-0.5 border transition-colors whitespace-nowrap shrink-0 ${
-              gameState.paused
-                ? 'border-[var(--ui-accent)] bg-[var(--ui-border)] text-[var(--ui-accent)] font-bold'
-                : 'border-[var(--ui-border)] text-[var(--ui-success)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)]'
-            }`}
-          >
-            {gameState.paused ? '[ ▶ RESUME ]' : '[ ■ PAUSE ]'}
-          </button>
-
-          {/* +1 Tick */}
-          <button
-            type="button"
-            onClick={stepManualTick}
-            title="Advance 1 Simulation Tick"
-            className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-text)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] transition-colors whitespace-nowrap shrink-0"
-          >
-            [ +1 TICK ]
-          </button>
-
-          {/* Speed Toggle */}
-          <div className="hidden sm:flex items-center border border-[var(--ui-border)] bg-[var(--ui-bg)] shrink-0">
-            {([1, 2, 4] as const).map((spd) => (
-              <button
-                key={spd}
-                type="button"
-                onClick={() => setSpeed(spd)}
-                className={`px-1 py-0.5 text-[11px] transition-colors whitespace-nowrap ${
-                  gameState.speed === spd && !gameState.paused
-                    ? 'bg-[var(--ui-border)] text-[var(--ui-accent)] font-bold'
-                    : 'text-[var(--ui-muted)] hover:text-[var(--ui-text)]'
-                }`}
-              >
-                {spd}x
-              </button>
-            ))}
-          </div>
-
-          {/* Cloud Save */}
-          <button
-            type="button"
-            onClick={handleCloudSave}
-            className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-info)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] transition-colors whitespace-nowrap shrink-0"
-          >
-            [ Ctrl+S: SAVE ]
-          </button>
-
-          {/* Reroll Random Map Button */}
-          <button
-            type="button"
-            onClick={() => {
-              const nextSeed = generateRandomWorldSeed();
-              setSeedInput(nextSeed);
-              embarkNewWorld(nextSeed, false);
-            }}
-            title="Roll a brand-new random 76x42 map & topography"
-            className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-warning)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] transition-colors whitespace-nowrap shrink-0"
-          >
-            [ ~ NEW MAP ]
-          </button>
-
-          {/* World Map Title Return */}
-          <button
-            type="button"
-            onClick={() => setScreen('title')}
-            className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-muted)] hover:text-[var(--ui-accent)] hover:bg-[var(--ui-border)] transition-colors whitespace-nowrap shrink-0"
-          >
-            [ &lt; REALM ]
-          </button>
-        </div>
-      </div>
-
-      {/* Optional Save Feedback Toast */}
-      {saveStatus && (
-        <div className="bg-[var(--ui-panel)] border-b border-[var(--ui-accent)] px-3 py-0.5 text-center text-xs text-[var(--ui-accent)]">
-          {saveStatus}
-        </div>
-      )}
-
-      {/* Active Narrative Event Alert Banner */}
-      {gameState.activeEvent && (
-        <div className="bg-[var(--ui-panel)] border-b-2 border-[var(--ui-danger)] px-3 py-1 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[var(--ui-danger)] font-bold whitespace-nowrap shrink-0">
-              [ ! {gameState.activeEvent.severity.replace('_', ' ')} ]
-            </span>
-            <span className="text-[var(--ui-bright)] font-bold truncate">
-              {gameState.activeEvent.title}
-            </span>
-            <span className="hidden md:inline text-[var(--ui-muted)] truncate">
-              {'//'} {gameState.activeEvent.historicalConnection}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsEventModalOpen(true)}
-            className="text-[var(--ui-danger)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] px-2 py-0.5 border border-[var(--ui-danger)] font-bold transition-colors whitespace-nowrap shrink-0"
-          >
-            [ INSPECT &amp; ISSUE DECREE ]
-          </button>
-        </div>
-      )}
-
-      {/* Fortress Spatial Alerts Ticker with Jump-to-Location Buttons */}
-      {gameState.alerts.length > 0 && (
-        <div className="hidden sm:flex bg-[var(--ui-bg)] border-b border-[var(--ui-border)] px-3 py-1 flex-wrap items-center justify-between gap-2 text-[11px] shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <span
-              className={`font-bold whitespace-nowrap shrink-0 ${
-                gameState.alerts[0].severity === 'DANGER'
-                  ? 'text-[var(--ui-danger)]'
-                  : gameState.alerts[0].severity === 'DISCOVERY'
-                  ? 'text-[var(--ui-info)]'
-                  : 'text-[var(--ui-warning)]'
-              }`}
-            >
-              [{gameState.alerts[0].severity}]
-            </span>
-            <span className="text-[var(--ui-text)] truncate">{gameState.alerts[0].title}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            {gameState.alerts.slice(0, 2).map((al) => (
-              <button
-                key={al.id}
-                type="button"
-                onClick={() => jumpToLocation(al.x, al.y, al.z)}
-                className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-info)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] transition-colors whitespace-nowrap shrink-0 tabular-nums"
-              >
-                [ JUMP ({al.x},{al.y},Z-{al.z}) ]
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Secondary Terminal Layout Toolbar: Gives Overseer Direct Control Over Screen Spacing */}
-      <div className="hidden lg:flex items-center justify-between px-2 py-0.5 bg-[var(--ui-panel)] border-b border-[var(--ui-border)] text-[11px] text-[var(--ui-muted)]">
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowLeftSidebar((v) => !v)}
-            className={`px-1 py-0.5 transition-colors whitespace-nowrap shrink-0 ${
-              showLeftSidebar
-                ? 'text-[var(--ui-accent)] bg-[var(--ui-border)]'
-                : 'text-[var(--ui-muted)] hover:text-[var(--ui-text)]'
-            }`}
-          >
-            {showLeftSidebar ? '[ << HIDE ORDERS ]' : '[ >> SHOW ORDERS ]'}
-          </button>
-
-          <span className="text-[var(--ui-border)]">|</span>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (showLeftSidebar || showRightSidebar) {
-                setShowLeftSidebar(false);
-                setShowRightSidebar(false);
-              } else {
-                setShowLeftSidebar(true);
-              }
-            }}
-            className={`px-1 py-0.5 transition-colors whitespace-nowrap shrink-0 ${
-              !showLeftSidebar && !showRightSidebar
-                ? 'text-[var(--ui-success)] bg-[var(--ui-border)] font-bold'
-                : 'text-[var(--ui-muted)] hover:text-[var(--ui-text)]'
-            }`}
-          >
-            {!showLeftSidebar && !showRightSidebar
-              ? '[ [X] FULL MAP MODE (100%) ]'
-              : '[ [ ] FULL MAP MODE (HOTKEY: F) ]'}
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowRightSidebar((v) => !v)}
-            className={`px-1 py-0.5 transition-colors whitespace-nowrap shrink-0 ${
-              showRightSidebar
-                ? 'text-[var(--ui-accent)] bg-[var(--ui-border)]'
-                : 'text-[var(--ui-muted)] hover:text-[var(--ui-text)]'
-            }`}
-          >
-            {showRightSidebar ? '[ HIDE CHRONICLE >> ]' : '[ SHOW CHRONICLE >> ]'}
-          </button>
-        </div>
-      </div>
+      <FortressHeader state={gameState} ordersVisible={showLeftSidebar} chronicleVisible={showRightSidebar}
+        onCommands={() => openOverlay('commands')} onDisplay={() => openOverlay('settings')}
+        onGuild={() => setIsGuildModalOpen(true)} onAdventure={() => setIsAdventureModalOpen(true)}
+        onTrade={() => setIsTradeModalOpen(true)} onDecrees={() => { if (!gameState.activeEvent) triggerNarrativeEvent(undefined, true); setIsEventModalOpen(true); }}
+        onPause={togglePause} onStep={stepManualTick} onSpeed={setSpeed} onSave={handleCloudSave}
+        onOrders={() => setShowLeftSidebar(v => !v)} onChronicle={() => setShowRightSidebar(v => !v)}
+        onFullMap={() => { if (showLeftSidebar || showRightSidebar) { setShowLeftSidebar(false); setShowRightSidebar(false); } else setShowLeftSidebar(true); }}
+        onRealm={() => setScreen('title')} onNewMap={() => { const seed = generateRandomWorldSeed(); setSeedInput(seed); embarkNewWorld(seed, false); }} />
+      {saveStatus && <p role="status" className="ui-caption shrink-0 border-b border-[var(--ui-border)] px-3 py-1 text-[var(--ui-muted)]">{saveStatus}</p>}
+      {gameState.activeEvent && <div className="flex shrink-0 items-center gap-3 border-b border-[var(--ui-border)] px-3 py-1"><span className="min-w-0 truncate text-[var(--ui-warning)]">! {gameState.activeEvent.title}</span><button type="button" className="ui-button" onClick={() => setIsEventModalOpen(true)}>Review decree</button></div>}
 
       {/* Main Screen Layout: MAP IS THE DOMINANT/BIGGEST PART */}
       <FortressNotices onOpenGuild={() => setIsGuildModalOpen(true)} onOpenAdventure={() => { setAdventureVisit(v => v + 1); setIsAdventureModalOpen(true); }} onShowMap={() => setMobilePanel('MAP')} />
@@ -662,35 +387,39 @@ function FortressShell() {
         <button
           type="button"
           onClick={() => setMobilePanel('MAP')}
+          aria-pressed={mobilePanel === 'MAP'}
           className={`py-1.5 px-0.5 text-center transition-colors whitespace-nowrap flex items-center justify-center shrink-0 ${
             mobilePanel === 'MAP'
               ? 'bg-[var(--ui-border)] text-[var(--ui-accent)] font-bold border border-[var(--ui-accent)]'
               : 'text-[var(--ui-muted)] border border-[var(--ui-border)]'
           }`}
         >
-          [ 1: ASCII MAP ]
+          Map
         </button>
         <button
           type="button"
           onClick={() => setMobilePanel('MANAGE')}
+          aria-pressed={mobilePanel === 'MANAGE'}
           className={`py-1.5 px-0.5 text-center transition-colors whitespace-nowrap flex items-center justify-center shrink-0 ${
             mobilePanel === 'MANAGE'
               ? 'bg-[var(--ui-border)] text-[var(--ui-accent)] font-bold border border-[var(--ui-accent)]'
               : 'text-[var(--ui-muted)] border border-[var(--ui-border)]'
           }`}
         >
-          [ 2: ORDERS ]
+          Orders
         </button>
         <button
           type="button"
           onClick={() => setMobilePanel('ADVISOR')}
+          aria-pressed={mobilePanel === 'ADVISOR'}
+          aria-label="Chronicle"
           className={`py-1.5 px-0.5 text-center transition-colors whitespace-nowrap flex items-center justify-center shrink-0 ${
             mobilePanel === 'ADVISOR'
               ? 'bg-[var(--ui-border)] text-[var(--ui-accent)] font-bold border border-[var(--ui-accent)]'
               : 'text-[var(--ui-muted)] border border-[var(--ui-border)]'
           }`}
         >
-          [ 3: LORE &amp; AI ]
+          Log
         </button>
       </div>
 
