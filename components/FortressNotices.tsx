@@ -21,9 +21,11 @@ const actionClass =
 export default function FortressNotices({
   onOpenGuild,
   onShowMap,
+  onOpenAdventure,
 }: {
   onOpenGuild: () => void;
   onShowMap: () => void;
+  onOpenAdventure?: () => void;
 }) {
   const { gameState, jumpToLocation, performGuildAction } = useGame();
   const [deliveryStatus, setDeliveryStatus] = useState<{
@@ -108,6 +110,7 @@ export default function FortressNotices({
                     Open guild
                   </button>
                 )}
+                {notice.action === 'ADVENTURE' && onOpenAdventure && <button type="button" className={actionClass} onClick={onOpenAdventure}>Claim cargo</button>}
               </li>
             );
           })}

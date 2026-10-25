@@ -52,6 +52,16 @@ Open **Guild Hall** from the in-game toolbar. The simulation pauses while you ma
 
 These systems run entirely in the local simulation and do not require Gemini or additional paid services.
 
+## Adventure Hall
+
+Open **Adventure Hall** from the toolbar for three new gameplay loops. Planning pauses the clock and restores its prior pause state on closing. **+1 tick** advances the full simulation while the hall is open.
+
+- **Caravan expeditions:** hire external scouts so your own dwarves keep working. Choose a cautious or bold approach to the River Market, Iron Ridge, or Lost Vault. Bold trips are faster and richer but have a greater setback risk. Supplies are spent at departure; returned cargo must be claimed once. Vault successes add a named Guild Hall relic. Route outcomes depend on the world seed and expedition ordinal, so reloading an ongoing trip does not reroll it. The priorities strip flags returned scouts.
+- **Clan celebrations:** hold a founders’ supper for morale and energy, a mason-gated stonecraft contest for temporary work progress, or tavern tales for morale and nearby social bonds. Each lasts 24 ticks, has a 120-tick per-kind cooldown, and leaves bounded, seeded dwarf anecdotes. Costs and prerequisites appear before starting.
+- **Engineering:** fund one research project at a time. Camp pick techniques permanently add mining progress, mushroom cellars improve each farm harvest, and forge-backed watch drills improve militia damage. Unlocks are finite and do not stack; the effects are applied by the simulation, not merely displayed in the panel.
+
+Activities use a validated, optional `activities` extension inside the existing version-2 snapshot envelope. Older version-1/version-2/full saves initialize empty activities without changing their fortress progress. Active trips, research deadlines, cooldowns, histories, and completed upgrades survive save/load. No additional service or AI calls are needed. See [implementation notes](docs/adventure-hall-2026-10-25.md).
+
 ## Controls and simulation
 
 **Display** provides independent 14–28px interface text and 60–200% map zoom (plus Fit), terminal/high-contrast themes, optional object labels, and reduced motion. Fonts are self-hosted; their license is in `public/fonts/LICENSE-DejaVu.txt`. Settings and tool favorites persist separately from fortress saves in this browser.
@@ -80,4 +90,5 @@ Existing relaxed survival rules are retained: this patch does not add dwarf deat
 - `components/GameProvider.tsx`: commands, simulation clock, async response ownership, and persistence UI.
 - `components/UIProvider.tsx`, `UIOverlay.tsx`, `ToolPicker.tsx`, `FortressNotices.tsx`: display preferences, command search, tool discovery, and actionable priorities.
 - `lib/tool-catalog.ts`, `ui-model.ts`, `ui-preferences.ts`: shared tool metadata, read-only previews/labels/notices, and validated UI preference storage.
+- `lib/activities.ts`, `expeditions.ts`, `festivals.ts`, `research.ts`, `components/AdventureHallModal.tsx`: timed exploration, clan celebrations, permanent engineering upgrades, and their planning UI.
 - `lib/*.test.ts`: engine regressions, round trips/backup recovery, AI validation/budgets, and audio encoding.

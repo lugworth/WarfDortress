@@ -26,6 +26,7 @@ import {
   stepSimulationTick,
 } from '@/lib/game-engine';
 import { performGuildAction as applyGuildAction } from '@/lib/guild';
+import { performActivityAction as applyActivityAction, type ActivityAction } from '@/lib/activities';
 import { generateRandomWorldSeed } from '@/lib/world-gen';
 import { readLocalSave, writeLocalSave, restoreCloudSave } from '@/lib/save-system';
 import {
@@ -71,6 +72,7 @@ interface GameContextType {
     recruitMigrant?: boolean
   ) => boolean;
   performGuildAction: (action: GuildAction) => boolean;
+  performActivityAction: (action: ActivityAction) => boolean;
   addWorkOrder: (order: Omit<WorkOrder, 'id'>) => void;
   toggleWorkOrderAutoRepeat: (orderId: string) => void;
   removeWorkOrder: (orderId: string) => void;
@@ -267,6 +269,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     },
     [currentZ, selectedTool, setGameState]
   );
+
+  const performActivityAction = useCallback((action: ActivityAction) => {
+    const previous = gameStateRef.current;
+    const next = applyActivityAction(previous, action);
+    if (next === previous) return false;
+    setGameState(next);
+    return true;
+  }, [setGameState]);
 
   const toggleDwarfLabor = useCallback((dwarfId: string, labor: DwarfLabor) => {
     setGameState((prev) => ({
@@ -550,6 +560,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         triggerGoblinRaid,
         performTradeBarter,
         performGuildAction,
+        performActivityAction,
         addWorkOrder,
         toggleWorkOrderAutoRepeat,
         removeWorkOrder,

@@ -1,4 +1,7 @@
 import { initializeGuild, stepGuild, makeNamedRelic, workProgressBonus, combatBonus, addRelationship } from './guild.ts';
+import { initializeActivities, stepActivities } from './activities.ts';
+import { getResearchBonuses } from './research.ts';
+import { getFestivalWorkBonus } from './festivals.ts';
 import { adjacent, reachableRoutes } from './navigation.ts';
 import { MAX_POPULATION, MAX_SEED_LENGTH, TRAP_DAMAGE, validResourceMap, EXPORT_VALUES, IMPORT_VALUES, tradeValues } from './game-rules.ts';
 import type {
@@ -815,7 +818,7 @@ export function createInitialGameState(seed = 'Khazad-251'): GameState {
     },
   ];
 
-  return initializeGuild({
+  return initializeActivities(initializeGuild({
     id: `fort-${crypto.randomUUID()}`,
     world,
     grid,
@@ -883,7 +886,7 @@ export function createInitialGameState(seed = 'Khazad-251'): GameState {
     season: 'Granite (Spring)',
     paused: false,
     speed: 1,
-  });
+  }));
 }
 
 export function canDesignateTile(tile: Tile, type: DesignationType): boolean {
@@ -1112,6 +1115,8 @@ function setTileTerrain(tile: Tile, terrain: TileTerrain) {
 }
 
 export function stepSimulationTick(state: GameState): GameState {
+  const researchBonuses = getResearchBonuses(state);
+  const festivalWorkBonus = getFestivalWorkBonus(state);
   const nextTicks = state.ticks + 1;
   const seasons: GameState['season'][] = [
     'Granite (Spring)',
@@ -1207,7 +1212,7 @@ export function stepSimulationTick(state: GameState): GameState {
 
   // Passive farm production every 25 ticks scaled by seasonal multiplier
   if (nextTicks % 25 === 0 && farmCount > 0) {
-    const harvested = Math.max(1, Math.round(farmCount * 2 * seasonMods.cropMultiplier));
+    const harvested = Math.max(1, Math.round(farmCount * 2 * seasonMods.cropMultiplier)) + farmCount * researchBonuses.foodPerFarm;
     resources.food += harvested;
     resources.wealth += harvested * 3;
     addLog(
@@ -1415,7 +1420,7 @@ export function stepSimulationTick(state: GameState): GameState {
         dwarf.currentTask = undefined;
         if (bestDist <= 1) {
           dwarf.state = 'FIGHTING';
-          const dmg = (dwarf.weaponEquipped ? 18 : 10) + ((dwarf.skills.COMBAT || 1) * 2) + combatBonus(state, dwarf);
+          const dmg = (dwarf.weaponEquipped ? 18 : 10) + ((dwarf.skills.COMBAT || 1) * 2) + combatBonus(state, dwarf) + (dwarf.labors.COMBAT ? researchBonuses.combat : 0);
           targetHostile.hp -= dmg;
           const incomingDmg = Math.max(
             1,
@@ -1581,7 +1586,7 @@ export function stepSimulationTick(state: GameState): GameState {
 
     dwarf.state = 'WORKING';
     const labor = getRequiredLabor(task.type);
-    task.progress += 1 + workProgressBonus(state, dwarf, labor);
+    task.progress += 1 + workProgressBonus(state, dwarf, labor) + (labor === 'MINING' ? researchBonuses.mining : 0) + festivalWorkBonus;
     if (dwarf.quirk === 'STONEWISE' && (labor === 'MINING' || labor === 'MASONRY')) dwarf.energy = Math.max(15, dwarf.energy - 1);
 
     if (task.progress >= task.totalTicks) {
@@ -1782,7 +1787,7 @@ export function stepSimulationTick(state: GameState): GameState {
     addLog(`[EVENT] ${nextActiveEvent.title} — Awaiting Overseer Decree!`, 'ALERT');
   }
 
-  return stepGuild({
+  return stepActivities(stepGuild({
     ...state,
     guild: { ...state.guild, relics: namedRelics, relationships },
     grid,
@@ -1796,5 +1801,5 @@ export function stepSimulationTick(state: GameState): GameState {
     ticks: nextTicks,
     year: nextYear,
     season: nextSeason,
-  });
+  }));
 }

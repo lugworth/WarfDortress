@@ -203,11 +203,13 @@ export interface FortressNotice {
   label: string;
   severity: "DANGER" | "WARN" | "INFO" | "DISCOVERY";
   coord?: { x: number; y: number; z: number };
-  action?: "GUILD";
+  action?: "GUILD" | "ADVENTURE";
 }
 
 export function getFortressNotices(state: GameState): FortressNotice[] {
   const notices: FortressNotice[] = [];
+  const expedition = state.activities?.expeditions.active;
+  if (expedition && state.ticks >= expedition.returnsAt) notices.push({ id: `expedition:${expedition.id}`, label: 'Your scouts have returned. Claim their cargo in the Adventure Hall.', severity: 'DISCOVERY', action: 'ADVENTURE' });
   for (const hostile of [...state.hostiles].sort((a, b) =>
     a.id.localeCompare(b.id),
   )) {

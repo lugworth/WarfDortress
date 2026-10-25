@@ -1,3 +1,5 @@
+import type { ActivitiesState } from './activities.ts';
+
 export type Biome =
   | 'DEEP_OCEAN'
   | 'COASTAL_WATER'
@@ -348,6 +350,8 @@ export interface NarrativeEvent {
 }
 
 export interface GameState {
+  /** Additive, versioned gameplay extension. Absent in older v1/v2 saves. */
+  activities?: ActivitiesState;
   guild: GuildState;
   id: string;
   world: WorldData;

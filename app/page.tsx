@@ -18,6 +18,7 @@ import { MAX_SEED_LENGTH } from '@/lib/game-rules';
 import { UIProvider, useUI } from '@/components/UIProvider';
 import UIOverlay from '@/components/UIOverlay';
 import FortressNotices from '@/components/FortressNotices';
+import AdventureHallModal from '@/components/AdventureHallModal';
 
 function AsciiCrest() {
   return (
@@ -65,6 +66,8 @@ function FortressShell() {
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
   const [isGuildModalOpen, setIsGuildModalOpen] = useState(false);
+  const [isAdventureModalOpen, setIsAdventureModalOpen] = useState(false);
+  const [adventureVisit, setAdventureVisit] = useState(0);
 
   // Desktop side panel toggles to maximize ASCII map area
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
@@ -386,6 +389,7 @@ function FortressShell() {
         <div className="fortress-actions flex flex-wrap items-center gap-1.5 text-xs">
           <button type="button" onClick={() => openOverlay('commands')} className="border border-[var(--ui-info)] px-2 py-1 text-[var(--ui-info)]">[ / COMMANDS ]</button>
           <button type="button" onClick={() => openOverlay('settings')} className="border border-[var(--ui-border)] px-2 py-1">[ DISPLAY ]</button>
+          <button type="button" onClick={() => setIsAdventureModalOpen(true)} className="border border-[var(--ui-info)] px-2 py-1 text-[var(--ui-info)]">[ ADVENTURE HALL{gameState.activities?.expeditions.active && gameState.ticks >= gameState.activities.expeditions.active.returnsAt ? ' · CARGO READY' : ''} ]</button>
           <button type="button" onClick={() => setIsGuildModalOpen(true)} className="px-1.5 py-0.5 border border-[var(--ui-accent)] text-[var(--ui-accent)] hover:bg-[var(--ui-border)] whitespace-nowrap">
             [ GUILD HALL{gameState.guild.commissions.some((c) => c.status === 'ACTIVE') ? ' · CHARTER ACTIVE' : ''} ]
           </button>
@@ -609,7 +613,7 @@ function FortressShell() {
       </div>
 
       {/* Main Screen Layout: MAP IS THE DOMINANT/BIGGEST PART */}
-      <FortressNotices onOpenGuild={() => setIsGuildModalOpen(true)} onShowMap={() => setMobilePanel('MAP')} />
+      <FortressNotices onOpenGuild={() => setIsGuildModalOpen(true)} onOpenAdventure={() => { setAdventureVisit(v => v + 1); setIsAdventureModalOpen(true); }} onShowMap={() => setMobilePanel('MAP')} />
       <div className="flex-1 flex min-h-0 overflow-hidden bg-[var(--ui-bg)]">
         {/* Left Sidebar: Compact width, collapsible */}
         {!isMobile && showLeftSidebar && (
@@ -691,6 +695,7 @@ function FortressShell() {
       </div>
 
       <GuildHallModal isOpen={isGuildModalOpen} onClose={() => setIsGuildModalOpen(false)} />
+      <AdventureHallModal key={adventureVisit} isOpen={isAdventureModalOpen} onClose={() => setIsAdventureModalOpen(false)} />
       <UIOverlay onShowMap={() => setMobilePanel('MAP')} />
 
       {/* Narrative Event & Decree Modal */}

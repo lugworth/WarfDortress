@@ -1,5 +1,6 @@
 import type { Biome, DesignationType, GameState, Tile, TileTerrain } from './types.ts';
 import { initializeGuild, validGuildState } from './guild.ts';
+import { initializeActivities, validActivities } from './activities.ts';
 import { createInitialGameState } from './game-engine.ts';
 import { getTerrainVisuals } from './world-gen.ts';
 import { MAX_POPULATION, MAX_SEED_LENGTH, RESOURCE_KEYS, validResourceMap } from './game-rules.ts';
@@ -71,6 +72,7 @@ export function validateGameState(state: GameState): GameState {
     });
   });
   check(validGuildState(state), 'Invalid guild, relic, or dwarf story data.');
+  check(validActivities(state), 'Invalid expedition, celebration, or research data.');
   return state;
 }
 
@@ -87,7 +89,7 @@ export function deserializeFortress(text: string): GameState {
   check(typeof text === 'string' && text.length < 8_000_000);
   const raw = JSON.parse(text);
   // Migrate the full, unversioned local saves written by the original app.
-  if (raw.version === undefined && raw.grid) { raw.id = `fort-${crypto.randomUUID()}`; return validateGameState(initializeGuild(raw)); }
+  if (raw.version === undefined && raw.grid) { raw.id = `fort-${crypto.randomUUID()}`; return validateGameState(initializeActivities(initializeGuild(raw))); }
   check(raw.version === 1 || raw.version === SAVE_VERSION, 'This save uses an unsupported version.');
   check(raw.state && Array.isArray(raw.cells) && raw.cells.length === 76 * 42 * 6);
   const grid: Tile[][][] = Array.from({ length: 6 }, (_, z) => Array.from({ length: 42 }, (_, y) => Array.from({ length: 76 }, (_, x) => {
@@ -98,7 +100,7 @@ export function deserializeFortress(text: string): GameState {
     return { x, y, z, terrain, biome: BIOMES[c[1]], ...getTerrainVisuals(terrain), revealed: c[2] === 1, ...(c[3] >= 0 ? { designation: DESIGNATIONS[c[3]] } : {}), ...(c[4] ? { resourceDrop: c[4] } : {}) };
   })));
   const restored = { ...raw.state, grid };
-  return validateGameState(raw.version === 1 ? initializeGuild(restored) : restored);
+  return validateGameState(initializeActivities(raw.version === 1 ? initializeGuild(restored) : restored));
 }
 
 export function writeLocalSave(storage: Pick<Storage, 'getItem' | 'setItem'>, state: GameState) {
