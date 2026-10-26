@@ -357,6 +357,18 @@ export type GuildAction =
   | { type: 'SET_RELIC_MODE'; id: string; mode: 'STORED' | 'DISPLAYED' | 'EQUIPPED'; ownerId?: string }
   | { type: 'GIFT_RELIC'; id: string; patron: Civilization['race'] };
 
+export interface StrangeMoodState {
+  id: string;
+  dwarfId: string;
+  dwarfName: string;
+  moodKind: 'FEY' | 'SECRETIVE' | 'POSSESSED';
+  artifactName: string;
+  relicTemplate: string;
+  demands: Partial<FortressResources>;
+  startedAt: number;
+  deadline: number;
+}
+
 export interface GameState {
   id: string;
   world: WorldData;
@@ -378,5 +390,7 @@ export interface GameState {
   guild: GuildState;
   activities?: {
     expeditions?: any;
+    claimedMilestones?: string[];
+    strangeMood?: StrangeMoodState | null;
   };
 }

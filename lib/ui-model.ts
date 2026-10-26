@@ -320,3 +320,255 @@ export const TOOL_GLYPHS: Record<DesignationType, string> = {
   CANCEL: '×',
 };
 
+export interface TileHoverMetadata {
+  x: number;
+  y: number;
+  z: number;
+  revealed: boolean;
+  char: string;
+  fg: string;
+  terrainLabel: string;
+  materialType: string;
+  occupancy: string[];
+  temperature: string;
+  temperatureStatus: "COLD" | "TEMPERATE" | "WARM" | "SCORCHING";
+  liquidLevel: string;
+  liquidDepth: number; // 0..7 scale
+  walkableLabel: string;
+  yieldLabel: string | null;
+  designationLabel: string | null;
+}
+
+const MATERIAL_BY_TERRAIN: Record<TileTerrain, string> = {
+  EMPTY_AIR: "Open Cavern Air",
+  WATER: "Fresh Surface Water",
+  GRASS: "Alluvial Loam & Meadow Turf",
+  TREE: "Surface Timber (Conifer & Oak)",
+  SHRUB: "Wild Surface Flora & Berries",
+  SAND: "Silica Riverbank Sand",
+  SOIL: "Subterranean Clay & Loam",
+  ROCK_WALL: "Strata Bedrock",
+  LIMESTONE_WALL: "Sedimentary Limestone (CaCO3)",
+  GRANITE_WALL: "Igneous Crystalline Granite",
+  IRON_VEIN: "Hematite & Magnetite Iron Seam",
+  COPPER_VEIN: "Malachite & Native Copper Seam",
+  GOLD_VEIN: "Auriferous Quartz Gold Vein",
+  MITHRIL_VEIN: "Abyssal True-Silver Mithril Vein",
+  MAGMA: "Molten Basaltic Magma",
+  ROCK_FLOOR: "Hewn Strata Stone Floor",
+  CONSTRUCTED_WALL: "Dressed Ashlar Stone Block",
+  DOOR: "Iron-Bound Stone Portal",
+  BED: "Joined Seasoned Timber Frame",
+  WORKSHOP_MASON: "Chiseled Stonework Bench",
+  WORKSHOP_CARPENTER: "Sawbuck & Joinery Timber",
+  WORKSHOP_STILL: "Copper-Coiled Fermentation Vat",
+  WORKSHOP_SMELTER: "Firebrick Blast Furnace",
+  WORKSHOP_FORGE: "Hardened Iron Anvil & Hearth",
+  TAVERN_HALL: "Oak Trestle & Feast Hearth",
+  TEMPLE_ALTAR: "Carved Runic Monolith",
+  TRADE_DEPOT: "Paved Caravan Exchange",
+  TRAP_STONE: "Counterweighted Deadfall Mechanism",
+  CAVERN_RELIC: "Ancient Runic Artifact Alloy",
+  FARM_PLOT: "Furrowed Plump-Helmet Silt",
+  STAIRS_UP_DOWN: "Carved Spiral Stone Steps",
+  STOCKPILE_TILE: "Marked Stone Storage Yard",
+};
+
+export function getTileHoverMetadata(
+  state: GameState,
+  tile: Tile,
+): TileHoverMetadata {
+  const stratum =
+    state.world.strata[tile.z] ||
+    state.world.strata[0] || {
+      name: "Surface",
+      primaryRock: "Granite",
+    };
+
+  if (!tile.revealed) {
+    return {
+      x: tile.x,
+      y: tile.y,
+      z: tile.z,
+      revealed: false,
+      char: "·",
+      fg: "#808080",
+      terrainLabel: "UNEXPLORED STRATA",
+      materialType: `Unprobed ${stratum.primaryRock} Formation`,
+      occupancy: ["Unexplored (Fog of War)"],
+      temperature: `${52 + tile.z * 8}°F (Geothermal Est.)`,
+      temperatureStatus: tile.z >= 4 ? "WARM" : "TEMPERATE",
+      liquidLevel: "0/7 (Unknown)",
+      liquidDepth: 0,
+      walkableLabel: "Unexplored",
+      yieldLabel: null,
+      designationLabel: tile.designation ? tile.designation.replaceAll("_", " ") : null,
+    };
+  }
+
+  // Material Type: enrich generic rock wall/floor with stratum's primaryRock
+  let materialType = MATERIAL_BY_TERRAIN[tile.terrain] || "Rough Stone";
+  if (
+    tile.terrain === "ROCK_WALL" ||
+    tile.terrain === "ROCK_FLOOR" ||
+    tile.terrain === "STAIRS_UP_DOWN"
+  ) {
+    materialType = `${stratum.primaryRock} (${materialType})`;
+  }
+
+  // Occupancy: Dwarves, Hostiles, Structures
+  const occupancy: string[] = [];
+  const dwarvesHere = state.dwarves.filter(
+    (d) => d.z === tile.z && d.x === tile.x && d.y === tile.y,
+  );
+  for (const d of dwarvesHere) {
+    occupancy.push(`☺ ${d.name} (${d.state})`);
+  }
+  const hostilesHere = state.hostiles.filter(
+    (h) => h.z === tile.z && h.x === tile.x && h.y === tile.y && h.hp > 0,
+  );
+  for (const h of hostilesHere) {
+    occupancy.push(`${h.char} ${h.name} (${h.hp}/${h.maxHp} HP)`);
+  }
+  if (STRUCTURES[tile.terrain]) {
+    occupancy.push(`⚒ ${STRUCTURES[tile.terrain]}`);
+  } else if (tile.terrain === "CAVERN_RELIC") {
+    occupancy.push("☼ Unclaimed Cavern Relic");
+  } else if (tile.terrain === "BED") {
+    occupancy.push("⌂ Dwarven Quarters");
+  } else if (tile.terrain === "TRAP_STONE") {
+    occupancy.push("^ Armed Stonefall Trap");
+  }
+  if (occupancy.length === 0) {
+    occupancy.push(tile.walkable ? "Clear (Passable)" : "Solid Obstacle");
+  }
+
+  // Check proximity to Magma or Water on the same Z-level
+  const level = state.grid[tile.z];
+  let nearMagma = false;
+  let nearWater = false;
+  if (level) {
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const neighbor = level[tile.y + dy]?.[tile.x + dx];
+        if (!neighbor) continue;
+        if (neighbor.terrain === "MAGMA") nearMagma = true;
+        if (
+          neighbor.terrain === "WATER" &&
+          Math.abs(dx) + Math.abs(dy) === 1
+        ) {
+          nearWater = true;
+        }
+      }
+    }
+  }
+
+  // Liquid Level (0/7 to 7/7 scale)
+  let liquidDepth = 0;
+  let liquidLevel = "0/7 Dry";
+  if (tile.terrain === "MAGMA") {
+    liquidDepth = 7;
+    liquidLevel = "7/7 Magma (Full Flow)";
+  } else if (tile.terrain === "WATER") {
+    liquidDepth = 7;
+    liquidLevel = "7/7 Water (Channel)";
+  } else if (tile.terrain === "FARM_PLOT") {
+    liquidDepth = 2;
+    liquidLevel = "2/7 Irrigated Loam";
+  } else if (
+    nearWater &&
+    (tile.terrain === "GRASS" ||
+      tile.terrain === "SOIL" ||
+      tile.terrain === "SAND" ||
+      tile.terrain === "ROCK_FLOOR")
+  ) {
+    liquidDepth = 1;
+    liquidLevel = "1/7 Damp Riverbank";
+  }
+
+  // Temperature calculation
+  let tempF = 56;
+  let temperatureStatus: TileHoverMetadata["temperatureStatus"] = "TEMPERATE";
+  let tempNote = "Ambient";
+
+  if (tile.terrain === "MAGMA") {
+    tempF = 2190;
+    temperatureStatus = "SCORCHING";
+    tempNote = "10998 Urist · Molten";
+  } else if (nearMagma) {
+    tempF = 188;
+    temperatureStatus = "SCORCHING";
+    tempNote = "Magma Radiant";
+  } else if (
+    tile.terrain === "WORKSHOP_SMELTER" ||
+    tile.terrain === "WORKSHOP_FORGE"
+  ) {
+    tempF = 145;
+    temperatureStatus = "WARM";
+    tempNote = "Furnace Draft";
+  } else if (tile.z === 0) {
+    const seasonLower = state.season.toLowerCase();
+    if (seasonLower.includes("winter") || seasonLower.includes("obsidian")) {
+      tempF = 28;
+      temperatureStatus = "COLD";
+      tempNote = "Winter Frost";
+    } else if (
+      seasonLower.includes("summer") ||
+      seasonLower.includes("hematite")
+    ) {
+      tempF = 74;
+      temperatureStatus = "TEMPERATE";
+      tempNote = "Summer Air";
+    } else if (
+      seasonLower.includes("autumn") ||
+      seasonLower.includes("malachite")
+    ) {
+      tempF = 46;
+      temperatureStatus = "COLD";
+      tempNote = "Autumn Chill";
+    } else {
+      tempF = 58;
+      temperatureStatus = "TEMPERATE";
+      tempNote = "Spring Breeze";
+    }
+    if (tile.terrain === "WATER") {
+      tempF -= 6;
+      if (tempF <= 45) temperatureStatus = "COLD";
+      tempNote = "River Current";
+    }
+  } else {
+    tempF = 52 + tile.z * 9;
+    if (tempF >= 85) {
+      temperatureStatus = "WARM";
+      tempNote = "Deep Geothermal";
+    } else {
+      temperatureStatus = "TEMPERATE";
+      tempNote = "Cavern Ambient";
+    }
+  }
+
+  return {
+    x: tile.x,
+    y: tile.y,
+    z: tile.z,
+    revealed: true,
+    char: tile.char,
+    fg: tile.fg,
+    terrainLabel: tile.terrain.replaceAll("_", " "),
+    materialType,
+    occupancy,
+    temperature: `${tempF.toLocaleString("en-US")}°F (${tempNote})`,
+    temperatureStatus,
+    liquidLevel,
+    liquidDepth,
+    walkableLabel: tile.walkable ? "Passable" : "Solid Wall",
+    yieldLabel: tile.resourceDrop
+      ? `+${tile.resourceDrop.amount} ${tile.resourceDrop.type}`
+      : null,
+    designationLabel: tile.designation
+      ? tile.designation.replaceAll("_", " ")
+      : null,
+  };
+}
+

@@ -25,6 +25,7 @@ import {
 } from './world-gen.ts';
 import { createInitialGuildState } from './guild.ts';
 import { createExpeditionState } from './expeditions.ts';
+import { triggerStrangeMood } from './progression.ts';
 
 export function getSeasonModifiers(season: GameState['season']): {
   cropMultiplier: number;
@@ -1329,7 +1330,7 @@ export function stepSimulationTick(state: GameState): GameState {
     }
   });
 
-  const nextDwarves: DwarfEntity[] = state.dwarves.map((dwarfRaw) => {
+  let nextDwarves: DwarfEntity[] = state.dwarves.map((dwarfRaw) => {
     const dwarf: DwarfEntity = {
       ...dwarfRaw,
       labors: { ...dwarfRaw.labors },
@@ -1758,6 +1759,29 @@ export function stepSimulationTick(state: GameState): GameState {
   // Remove defeated hostiles
   hostiles = hostiles.filter((h) => h.hp > 0);
 
+  // Handle Strange Mood deadline expiration
+  let nextActivities = state.activities ? { ...state.activities } : {};
+  if (
+    nextActivities.strangeMood &&
+    nextTicks >= nextActivities.strangeMood.deadline
+  ) {
+    const expiredMood = nextActivities.strangeMood;
+    nextActivities.strangeMood = null;
+    nextDwarves = nextDwarves.map((d) =>
+      d.id === expiredMood.dwarfId
+        ? {
+            ...d,
+            happiness: Math.max(10, d.happiness - 35),
+            thought: `Melancholic after failing to obtain materials for ${expiredMood.artifactName}!`,
+          }
+        : d
+    );
+    addLog(
+      `[STRANGE MOOD FAILED] ${expiredMood.dwarfName} fell into melancholy after lacking materials for "${expiredMood.artifactName}".`,
+      'ALERT'
+    );
+  }
+
   // Trigger emergent narrative events every 45 ticks if none is currently awaiting player decision
   let nextActiveEvent = state.activeEvent;
   if (!nextActiveEvent && nextTicks > 0 && nextTicks % 45 === 0) {
@@ -1772,7 +1796,7 @@ export function stepSimulationTick(state: GameState): GameState {
     addLog(`[EVENT] ${nextActiveEvent.title} — Awaiting Overseer Decree!`, 'ALERT');
   }
 
-  return {
+  let nextState: GameState = {
     ...state,
     grid,
     dwarves: nextDwarves,
@@ -1782,8 +1806,21 @@ export function stepSimulationTick(state: GameState): GameState {
     workOrders,
     chronicle,
     activeEvent: nextActiveEvent,
+    activities: nextActivities,
     ticks: nextTicks,
     year: nextYear,
     season: nextSeason,
   };
+
+  // Periodically spark a Strange Mood if none is active and wealth >= 600
+  if (
+    !nextState.activities?.strangeMood &&
+    nextTicks > 0 &&
+    nextTicks % 55 === 0 &&
+    nextState.resources.wealth >= 600
+  ) {
+    nextState = triggerStrangeMood(nextState).nextState;
+  }
+
+  return nextState;
 }

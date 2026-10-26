@@ -9,6 +9,7 @@ import {
   getDesignationPreview,
   getFortressNotices,
   getMapPoints,
+  getTileHoverMetadata,
   groupChronicle,
   TOOL_GLYPHS,
 } from "./ui-model.ts";
@@ -306,5 +307,119 @@ test("asciiBar and TOOL_GLYPHS render deterministic tactile block gauges and too
   for (const tool of Object.values(TOOL_KEYS)) {
     assert.ok(TOOL_GLYPHS[tool]?.length >= 1, `Missing glyph for ${tool}`);
   }
+});
+
+test("getTileHoverMetadata reports material type, occupancy, temperature, and liquid level accurately", () => {
+  const state = createInitialGameState("Hover-inspector");
+
+  // 1. Surface water tile & adjacent damp bank
+  terrain(state, 0, 10, 10, "WATER", true);
+  terrain(state, 0, 11, 10, "GRASS", true);
+  const waterMeta = getTileHoverMetadata(state, state.grid[0][10][10]);
+  assert.equal(waterMeta.materialType, "Fresh Surface Water");
+  assert.equal(waterMeta.liquidDepth, 7);
+  assert.match(waterMeta.liquidLevel, /7\/7 Water/);
+
+  const bankMeta = getTileHoverMetadata(state, state.grid[0][10][11]);
+  assert.equal(bankMeta.liquidDepth, 1);
+  assert.match(bankMeta.liquidLevel, /1\/7 Damp Riverbank/);
+
+  // 2. Magma tile & radiant heat neighbor + dwarf/hostile occupancy
+  terrain(state, 5, 20, 20, "MAGMA", true);
+  terrain(state, 5, 21, 20, "ROCK_FLOOR", true);
+  state.dwarves[0].x = 21;
+  state.dwarves[0].y = 20;
+  state.dwarves[0].z = 5;
+  state.hostiles.push({
+    id: "gob-test",
+    name: "Goblin Pikeman",
+    kind: "GOBLIN_RAIDER",
+    char: "g",
+    color: "#ff0000",
+    x: 21,
+    y: 20,
+    z: 5,
+    hp: 18,
+    maxHp: 24,
+    attack: 5,
+    behavior: "RAID",
+  });
+
+  const magmaMeta = getTileHoverMetadata(state, state.grid[5][20][20]);
+  assert.equal(magmaMeta.temperatureStatus, "SCORCHING");
+  assert.equal(magmaMeta.liquidDepth, 7);
+  assert.match(magmaMeta.temperature, /2,190°F/);
+
+  const occupiedMeta = getTileHoverMetadata(state, state.grid[5][20][21]);
+  assert.equal(occupiedMeta.temperatureStatus, "SCORCHING");
+  assert.ok(occupiedMeta.occupancy.some((o) => o.includes(state.dwarves[0].name)));
+  assert.ok(occupiedMeta.occupancy.some((o) => o.includes("Goblin Pikeman")));
+
+  // 3. Unexplored tile hides exact material and occupants
+  terrain(state, 2, 5, 5, "GOLD_VEIN", false);
+  const hiddenMeta = getTileHoverMetadata(state, state.grid[2][5][5]);
+  assert.equal(hiddenMeta.revealed, false);
+  assert.equal(hiddenMeta.terrainLabel, "UNEXPLORED STRATA");
+  assert.ok(!hiddenMeta.materialType.includes("Gold"));
+});
+
+test("progression ranks, milestone rewards, strange mood artifacts, and scouting expeditions work deterministically", async () => {
+  const {
+    getFortressProgression,
+    claimMilestoneReward,
+    triggerStrangeMood,
+    fulfillStrangeMood,
+  } = await import("./progression.ts");
+  const { performExpeditionAction } = await import("./expeditions.ts");
+
+  let state = createInitialGameState("Progression-test");
+  const initialProg = getFortressProgression(state);
+  assert.equal(initialProg.currentRank.tier, 2); // Starting score ~940 -> Delver Hamlet
+
+  // Complete & claim "Strike the Earth" (35+ stone)
+  state.resources.stone = 40;
+  const beforeWealth = state.resources.wealth;
+  const claimRes = claimMilestoneReward(state, "ms-strike-earth");
+  assert.equal(claimRes.claimed, true);
+  state = claimRes.nextState;
+  assert.equal(state.resources.wealth, beforeWealth + 100);
+  // Cannot double-claim
+  assert.equal(claimMilestoneReward(state, "ms-strike-earth").claimed, false);
+
+  // Trigger and fulfill a Strange Mood to forge a Legendary Artifact
+  state.resources.stone = 20;
+  state.resources.wood = 20;
+  state.resources.ironOre = 10;
+  state.resources.steelBars = 10;
+  state.resources.ale = 20;
+  const moodRes = triggerStrangeMood(state);
+  assert.equal(moodRes.triggered, true);
+  state = moodRes.nextState;
+  assert.ok(state.activities?.strangeMood);
+
+  const fulfillRes = fulfillStrangeMood(state);
+  assert.equal(fulfillRes.fulfilled, true);
+  state = fulfillRes.nextState;
+  assert.equal(state.activities?.strangeMood, null);
+  assert.equal(state.guild.relics.length, 1);
+  assert.ok(state.dwarves.some((d) => d.title.startsWith("Legendary Artisan")));
+
+  // Start and claim a scouting expedition
+  const expStart = performExpeditionAction(state, {
+    type: "START_EXPEDITION",
+    routeId: "route-foothills",
+    approach: "CAUTIOUS",
+  });
+  assert.equal(expStart.success, true);
+  state = expStart.nextState;
+  const expId = state.activities.expeditions.active.id;
+  state.ticks = state.activities.expeditions.active.returnsAt;
+  const expClaim = performExpeditionAction(state, {
+    type: "CLAIM_EXPEDITION",
+    id: expId,
+  });
+  assert.equal(expClaim.success, true);
+  assert.equal(expClaim.nextState.activities.expeditions.active, null);
+  assert.equal(expClaim.nextState.activities.expeditions.history.length, 1);
 });
 

@@ -9,9 +9,11 @@ import {
 } from '@/lib/types';
 import { QUIRKS } from '@/lib/guild';
 import { scanWorldStrata } from '@/lib/game-engine';
+import { getFortressProgression } from '@/lib/progression';
+import { formatCost } from '@/lib/tool-catalog';
 import { asciiBar } from '@/lib/ui-model';
 import { playTactileSfx } from '@/lib/audio';
-import ToolPicker from './ToolPicker';
+import ExpeditionsPanel from './ExpeditionsPanel';
 
 const ALL_LABORS: DwarfLabor[] = [
   'MINING',
@@ -39,14 +41,22 @@ export default function Sidebar() {
     toggleWorkOrderAutoRepeat,
     removeWorkOrder,
     jumpToLocation,
+    performExpeditionAction,
+    claimMilestone,
+    startStrangeMood,
+    completeStrangeMood,
   } = useGame();
 
-  const [activeTab, setActiveTab] = useState<'DESIGNATE' | 'DWARVES' | 'STOCKS' | 'RADAR'>(
+  const [activeTab, setActiveTab] = useState<'PROGRESSION' | 'DWARVES' | 'STOCKS' | 'RADAR'>(
     'DWARVES'
   );
 
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const strataSummaries = useMemo(() => scanWorldStrata(gameState), [gameState]);
+  const progression = useMemo(() => getFortressProgression(gameState), [gameState]);
+  const claimableCount = progression.milestones.filter(
+    (m) => m.completed && !m.claimed
+  ).length + (progression.canFulfillMood ? 1 : 0);
 
   // Draw Mini-Map Radar when RADAR tab is active
   useEffect(() => {
@@ -140,9 +150,12 @@ export default function Sidebar() {
         {(
           [
             { id: 'DWARVES', label: `Clan (${gameState.dwarves.length})` },
+            {
+              id: 'PROGRESSION',
+              label: claimableCount > 0 ? `Quests (${claimableCount}!)` : 'Quests',
+            },
             { id: 'STOCKS', label: 'Stocks' },
             { id: 'RADAR', label: 'Radar' },
-            { id: 'DESIGNATE', label: 'Catalog' },
           ] as const
         ).map((tab) => (
           <button
@@ -153,7 +166,9 @@ export default function Sidebar() {
             className={`py-2 px-0.5 text-center transition-colors border-r border-[var(--ui-border)] last:border-r-0 whitespace-nowrap flex items-center justify-center shrink-0 text-[11px] ${
               activeTab === tab.id
                 ? 'bg-[var(--ui-panel)] text-[var(--ui-accent)] font-bold border-b-2 border-b-[var(--ui-accent)]'
-                : 'text-[var(--ui-muted)] hover:text-[var(--ui-text)]'
+                : tab.id === 'PROGRESSION' && claimableCount > 0
+                  ? 'text-[#33ff00] font-bold hover:text-[#ffffff]'
+                  : 'text-[var(--ui-muted)] hover:text-[var(--ui-text)]'
             }`}
           >
             {tab.label}
@@ -163,7 +178,167 @@ export default function Sidebar() {
 
       {/* Tab Content Area */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
-        {activeTab === 'DESIGNATE' && <ToolPicker />}
+        {activeTab === 'PROGRESSION' && (
+          <div className="space-y-3" data-testid="progression-panel">
+            {/* 1. Fortress Sovereignty Rank Card */}
+            <div
+              data-testid="fortress-rank-card"
+              className="p-2.5 bg-[var(--ui-bg)] border border-[var(--ui-accent)] space-y-1.5"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[var(--ui-accent)] font-bold text-xs">
+                  ★ TIER {progression.currentRank.tier}:{' '}
+                  {progression.currentRank.title.toUpperCase()}
+                </span>
+                <span className="text-[#00ffff] text-[10px] tabular-nums font-bold">
+                  SCORE {progression.score}
+                </span>
+              </div>
+              <div className="text-[10px] text-[var(--ui-muted)]">
+                Dwarven Charter: <span className="text-[#d0d0d0]">{progression.currentRank.dwarvenTitle}</span>
+              </div>
+              <div className="text-[11px] text-[#33ff00]">
+                {progression.currentRank.perk}
+              </div>
+              {progression.nextRank ? (
+                <div className="pt-1 border-t border-[var(--ui-border)] space-y-0.5 text-[10px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--ui-muted)]">
+                      Next: <strong className="text-[#ffffff]">{progression.nextRank.title}</strong>
+                    </span>
+                    <span className="text-[#ff9900] tabular-nums">
+                      {asciiBar(progression.rankProgressPercent, 100, 8)}{' '}
+                      {progression.rankProgressPercent}%
+                    </span>
+                  </div>
+                  <div className="text-[var(--ui-muted)]">
+                    Unlocks at Score {progression.nextRank.minScore}
+                  </div>
+                </div>
+              ) : (
+                <div className="pt-1 border-t border-[var(--ui-border)] text-[10px] text-[#ff0099] font-bold">
+                  [ SOVEREIGN MOUNTAINHOME CAPITAL ACHIEVED ]
+                </div>
+              )}
+            </div>
+
+            {/* 2. Strange Mood & Masterwork Artifact System */}
+            <div
+              data-testid="strange-mood-card"
+              className="p-2.5 bg-[var(--ui-bg)] border border-[#cc00ff] space-y-1.5"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[#cc00ff] font-bold text-xs">
+                  ☼ STRANGE MOOD &amp; ARTIFACTS
+                </span>
+                <span className="text-[10px] text-[var(--ui-muted)] tabular-nums">
+                  VAULT: {gameState.guild.relics.length}
+                </span>
+              </div>
+
+              {progression.strangeMood ? (
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="text-[#ffffff] font-bold">
+                    {progression.strangeMood.dwarfName} ({progression.strangeMood.moodKind} MOOD)
+                  </div>
+                  <div className="text-[#00ffff] text-[10px]">
+                    Forging: &ldquo;{progression.strangeMood.artifactName}&rdquo;
+                  </div>
+                  <div className="text-[#ff9900] text-[10px] tabular-nums">
+                    Demands: {formatCost(progression.strangeMood.demands)} ·{' '}
+                    {Math.max(0, progression.strangeMood.deadline - gameState.ticks)}T left
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!progression.canFulfillMood}
+                    onClick={() => {
+                      playTactileSfx('stamp');
+                      completeStrangeMood();
+                    }}
+                    className="w-full py-1 px-2 border border-[#33ff00] bg-[#0a200a] text-[#33ff00] font-bold text-[11px] disabled:opacity-40"
+                  >
+                    [ ☼ FULFILL MOOD &amp; FORGE ARTIFACT ]
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1.5 text-[10px] text-[var(--ui-muted)]">
+                  <p>
+                    Inspire a skilled artisan to claim a workshop and forge a named
+                    Legendary Artifact (+350 Wealth &amp; Relic Blessing).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTactileSfx('tool');
+                      startStrangeMood();
+                    }}
+                    className="w-full py-1 px-2 border border-[#cc00ff] text-[#cc00ff] hover:bg-[#1e0a24] font-bold text-[11px]"
+                  >
+                    [ ☼ INSPIRE STRANGE MOOD ]
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Interactive Fortress Milestones (Deeds) */}
+            <div className="space-y-1.5" data-testid="milestones-list">
+              <div className="text-[var(--ui-info)] font-bold text-xs">
+                +-[ FORTRESS MILESTONES &amp; DEEDS ]-
+              </div>
+              {progression.milestones.map((ms) => (
+                <div
+                  key={ms.id}
+                  className={`p-2 border space-y-1 ${
+                    ms.claimed
+                      ? 'border-[#1f3a1f] bg-[#060d06] opacity-80'
+                      : ms.completed
+                        ? 'border-[#33ff00] bg-[#091809]'
+                        : 'border-[var(--ui-border)] bg-[var(--ui-bg)]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-bold text-[#ffffff] text-[11px]">
+                      {ms.claimed ? '✓ ' : ms.completed ? '★ ' : '· '}
+                      {ms.title}
+                    </span>
+                    <span className="text-[10px] tabular-nums text-[#00ffff]">
+                      {ms.progress}/{ms.target}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-[var(--ui-muted)] leading-snug">
+                    {ms.description}
+                  </p>
+                  <div className="text-[10px] text-[#ff9900]">
+                    Reward: {ms.rewardSummary}
+                  </div>
+                  {ms.completed && !ms.claimed && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playTactileSfx('stamp');
+                        claimMilestone(ms.id);
+                      }}
+                      className="w-full mt-1 py-1 px-2 border border-[#33ff00] bg-[#0d260d] text-[#33ff00] font-bold text-[11px] hover:bg-[#163d16]"
+                    >
+                      [ ★ CLAIM MILESTONE REWARD ]
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* 4. External Caravan & Scouting Expeditions */}
+            <div className="pt-2 border-t border-[var(--ui-border)] space-y-1.5">
+              <div className="text-[var(--ui-accent)] font-bold text-xs">
+                +-[ EXTERNAL SCOUTING EXPEDITIONS ]-
+              </div>
+              <ExpeditionsPanel
+                state={gameState}
+                onAction={performExpeditionAction}
+              />
+            </div>
+          </div>
+        )}
 
         {activeTab === 'DWARVES' && (
           <div className="space-y-2.5">

@@ -17,6 +17,15 @@ import {
 } from '@/lib/types';
 import { performGuildAction as executeGuildAction } from '@/lib/guild';
 import {
+  performExpeditionAction as executeExpeditionAction,
+  type ExpeditionAction,
+} from '@/lib/expeditions';
+import {
+  claimMilestoneReward,
+  fulfillStrangeMood,
+  triggerStrangeMood,
+} from '@/lib/progression';
+import {
   applyAreaDesignation,
   applyLaborPreset,
   createInitialGameState,
@@ -86,6 +95,10 @@ interface GameContextType {
   handleSignOut: () => Promise<void>;
   loadCloudSave: (save: CloudFortressSave) => void;
   performGuildAction: (action: GuildAction) => boolean;
+  performExpeditionAction: (action: ExpeditionAction) => boolean;
+  claimMilestone: (milestoneId: string) => boolean;
+  startStrangeMood: () => boolean;
+  completeStrangeMood: () => boolean;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -486,6 +499,46 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return success;
   }, []);
 
+  const performExpeditionAction = useCallback((action: ExpeditionAction) => {
+    let success = false;
+    setGameState((prev) => {
+      const res = executeExpeditionAction(prev, action);
+      success = res.success;
+      return res.nextState;
+    });
+    return success;
+  }, []);
+
+  const claimMilestone = useCallback((milestoneId: string) => {
+    let claimed = false;
+    setGameState((prev) => {
+      const res = claimMilestoneReward(prev, milestoneId);
+      claimed = res.claimed;
+      return res.nextState;
+    });
+    return claimed;
+  }, []);
+
+  const startStrangeMood = useCallback(() => {
+    let triggered = false;
+    setGameState((prev) => {
+      const res = triggerStrangeMood(prev);
+      triggered = res.triggered;
+      return res.nextState;
+    });
+    return triggered;
+  }, []);
+
+  const completeStrangeMood = useCallback(() => {
+    let fulfilled = false;
+    setGameState((prev) => {
+      const res = fulfillStrangeMood(prev);
+      fulfilled = res.fulfilled;
+      return res.nextState;
+    });
+    return fulfilled;
+  }, []);
+
   return (
     <GameContext.Provider
       value={{
@@ -531,6 +584,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         handleSignOut,
         loadCloudSave,
         performGuildAction,
+        performExpeditionAction,
+        claimMilestone,
+        startStrangeMood,
+        completeStrangeMood,
       }}
     >
       {children}

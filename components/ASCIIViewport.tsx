@@ -12,7 +12,13 @@ import { DesignationType, DwarfEntity, HostileEntity } from "@/lib/types";
 import { ISOTOPE } from "@/lib/colors";
 import { canDesignateTile, getConstructionCost } from "@/lib/game-engine";
 import { TOOL_KEYS } from "@/lib/game-rules";
-import { getDesignationPreview, getMapPoints, TOOL_GLYPHS } from "@/lib/ui-model";
+import {
+  asciiBar,
+  getDesignationPreview,
+  getMapPoints,
+  getTileHoverMetadata,
+  TOOL_GLYPHS,
+} from "@/lib/ui-model";
 import { formatCost, getTool } from "@/lib/tool-catalog";
 import { TOOL_NAMES } from "@/lib/ui-labels";
 import { useUI } from "./UIProvider";
@@ -109,6 +115,9 @@ export default function ASCIIViewport() {
   const [mapOptions, setMapOptions] = useState(false);
   const [showBuildDrawer, setShowBuildDrawer] = useState(false);
   const [panMode, setPanMode] = useState(false);
+  const [pointerPos, setPointerPos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [focusedPointId, setFocusedPointId] = useState<string | null>(null);
   const [fontReady, setFontReady] = useState(false);
   const [orderStatus, setOrderStatus] = useState("");
@@ -715,6 +724,13 @@ export default function ASCIIViewport() {
 
   const handleMouseMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (panMode) return;
+    const containerRect = scrollRef.current?.getBoundingClientRect();
+    if (containerRect) {
+      setPointerPos({
+        x: e.clientX - containerRect.left,
+        y: e.clientY - containerRect.top,
+      });
+    }
     const coord = clientToGrid(e.clientX, e.clientY);
     if (!coord) return;
     if (dragStart && !inspectMode) {
@@ -906,6 +922,14 @@ export default function ASCIIViewport() {
     (t) => t.id === selectedTool,
   );
 
+  const hoverMeta = useMemo(
+    () =>
+      hoveredTile && hoveredTile.z === currentZ
+        ? getTileHoverMetadata(gameState, hoveredTile)
+        : null,
+    [gameState, hoveredTile, currentZ],
+  );
+
   return (
     <div
       ref={scrollRef}
@@ -946,6 +970,7 @@ export default function ASCIIViewport() {
           }
         }}
         onPointerLeave={() => {
+          setPointerPos(null);
           if (dragStart) return;
           setDragStart(null);
           setDragCurrent(null);
@@ -1148,7 +1173,7 @@ export default function ASCIIViewport() {
         <span className="text-[#404040]">|</span>
         <span className="text-[#d0d0d0] tabular-nums truncate max-w-[240px]">
           {hoveredTile
-            ? `(${hoveredTile.x},${hoveredTile.y}) ${
+            ? `(${hoveredTile.x},${hoveredTile.y},Z-${hoveredTile.z}) ${
                 hoveredTile.revealed
                   ? hoveredTile.terrain.replaceAll("_", " ")
                   : "UNEXPLORED"
@@ -1156,6 +1181,136 @@ export default function ASCIIViewport() {
             : orderStatus || "Drag tiles to designate"}
         </span>
       </div>
+
+      {/* HOVER-BASED TILE INSPECTOR OVERLAY (Material, Occupancy, Temperature, Liquid Level) */}
+      {hoverMeta && !dragStart && (
+        <aside
+          data-testid="hover-tile-inspector"
+          aria-label="Hover tile inspector"
+          style={
+            pointerPos
+              ? {
+                  left: Math.max(
+                    10,
+                    Math.min(
+                      viewport.width - 292,
+                      pointerPos.x + 280 > viewport.width
+                        ? pointerPos.x - 284
+                        : pointerPos.x + 18,
+                    ),
+                  ),
+                  top: Math.max(
+                    44,
+                    Math.min(
+                      viewport.height - 210,
+                      pointerPos.y + 185 > viewport.height - 54
+                        ? pointerPos.y - 172
+                        : pointerPos.y + 18,
+                    ),
+                  ),
+                }
+              : {
+                  right: 10,
+                  top: 44,
+                }
+          }
+          className="pointer-events-none absolute z-30 w-[274px] bg-[#080808]/95 backdrop-blur-md border border-[#ff0099]/80 px-2.5 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.9)] text-[11px] space-y-1"
+        >
+          {/* Inspector Header: Glyph + Terrain + Coordinates */}
+          <div className="flex items-center justify-between gap-1.5 border-b border-[#242424] pb-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span
+                className="inline-flex items-center justify-center w-5 h-5 border border-[#303030] bg-[#000000] font-bold text-xs shrink-0"
+                style={{ color: hoverMeta.fg }}
+              >
+                {hoverMeta.char}
+              </span>
+              <span className="font-bold text-[#ffffff] truncate">
+                {hoverMeta.terrainLabel}
+              </span>
+            </div>
+            <span className="text-[#00ffff] tabular-nums font-bold shrink-0 text-[10px]">
+              ({hoverMeta.x},{hoverMeta.y},Z-{hoverMeta.z})
+            </span>
+          </div>
+
+          {/* Metadata Rows */}
+          <div className="space-y-0.5 text-[10px]">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[#808080] shrink-0">MATERIAL:</span>
+              <span className="text-[#d0d0d0] font-bold text-right truncate">
+                {hoverMeta.materialType}
+              </span>
+            </div>
+
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[#808080] shrink-0">OCCUPANCY:</span>
+              <span
+                className={`text-right truncate font-bold ${
+                  hoverMeta.occupancy.some((o) => o.includes("HP)"))
+                    ? "text-[#ff0000]"
+                    : hoverMeta.occupancy.some((o) => o.startsWith("☺"))
+                      ? "text-[#33ff00]"
+                      : "text-[#00ffff]"
+                }`}
+              >
+                {hoverMeta.occupancy.join(" · ")}
+              </span>
+            </div>
+
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[#808080] shrink-0">TEMP:</span>
+              <span
+                className={`text-right tabular-nums font-bold ${
+                  hoverMeta.temperatureStatus === "SCORCHING"
+                    ? "text-[#ff0000]"
+                    : hoverMeta.temperatureStatus === "WARM"
+                      ? "text-[#ff9900]"
+                      : hoverMeta.temperatureStatus === "COLD"
+                        ? "text-[#00ffff]"
+                        : "text-[#33ff00]"
+                }`}
+              >
+                {hoverMeta.temperature}
+              </span>
+            </div>
+
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[#808080] shrink-0">LIQUID:</span>
+              <span
+                className={`text-right tabular-nums ${
+                  hoverMeta.liquidDepth > 0
+                    ? hoverMeta.terrainLabel === "MAGMA"
+                      ? "text-[#ff0000] font-bold"
+                      : "text-[#00ffff] font-bold"
+                    : "text-[#808080]"
+                }`}
+              >
+                {asciiBar(hoverMeta.liquidDepth, 7, 5)} {hoverMeta.liquidLevel}
+              </span>
+            </div>
+
+            {(hoverMeta.yieldLabel || hoverMeta.designationLabel) && (
+              <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-[#1e1e1e]">
+                {hoverMeta.yieldLabel ? (
+                  <span className="text-[#ff9900] font-bold">
+                    YIELD: {hoverMeta.yieldLabel}
+                  </span>
+                ) : (
+                  <span className="text-[#808080]">
+                    {hoverMeta.walkableLabel}
+                  </span>
+                )}
+                {hoverMeta.designationLabel && (
+                  <span className="text-[#ff0099] font-bold">
+                    [ORDER: {hoverMeta.designationLabel}]
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </aside>
+      )}
 
       {/* FLOATING ORDER PREVIEW & CONFIRMATION CARD (Above FAB Dock) */}
       {preview && selection && (

@@ -146,3 +146,142 @@ export function expeditionActionAvailable(
 
   return false;
 }
+
+export function performExpeditionAction(
+  state: GameState,
+  action: ExpeditionAction,
+): { nextState: GameState; success: boolean } {
+  if (!expeditionActionAvailable(state, action)) {
+    return { nextState: state, success: false };
+  }
+
+  const expeditions: ExpeditionState =
+    state.activities?.expeditions || createExpeditionState();
+
+  if (action.type === "START_EXPEDITION") {
+    const route = EXPEDITION_ROUTES.find((r) => r.id === action.routeId);
+    if (!route) return { nextState: state, success: false };
+    const plan = route.approaches[action.approach];
+
+    const nextResources = { ...state.resources };
+    for (const [k, v] of Object.entries(route.cost)) {
+      const key = k as keyof FortressResources;
+      nextResources[key] = Math.max(0, (nextResources[key] ?? 0) - (v ?? 0));
+    }
+
+    const active: ActiveExpedition = {
+      id: `exp-${state.ticks}-${route.id}`,
+      routeId: route.id,
+      approach: action.approach,
+      startedAt: state.ticks,
+      returnsAt: state.ticks + plan.duration,
+    };
+
+    return {
+      nextState: {
+        ...state,
+        resources: nextResources,
+        activities: {
+          ...state.activities,
+          expeditions: {
+            ...expeditions,
+            active,
+          },
+        },
+        chronicle: [
+          {
+            id: `chron-exp-start-${state.ticks}`,
+            tick: state.ticks,
+            season: state.season,
+            year: state.year,
+            text: `[EXPEDITION] Dispatched scouts on "${route.name}" (${action.approach} approach, returns at Tick ${active.returnsAt}).`,
+            type: "INFO",
+          },
+          ...state.chronicle.slice(0, 59),
+        ],
+      },
+      success: true,
+    };
+  }
+
+  if (action.type === "CLAIM_EXPEDITION" && expeditions.active) {
+    const active = expeditions.active;
+    const route = EXPEDITION_ROUTES.find((r) => r.id === active.routeId);
+    if (!route) return { nextState: state, success: false };
+    const plan = route.approaches[active.approach];
+
+    // Deterministic roll from seed + ticks + routeId
+    const hash = (state.ticks * 31 + active.routeId.length * 17) % 100;
+    const isSetback = hash < plan.setbackChance;
+    const outcome: "SUCCESS" | "SETBACK" = isSetback ? "SETBACK" : "SUCCESS";
+    const reward = isSetback ? route.setbackReward : plan.reward;
+
+    const nextResources = { ...state.resources };
+    for (const [k, v] of Object.entries(reward)) {
+      const key = k as keyof FortressResources;
+      nextResources[key] = (nextResources[key] ?? 0) + (v ?? 0);
+    }
+
+    const nextRelics = [...state.guild.relics];
+    let relicId: string | undefined;
+    if (!isSetback && route.relicOnSuccess) {
+      relicId = `relic-exp-${state.ticks}`;
+      nextResources.relics += 1;
+      nextRelics.push({
+        id: relicId,
+        template: "CROWN_OF_EMBER",
+        name: "Crown of the Sunken Outpost",
+        discoveredBy: `Scouting Expedition (${route.name})`,
+        discoveredAt: state.ticks,
+        mode: "STORED",
+        history: [
+          {
+            tick: state.ticks,
+            text: `Recovered intact from ${route.name} by ${active.approach.toLowerCase()} scouts.`,
+          },
+        ],
+      });
+    }
+
+    const historyItem: ExpeditionHistoryItem = {
+      id: active.id,
+      routeId: active.routeId,
+      outcome,
+      claimedAt: state.ticks,
+      reward,
+      relicId,
+    };
+
+    return {
+      nextState: {
+        ...state,
+        resources: nextResources,
+        guild: {
+          ...state.guild,
+          relics: nextRelics,
+        },
+        activities: {
+          ...state.activities,
+          expeditions: {
+            active: null,
+            history: [historyItem, ...expeditions.history],
+          },
+        },
+        chronicle: [
+          {
+            id: `chron-exp-claim-${state.ticks}`,
+            tick: state.ticks,
+            season: state.season,
+            year: state.year,
+            text: `[EXPEDITION] Scouts returned from "${route.name}" (${outcome})! Cargo claimed into fortress stockpiles.`,
+            type: outcome === "SUCCESS" ? "LORE" : "ALERT",
+          },
+          ...state.chronicle.slice(0, 59),
+        ],
+      },
+      success: true,
+    };
+  }
+
+  return { nextState: state, success: false };
+}

@@ -8,6 +8,8 @@ import Sidebar from '@/components/Sidebar';
 import AdvisorPanel from '@/components/AdvisorPanel';
 import NarrativeEventModal from '@/components/NarrativeEventModal';
 import { TradeDepotModal } from '@/components/TradeDepotModal';
+import GuildHallModal from '@/components/GuildHallModal';
+import { getFortressProgression } from '@/lib/progression';
 import {
   generateDeterministicWorldMeta,
   generateRandomWorldSeed,
@@ -56,10 +58,12 @@ function FortressShell() {
   const [mobilePanel, setMobilePanel] = useState<'MAP' | 'MANAGE' | 'ADVISOR'>('MAP');
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
+  const [isGuildModalOpen, setIsGuildModalOpen] = useState(false);
 
   // Desktop side panel toggles to maximize ASCII map area
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(false); // default closed so map is HUGE!
+  const progression = getFortressProgression(gameState);
 
   const previewWorld = generateDeterministicWorldMeta(seedInput || 'Khazad-251');
   const previewArchetype = getSurfaceArchetype(seedInput || 'Khazad-251');
@@ -334,6 +338,12 @@ function FortressShell() {
           <span className="font-bold text-[#ff0099] whitespace-nowrap">
             [{gameState.world.dwarvenName}]
           </span>
+          <span
+            className="hidden sm:inline-block px-1.5 py-0.5 bg-[#1a1016] border border-[#ff0099]/60 text-[#ff9900] text-[10px] font-bold whitespace-nowrap"
+            title={`${progression.currentRank.perk} (Score: ${progression.score})`}
+          >
+            ★ {progression.currentRank.title}
+          </span>
           <span className="text-[#404040]">|</span>
           <span className="text-[#00ffff] tabular-nums whitespace-nowrap">
             Y{gameState.year}·{gameState.season}·T{gameState.ticks}
@@ -406,6 +416,16 @@ function FortressShell() {
               <span className="truncate">{gameState.alerts[0].title}</span>
             </button>
           )}
+
+          {/* Guild Hall (Commissions & Relics) Button */}
+          <button
+            type="button"
+            onClick={() => setIsGuildModalOpen(true)}
+            title="Open Royal Guild Hall: Commissions, Named Relics & Clan Stories"
+            className="px-1.5 py-0.5 border border-[#262626] text-[#ff9900] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
+          >
+            [ ♛ GUILD ]
+          </button>
 
           {/* Trade Depot Barter Modal Button */}
           <button
@@ -628,6 +648,12 @@ function FortressShell() {
       <TradeDepotModal
         isOpen={isTradeModalOpen}
         onClose={() => setIsTradeModalOpen(false)}
+      />
+
+      {/* Royal Guild Hall: Commissions, Relics & Clan Stories Modal */}
+      <GuildHallModal
+        isOpen={isGuildModalOpen}
+        onClose={() => setIsGuildModalOpen(false)}
       />
     </div>
   );
