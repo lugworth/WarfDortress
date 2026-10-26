@@ -62,6 +62,8 @@ import {
   testFirestoreConnection,
 } from '@/lib/firebase';
 
+import { LOCAL_SAVE_KEY, parseLocalSave, serializeLocalSave, getLocalSaveSummary, type LocalSaveSummary } from '@/lib/local-save';
+
 export type ScreenMode = 'title' | 'playing' | 'paused';
 
 interface GameContextType {
@@ -106,6 +108,8 @@ interface GameContextType {
   user: User | null;
   cloudSaves: CloudFortressSave[];
   saveStatus: string | null;
+  localSave: LocalSaveSummary | null;
+  resumeLocalSave: () => void;
   handleCloudSave: () => Promise<void>;
   handleGoogleSignIn: () => Promise<void>;
   handleSignOut: () => Promise<void>;
@@ -148,6 +152,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [cloudSaves, setCloudSaves] = useState<CloudFortressSave[]>([]);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
+  const [localSave, setLocalSave] = useState<LocalSaveSummary | null>(null);
+  const latestState = useRef(gameState);
+  useEffect(() => { latestState.current = gameState; }, [gameState]);
+  const sessionStarted = useRef(false);
+  const persistLocal = useCallback((state: GameState) => {
+    try {
+      localStorage.setItem(LOCAL_SAVE_KEY, serializeLocalSave(state));
+      setLocalSave(getLocalSaveSummary(state));
+      return true;
+    } catch {
+      setSaveStatus('Local save unavailable. Browser storage may be full or disabled.');
+      return false;
+    }
+  }, []);
+
   const setScreen = useCallback((next: ScreenMode) => {
     setScreenState(next);
     if (typeof document !== 'undefined') {
@@ -162,7 +181,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const autostart = params.get('autostart') === '1';
       const frame = requestAnimationFrame(() => {
         setGameState(createInitialGameState(freshSeed));
+        try {
+          const saved = parseLocalSave(localStorage.getItem(LOCAL_SAVE_KEY));
+          if (saved) setLocalSave(getLocalSaveSummary(saved));
+        } catch { /* Storage can be disabled; the game still runs. */ }
         if (autostart) {
+          sessionStarted.current = true;
           setScreenState('playing');
           document.body.dataset.state = 'playing';
         }
@@ -170,6 +194,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return () => cancelAnimationFrame(frame);
     }
   }, []);
+
+  useEffect(() => {
+    if (screen !== 'playing') return;
+    const save = () => { if (sessionStarted.current) persistLocal(latestState.current); };
+    const timer = window.setInterval(save, 15_000);
+    const onVisibility = () => { if (document.hidden) save(); };
+    window.addEventListener('pagehide', save);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('pagehide', save);
+      document.removeEventListener('visibilitychange', onVisibility);
+      save();
+    };
+  }, [screen, persistLocal]);
+
+  useEffect(() => {
+    if (!saveStatus) return;
+    const timer = window.setTimeout(() => setSaveStatus(null), 6000);
+    return () => clearTimeout(timer);
+  }, [saveStatus]);
 
   useEffect(() => {
     testFirestoreConnection();
@@ -211,7 +256,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const intervalMs = Math.max(120, Math.floor(baseInterval / gameState.speed));
 
     const timer = setInterval(() => {
-      setGameState((prev) => (prev.paused ? prev : stepSimulationTick(prev)));
+      if (!document.hidden) setGameState((prev) => (prev.paused ? prev : stepSimulationTick(prev)));
     }, intervalMs);
 
     return () => clearInterval(timer);
@@ -226,7 +271,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const embarkNewWorld = useCallback(
     async (seed: string, enhanceWithAI = true) => {
       const cleanSeed = seed.trim() || 'Khazad-251';
-      const freshState = createInitialGameState(cleanSeed);
+      const freshState = { ...createInitialGameState(cleanSeed), paused: true };
+      sessionStarted.current = true;
+      persistLocal(freshState);
       setGameState(freshState);
       setCurrentZ(0);
       setSelectedDwarfId(freshState.dwarves[0]?.id || null);
@@ -250,8 +297,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             }),
           });
           const data = await res.json();
-          if (data && data.backstory && Array.isArray(data.history) && data.history.length > 0) {
-            setGameState((prev) => ({
+          if (res.ok && data && data.backstory && Array.isArray(data.history) && data.history.length > 0) {
+            setGameState((prev) => prev.id !== freshState.id ? prev : ({
               ...prev,
               world: {
                 ...prev.world,
@@ -265,7 +312,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [setScreen]
+    [setScreen, persistLocal]
   );
 
   const designateBox = useCallback(
@@ -449,7 +496,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setSpeed = useCallback((speed: 1 | 2 | 4) => {
-    setGameState((prev) => ({ ...prev, speed, paused: false }));
+    setGameState((prev) => ({ ...prev, speed }));
   }, []);
 
   const handleGoogleSignIn = useCallback(async () => {
@@ -472,11 +519,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const handleCloudSave = useCallback(async () => {
     try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('ascii_fortress_autosave', JSON.stringify(gameState));
-      }
+      const savedLocally = persistLocal(gameState);
       if (!auth.currentUser) {
-        setSaveStatus('Saved locally! Sign in with Google to sync to Firestore Cloud.');
+        if (savedLocally) setSaveStatus('Fortress saved in this browser.');
         return;
       }
       setSaveStatus('Syncing fortress to Firestore...');
@@ -487,11 +532,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       setSaveStatus(e instanceof Error ? e.message : 'Cloud save failed');
     }
-  }, [gameState]);
+  }, [gameState, persistLocal]);
+
+  const resumeLocalSave = useCallback(() => {
+    try {
+      const saved = parseLocalSave(localStorage.getItem(LOCAL_SAVE_KEY));
+      if (!saved) { setSaveStatus("The local save could not be read."); return; }
+      sessionStarted.current = true;
+      setGameState(saved);
+      setCurrentZ(0);
+      setSelectedDwarfId(saved.dwarves[0]?.id ?? null);
+      setHoveredTile(null);
+      setInspectMode(false);
+      setScreen("playing");
+      setSaveStatus(`Resumed ${saved.world.dwarvenName}. Press Resume when ready.`);
+    } catch { setSaveStatus("Browser storage is unavailable."); }
+  }, [setScreen]);
 
   const loadCloudSave = useCallback(
     (save: CloudFortressSave) => {
       const restored = createInitialGameState(save.seed);
+      sessionStarted.current = true;
       setGameState({
         ...restored,
         id: save.id,
@@ -727,6 +788,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         user,
         cloudSaves,
         saveStatus,
+        localSave,
+        resumeLocalSave,
         handleCloudSave,
         handleGoogleSignIn,
         handleSignOut,

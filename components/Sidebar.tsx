@@ -452,13 +452,13 @@ export default function Sidebar() {
           return (
           <div className="space-y-2.5">
             {/* Dwarven Militia Squads & AI Goblin Raid Command Box */}
-            <div
+            <details
               data-testid="militia-command-panel"
               className="p-2 bg-[var(--ui-bg)] border border-[var(--ui-danger)]/70 space-y-2"
             >
-              <div className="flex items-center justify-between text-[11px]">
+              <summary className="flex items-center justify-between gap-3 text-[11px]">
                 <span className="text-[var(--ui-danger)] font-bold">
-                  ⚔ MILITIA &amp; AI RAID COMMAND
+                  Militia & defense +
                 </span>
                 <span className="text-[var(--ui-muted)] tabular-nums">
                   HOSTILES:{' '}
@@ -470,7 +470,7 @@ export default function Sidebar() {
                     {vanquishedCount}
                   </strong>
                 </span>
-              </div>
+              </summary>
 
               {/* Global Doctrine Selector */}
               <div className="button-grid">
@@ -748,7 +748,7 @@ export default function Sidebar() {
                   Sound war horn
                 </button>
               </div>
-            </div>
+            </details>
 
             {/* Clan-Wide Labor Presets */}
             <div className="p-2 bg-[var(--ui-bg)] border border-[var(--ui-border)] space-y-1.5">

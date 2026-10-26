@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useDialog } from '@/hooks/use-dialog';
+import { usePauseWhileOpen } from '@/hooks/use-pause-while-open';
 import { useGame } from './GameProvider';
 import { hasResources } from '@/lib/game-engine';
 import { NarrativeEventSeverity } from '@/lib/types';
@@ -48,6 +50,9 @@ export default function NarrativeEventModal({ isOpen, onClose }: NarrativeEventM
   const [isSpeaking, setIsSpeaking] = useState(false);
   const activeEvent = gameState.activeEvent;
 
+  const dialogRef = useDialog(isOpen, onClose);
+  usePauseWhileOpen(isOpen);
+
   if (!isOpen) return null;
 
   const avgMorale = Math.round(
@@ -88,6 +93,8 @@ export default function NarrativeEventModal({ isOpen, onClose }: NarrativeEventM
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label="Fortress Narrative Events and Decrees"

@@ -342,7 +342,7 @@ test("getTileHoverMetadata reports material type, occupancy, temperature, and li
     hp: 18,
     maxHp: 24,
     attack: 5,
-    behavior: "RAID",
+    behavior: "RAID_SEEK",
   });
 
   const magmaMeta = getTileHoverMetadata(state, state.grid[5][20][20]);
@@ -412,15 +412,15 @@ test("progression ranks, milestone rewards, strange mood artifacts, and scouting
   });
   assert.equal(expStart.success, true);
   state = expStart.nextState;
-  const expId = state.activities.expeditions.active.id;
-  state.ticks = state.activities.expeditions.active.returnsAt;
+  const expId = state.activities!.expeditions.active.id;
+  state.ticks = state.activities!.expeditions.active.returnsAt;
   const expClaim = performExpeditionAction(state, {
     type: "CLAIM_EXPEDITION",
     id: expId,
   });
   assert.equal(expClaim.success, true);
-  assert.equal(expClaim.nextState.activities.expeditions.active, null);
-  assert.equal(expClaim.nextState.activities.expeditions.history.length, 1);
+  assert.equal(expClaim.nextState.activities!.expeditions.active, null);
+  assert.equal(expClaim.nextState.activities!.expeditions.history.length, 1);
 });
 
 test("automated Thoughts & Feelings log records key life events (plump helmet roast, terrifying beast) and aggregates clan anecdotes", async () => {
@@ -618,8 +618,6 @@ test("tooltip toggle preference, configured migrant jobs, resource economy balan
     getBuildingTileFunctionInfo,
     activateBuildingTileFunction,
   } = await import("./game-engine.ts");
-  const { TerrainType } = await import("./types.ts").catch(() => ({ TerrainType: null }));
-  void TerrainType;
 
   // 1. Tooltip toggle preference defaults to true and parses false cleanly
   assert.equal(DEFAULT_UI.tooltips, true);
@@ -732,7 +730,7 @@ test("thought log IDs stay strictly unique past MAX_THOUGHT_LOG_ENTRIES cap and 
       year: state.year,
       season: state.season,
       text: `Recorded unique memory #${i} during tick 180.`,
-      category: "AMBIENT_HALL",
+      category: "FELLOWSHIP",
       sentiment: "POSITIVE",
       moraleDelta: 1,
     });

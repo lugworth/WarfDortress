@@ -17,7 +17,6 @@ import {
 } from "@/lib/game-engine";
 import { TOOL_KEYS } from "@/lib/game-rules";
 import {
-  asciiBar,
   getDesignationPreview,
   getMapPoints,
   getTileHoverMetadata,
@@ -28,7 +27,7 @@ import { TOOL_NAMES } from "@/lib/ui-labels";
 import { useUI } from "./UIProvider";
 import AsciiSelect from "./AsciiSelect";
 import { playTactileSfx } from "@/lib/audio";
-import { getCurrentWeather, getWeatherTileVisuals } from "@/lib/weather";
+import { getWeatherTileVisuals } from "@/lib/weather";
 import {
   getBuildingUnlockStatus,
   getBuildingUnlockStatuses,
@@ -47,12 +46,7 @@ const PRIMARY_FAB_TOOLS: Array<{
   { id: "GATHER", shortLabel: "Gather", hotkey: "G", accent: "text-[#33ff00]" },
   { id: "STAIRS", shortLabel: "Stairs", hotkey: "X", accent: "text-[#ff0099]" },
   { id: "STOCKPILE", shortLabel: "Stock", hotkey: "P", accent: "text-[#00ffff]" },
-  { id: "BUILD_WALL", shortLabel: "Wall", hotkey: "W", accent: "text-[#ffffff]" },
-  { id: "BUILD_DOOR", shortLabel: "Door", hotkey: "O", accent: "text-[#ff9900]" },
-  { id: "BUILD_TRAP", shortLabel: "Trap", hotkey: "E", accent: "text-[#ff0000]" },
-  { id: "BUILD_FARM", shortLabel: "Farm", hotkey: "A", accent: "text-[#33ff00]" },
-  { id: "MILITIA_STATION", shortLabel: "Station", hotkey: "J", accent: "text-[#ff0000]" },
-  { id: "MILITIA_PATROL", shortLabel: "Patrol", hotkey: "N", accent: "text-[#00ffff]" },
+
 ];
 
 const SECONDARY_FAB_TOOLS: Array<{
@@ -61,6 +55,12 @@ const SECONDARY_FAB_TOOLS: Array<{
   hotkey: string;
   accent: string;
 }> = [
+  { id: "BUILD_WALL", shortLabel: "Wall", hotkey: "W", accent: "text-[#ffffff]" },
+  { id: "BUILD_DOOR", shortLabel: "Door", hotkey: "O", accent: "text-[#ff9900]" },
+  { id: "BUILD_TRAP", shortLabel: "Trap", hotkey: "E", accent: "text-[#ff0000]" },
+  { id: "BUILD_FARM", shortLabel: "Farm", hotkey: "A", accent: "text-[#33ff00]" },
+  { id: "MILITIA_STATION", shortLabel: "Station", hotkey: "J", accent: "text-[#ff0000]" },
+  { id: "MILITIA_PATROL", shortLabel: "Patrol", hotkey: "N", accent: "text-[#00ffff]" },
   { id: "BUILD_BED", shortLabel: "Bed", hotkey: "B", accent: "text-[#00ffff]" },
   { id: "BUILD_MASON", shortLabel: "Mason", hotkey: "M", accent: "text-[#d0d0d0]" },
   { id: "BUILD_CARPENTER", shortLabel: "Carpenter", hotkey: "C", accent: "text-[#ff9900]" },
@@ -128,14 +128,12 @@ export default function ASCIIViewport() {
 
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const panOrigin = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ width: 960, height: 640, dpr: 1 });
   const [mapOptions, setMapOptions] = useState(false);
   const [showBuildDrawer, setShowBuildDrawer] = useState(false);
   const [panMode, setPanMode] = useState(false);
-  const [pointerPos, setPointerPos] = useState<{ x: number; y: number } | null>(
-    null,
-  );
   const [focusedPointId, setFocusedPointId] = useState<string | null>(null);
   const [fontReady, setFontReady] = useState(false);
   const [orderStatus, setOrderStatus] = useState("");
@@ -172,12 +170,12 @@ export default function ASCIIViewport() {
 
   const gridWidth = gameState.world.width;
   const gridHeight = gameState.world.height;
-  // Auto-scale cells so the 76x42 map fills the viewport container with zero scrollbars
-  const CELL_W = Math.max(4, viewport.width / gridWidth);
-  const CELL_H = Math.max(6, viewport.height / gridHeight);
+  const zoom = preferences.mapZoom === "fit" ? null : preferences.mapZoom / 100;
+  const CELL_W = zoom ? 14 * zoom : viewport.width / gridWidth;
+  const CELL_H = zoom ? 18 * zoom : viewport.height / gridHeight;
   const scale = Math.min(CELL_W / 14, CELL_H / 18);
-  const logicalWidth = viewport.width;
-  const logicalHeight = viewport.height;
+  const logicalWidth = Math.max(viewport.width, CELL_W * gridWidth);
+  const logicalHeight = Math.max(viewport.height, CELL_H * gridHeight);
   const points = useMemo(
     () => getMapPoints(gameState, currentZ),
     [gameState, currentZ],
@@ -336,25 +334,29 @@ export default function ASCIIViewport() {
         0,
         Math.min(
           gridWidth - 1,
-          Math.floor(((clientX - rect.left) / rect.width) * gridWidth),
+          Math.floor((clientX - rect.left) / CELL_W),
         ),
       );
       const gy = Math.max(
         0,
         Math.min(
           gridHeight - 1,
-          Math.floor(((clientY - rect.top) / rect.height) * gridHeight),
+          Math.floor((clientY - rect.top) / CELL_H),
         ),
       );
       return { x: gx, y: gy };
     },
-    [gridWidth, gridHeight],
+    [gridWidth, gridHeight, CELL_W, CELL_H],
   );
 
   // Keyboard shortcuts for intuitive Dwarf Fortress control
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
+      if (e.key === "Escape" && !document.querySelector('[aria-modal="true"]')) {
+        setMapOptions(false);
+        setShowBuildDrawer(false);
+      }
       if (
         tag === "INPUT" ||
         tag === "TEXTAREA" ||
@@ -778,12 +780,18 @@ export default function ASCIIViewport() {
 
 
   const handleMouseDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (panMode || e.button === 1) return;
+    if (panMode || e.button === 1) {
+      const container = scrollRef.current;
+      if (container) panOrigin.current = { x: e.clientX, y: e.clientY, left: container.scrollLeft, top: container.scrollTop };
+      e.preventDefault();
+      return;
+    }
     e.currentTarget.focus();
     setPending(null);
     const coord = clientToGrid(e.clientX, e.clientY);
     if (!coord) return;
     setCursor(coord);
+    setHoveredTile(gameState.grid[currentZ]?.[coord.y]?.[coord.x] ?? null);
 
     // Always update inspected coordinate on click when in inspectMode or Shift/Right-click
     const clickedDwarf = gameState.dwarves.find(
@@ -808,24 +816,23 @@ export default function ASCIIViewport() {
   };
 
   const handleMouseMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (panMode) return;
-    const containerRect = scrollRef.current?.getBoundingClientRect();
-    if (containerRect) {
-      setPointerPos({
-        x: e.clientX - containerRect.left,
-        y: e.clientY - containerRect.top,
-      });
+    if (panOrigin.current && scrollRef.current) {
+      scrollRef.current.scrollLeft = panOrigin.current.left - (e.clientX - panOrigin.current.x);
+      scrollRef.current.scrollTop = panOrigin.current.top - (e.clientY - panOrigin.current.y);
+      return;
     }
+    if (panMode) return;
     const coord = clientToGrid(e.clientX, e.clientY);
     if (!coord) return;
     if (dragStart && !inspectMode) {
       setDragCurrent(coord);
     }
     const tile = gameState.grid[currentZ]?.[coord.y]?.[coord.x] || null;
-    setHoveredTile(tile);
+    if (e.pointerType !== "touch") setHoveredTile(tile);
   };
 
   const handleMouseUp = () => {
+    panOrigin.current = null;
     if (dragStart && dragCurrent && !inspectMode) {
       setPending({
         start: dragStart,
@@ -996,6 +1003,8 @@ export default function ASCIIViewport() {
     } else if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
+      setMapOptions(false);
+      setShowBuildDrawer(false);
       setPending(null);
       setDragStart(null);
       setDragCurrent(null);
@@ -1005,10 +1014,6 @@ export default function ASCIIViewport() {
 
   const isSecondaryToolActive = SECONDARY_FAB_TOOLS.some(
     (t) => t.id === selectedTool,
-  );
-  const currentWeather = useMemo(
-    () => getCurrentWeather(gameState),
-    [gameState],
   );
   const buildingUnlocks = useMemo(
     () => getBuildingUnlockStatuses(gameState),
@@ -1034,9 +1039,32 @@ export default function ASCIIViewport() {
 
   return (
     <div
-      ref={scrollRef}
-      className="map-viewport relative flex-1 h-full w-full min-h-0 min-w-0 bg-[var(--ui-bg)] font-mono select-none overflow-hidden text-[var(--ui-text)]"
+      className="map-viewport flex flex-col flex-1 h-full w-full min-h-0 min-w-0 bg-[var(--ui-bg)] font-mono select-none overflow-hidden text-[var(--ui-text)]"
     >
+      {/* Screen-reader keyboard help */}
+      <p id="map-keyboard-help" className="sr-only">
+        Focus map: arrows inspect, Tab cycles objects in inspect mode, Shift and
+        arrows select, Enter confirms, Escape cancels.
+      </p>
+
+      <div className="map-toolbar map-topbar" aria-label="Map depth and options">
+        <div className="map-depth-controls">
+          <button type="button" aria-label="Ascend Z-Level" disabled={currentZ === 0}
+            onClick={() => setCurrentZ(z => Math.max(0, z - 1))}>↑</button>
+          <AsciiSelect<number> ariaLabel="Map depth" value={currentZ}
+            onChange={z => setCurrentZ(z)}
+            options={gameState.world.strata.map(st => ({ value: st.zLevel,
+              label: `Z-${st.zLevel} · ${st.zLevel === 0 ? 'Surface' : st.primaryRock}` }))} />
+          <button type="button" aria-label="Descend Z-Level" disabled={currentZ >= gameState.world.depth - 1}
+            onClick={() => setCurrentZ(z => Math.min(gameState.world.depth - 1, z + 1))}>↓</button>
+        </div>
+        <span className="map-tool-label">{inspectMode ? 'Inspecting' : TOOL_NAMES[selectedTool]}</span>
+        <button type="button" aria-expanded={mapOptions} aria-controls="map-options"
+          onClick={() => { setMapOptions(v => !v); setShowBuildDrawer(false); setInspectMode(false); }}>
+          Map options {mapOptions ? '−' : '+'}
+        </button>
+      </div>
+      <div className="map-stage" ref={scrollRef}>
       {/* Full-Container Auto-Scaled ASCII Canvas (Zero Scrollbars) */}
       <canvas
         ref={canvasRef}
@@ -1048,19 +1076,20 @@ export default function ASCIIViewport() {
         tabIndex={0}
         onKeyDown={handleMapKey}
         onPointerDown={(e) => {
-          if (!panMode) e.currentTarget.setPointerCapture(e.pointerId);
+          e.currentTarget.setPointerCapture(e.pointerId);
           handleMouseDown(e);
         }}
         onPointerMove={handleMouseMove}
         onPointerUp={handleMouseUp}
         onPointerCancel={() => {
+          panOrigin.current = null;
           setDragStart(null);
           setDragCurrent(null);
         }}
         style={{
           touchAction: "none",
-          width: "100%",
-          height: "100%",
+          width: logicalWidth,
+          height: logicalHeight,
           display: "block",
         }}
         onContextMenu={(e) => {
@@ -1072,112 +1101,41 @@ export default function ASCIIViewport() {
           }
         }}
         onPointerLeave={() => {
-          setPointerPos(null);
+          setHoveredTile(null);
           if (dragStart) return;
           setDragStart(null);
           setDragCurrent(null);
         }}
         className={`block w-full h-full bg-[var(--ui-bg)] ${
-          inspectMode ? "cursor-pointer" : "cursor-crosshair"
+          panMode ? "cursor-grab" : inspectMode ? "cursor-pointer" : "cursor-crosshair"
         }`}
       />
 
-      {/* Screen-reader keyboard help */}
-      <p id="map-keyboard-help" className="sr-only">
-        Focus map: arrows inspect, Tab cycles objects in inspect mode, Shift and
-        arrows select, Enter confirms, Escape cancels.
-      </p>
-
-      {/* FLOATING TOP-LEFT HUD: Z-Level Strata Switcher & Quick Presets */}
-      <div
-        aria-label="Map depth and options"
-        className="pointer-events-auto absolute top-2.5 left-2.5 z-20 flex flex-wrap items-center gap-1 bg-[#0a0a0a]/90 backdrop-blur-sm border border-[#2a2a2a] px-2 py-1 shadow-lg text-xs"
-      >
-        <span
-          className="text-[#ff0099] font-bold mr-1 whitespace-nowrap"
-          title={preferences.tooltips ? currentStratum.name : undefined}
+      {/* FLOATING TOP-LEFT DRAWER: Quick Automation Presets & Object Finder */}
+      {mapOptions && (
+        <section
+          id="map-options"
+          aria-label="Map options"
+          className="pointer-events-auto map-context-card absolute top-2 left-2 z-30 w-80 max-w-[calc(100vw-1.5rem)] bg-[#0c0c0c]/95 backdrop-blur-md border border-[#ff0099] p-2.5 shadow-2xl space-y-2.5 text-xs"
         >
-          Z-{currentZ} ·{" "}
-          <span className="text-[#d0d0d0] font-normal">
-            {currentZ === 0 ? "Surface" : currentStratum.primaryRock}
-          </span>
-        </span>
-        <button
-          type="button"
-          aria-label="Ascend Z-Level"
-          disabled={currentZ === 0}
-          onClick={() => {
-            playTactileSfx("zlevel");
-            setCurrentZ((z) => Math.max(0, z - 1));
-          }}
-          className="px-1.5 py-0.5 border border-[#2a2a2a] bg-[#000000] text-[#00ffff] hover:border-[#00ffff] disabled:opacity-35"
-          title={preferences.tooltips ? "Ascend Z-Level ([)" : undefined}
-        >
-          ↑
-        </button>
-        <button
-          type="button"
-          aria-label="Descend Z-Level"
-          disabled={currentZ >= gameState.world.depth - 1}
-          onClick={() => {
-            playTactileSfx("zlevel");
-            setCurrentZ((z) => Math.min(gameState.world.depth - 1, z + 1));
-          }}
-          className="px-1.5 py-0.5 border border-[#2a2a2a] bg-[#000000] text-[#00ffff] hover:border-[#00ffff] disabled:opacity-35"
-          title={preferences.tooltips ? "Descend Z-Level (])" : undefined}
-        >
-          ↓
-        </button>
-        <div
-          className="hidden sm:flex items-center gap-0.5 ml-0.5"
-          role="group"
-          aria-label="Strata depth selector"
-        >
-          {gameState.world.strata.map((stratum) => (
+          <div className="flex items-center justify-between border-b border-[#202020] pb-1">
+            <span className="text-[#ff0099] font-bold">
+              Map options & quick orders
+            </span>
             <button
-              key={stratum.zLevel}
               type="button"
-              aria-pressed={currentZ === stratum.zLevel}
-              title={
-                preferences.tooltips
-                  ? `Z-${stratum.zLevel}: ${stratum.name} (${stratum.primaryRock})`
-                  : undefined
-              }
-              onClick={() => {
-                playTactileSfx("zlevel");
-                setCurrentZ(stratum.zLevel);
-              }}
-              className={`px-1.5 py-0.5 text-[11px] tabular-nums border transition-colors ${
-                currentZ === stratum.zLevel
-                  ? "border-[#ff0099] bg-[#201018] text-[#ff0099] font-bold"
-                  : "border-[#222222] bg-[#000000] text-[#808080] hover:text-[#d0d0d0]"
-              }`}
+              onClick={() => setMapOptions(false)}
+              className="text-[#808080] hover:text-[#ffffff] px-1"
             >
-              Z{stratum.zLevel}
+              ×
             </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          data-testid="viewport-weather-badge"
-          onClick={() => {
-            playTactileSfx("tool");
-            cycleSeasonWeather();
-          }}
-          style={{ color: currentWeather.color }}
-          className="px-1.5 py-0.5 text-[11px] border border-[#2a2a2a] bg-[#000000] hover:border-[#00ffff] transition-colors whitespace-nowrap font-bold"
-          title={
-            preferences.tooltips
-              ? `${gameState.season} — ${currentWeather.label} (${currentWeather.summary}). Click to cycle season & weather.`
-              : undefined
-          }
-        >
-          {currentWeather.glyph} {currentWeather.shortLabel}{" "}
-          {currentWeather.surfaceTempF}°F
-          {currentZ === 0 && currentWeather.surfaceSpeedPct < 100
-            ? ` · ${currentWeather.surfaceSpeedPct}% SPD`
-            : ""}
-        </button>
+          </div>
+          <p className="text-[11px] text-[#808080]">
+            {currentStratum.name} · Primary Rock: {currentStratum.primaryRock}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" aria-pressed={panMode} onClick={() => setPanMode(v => !v)} className="ui-button">Pan map {panMode ? 'ON' : 'OFF'}</button>
+            <button type="button" onClick={cycleSeasonWeather} className="ui-button">Cycle season & weather</button>
         <button
           type="button"
           aria-pressed={preferences.labels}
@@ -1209,44 +1167,7 @@ export default function ASCIIViewport() {
         >
           Tips {preferences.tooltips ? "ON" : "OFF"}
         </button>
-        <button
-          type="button"
-          aria-expanded={mapOptions}
-          aria-controls="map-options"
-          onClick={() => setMapOptions((v) => !v)}
-          className={`px-1.5 py-0.5 text-[11px] border transition-colors ${
-            mapOptions
-              ? "border-[#ff0099] bg-[#201018] text-[#ff0099]"
-              : "border-[#222222] bg-[#000000] text-[#d0d0d0] hover:border-[#808080]"
-          }`}
-        >
-          Quick {mapOptions ? "^" : "v"}
-        </button>
-      </div>
-
-
-      {/* FLOATING TOP-LEFT DRAWER: Quick Automation Presets & Object Finder */}
-      {mapOptions && (
-        <section
-          id="map-options"
-          aria-label="Map options"
-          className="pointer-events-auto absolute top-11 left-2.5 z-30 w-80 max-w-[calc(100vw-1.5rem)] bg-[#0c0c0c]/95 backdrop-blur-md border border-[#ff0099] p-2.5 shadow-2xl space-y-2.5 text-xs"
-        >
-          <div className="flex items-center justify-between border-b border-[#202020] pb-1">
-            <span className="text-[#ff0099] font-bold">
-              [ QUICK FORTRESS MACROS ]
-            </span>
-            <button
-              type="button"
-              onClick={() => setMapOptions(false)}
-              className="text-[#808080] hover:text-[#ffffff] px-1"
-            >
-              ×
-            </button>
           </div>
-          <p className="text-[11px] text-[#808080]">
-            {currentStratum.name} · Primary Rock: {currentStratum.primaryRock}
-          </p>
           <div className="flex flex-wrap gap-1.5">
             <button
               type="button"
@@ -1309,176 +1230,19 @@ export default function ASCIIViewport() {
         </section>
       )}
 
-      {/* FLOATING TOP-RIGHT HUD: Active Tool & Hovered Tile Telemetry */}
-      <div className="pointer-events-none absolute top-2.5 right-2.5 z-20 hidden sm:flex items-center gap-2 bg-[#0a0a0a]/90 backdrop-blur-sm border border-[#2a2a2a] px-2.5 py-1 shadow-lg text-xs">
-        <span className="text-[#ff0099] font-bold whitespace-nowrap">
-          {inspectMode
-            ? "[ ? INSPECT MODE ]"
-            : `[ ${TOOL_GLYPHS[selectedTool]} ${TOOL_NAMES[selectedTool].toUpperCase()} ]`}
-        </span>
-        <span className="text-[#404040]">|</span>
-        <span className="text-[#d0d0d0] tabular-nums truncate max-w-[240px]">
-          {hoveredTile
-            ? `(${hoveredTile.x},${hoveredTile.y},Z-${hoveredTile.z}) ${
-                hoveredTile.revealed
-                  ? hoveredTile.terrain.replaceAll("_", " ")
-                  : "UNEXPLORED"
-              }`
-            : orderStatus || "Drag tiles to designate"}
-        </span>
-      </div>
-
-      {/* HOVER-BASED TILE INSPECTOR OVERLAY (Material, Occupancy, Temperature, Liquid Level) */}
-      {preferences.tooltips && hoverMeta && !dragStart && (
-        <aside
-          data-testid="hover-tile-inspector"
-          aria-label="Hover tile inspector"
-          style={
-            pointerPos
-              ? {
-                  left: Math.max(
-                    10,
-                    Math.min(
-                      viewport.width - 292,
-                      pointerPos.x + 280 > viewport.width
-                        ? pointerPos.x - 284
-                        : pointerPos.x + 18,
-                    ),
-                  ),
-                  top: Math.max(
-                    44,
-                    Math.min(
-                      viewport.height - 210,
-                      pointerPos.y + 185 > viewport.height - 54
-                        ? pointerPos.y - 172
-                        : pointerPos.y + 18,
-                    ),
-                  ),
-                }
-              : {
-                  right: 10,
-                  top: 44,
-                }
-          }
-          className="pointer-events-none absolute z-30 w-[274px] bg-[#080808]/95 backdrop-blur-md border border-[#ff0099]/80 px-2.5 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.9)] text-[11px] space-y-1"
-        >
-          {/* Inspector Header: Glyph + Terrain + Coordinates */}
-          <div className="flex items-center justify-between gap-1.5 border-b border-[#242424] pb-1">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span
-                className="inline-flex items-center justify-center w-5 h-5 border border-[#303030] bg-[#000000] font-bold text-xs shrink-0"
-                style={{ color: hoverMeta.fg }}
-              >
-                {hoverMeta.char}
-              </span>
-              <span className="font-bold text-[#ffffff] truncate">
-                {hoverMeta.terrainLabel}
-              </span>
-            </div>
-            <span className="text-[#00ffff] tabular-nums font-bold shrink-0 text-[10px]">
-              ({hoverMeta.x},{hoverMeta.y},Z-{hoverMeta.z})
-            </span>
-          </div>
-
-          {/* Metadata Rows */}
-          <div className="space-y-0.5 text-[10px]">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[#808080] shrink-0">MATERIAL:</span>
-              <span className="text-[#d0d0d0] font-bold text-right truncate">
-                {hoverMeta.materialType}
-              </span>
-            </div>
-
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[#808080] shrink-0">OCCUPANCY:</span>
-              <span
-                className={`text-right truncate font-bold ${
-                  hoverMeta.occupancy.some((o) => o.includes("HP)"))
-                    ? "text-[#ff0000]"
-                    : hoverMeta.occupancy.some((o) => o.startsWith("☺"))
-                      ? "text-[#33ff00]"
-                      : "text-[#00ffff]"
-                }`}
-              >
-                {hoverMeta.occupancy.join(" · ")}
-              </span>
-            </div>
-
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[#808080] shrink-0">TEMP:</span>
-              <span
-                className={`text-right tabular-nums font-bold ${
-                  hoverMeta.temperatureStatus === "SCORCHING"
-                    ? "text-[#ff0000]"
-                    : hoverMeta.temperatureStatus === "WARM"
-                      ? "text-[#ff9900]"
-                      : hoverMeta.temperatureStatus === "COLD"
-                        ? "text-[#00ffff]"
-                        : "text-[#33ff00]"
-                }`}
-              >
-                {hoverMeta.temperature}
-              </span>
-            </div>
-
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[#808080] shrink-0">LIQUID:</span>
-              <span
-                className={`text-right tabular-nums ${
-                  hoverMeta.liquidDepth > 0
-                    ? hoverMeta.terrainLabel === "MAGMA"
-                      ? "text-[#ff0000] font-bold"
-                      : "text-[#00ffff] font-bold"
-                    : "text-[#808080]"
-                }`}
-              >
-                {asciiBar(hoverMeta.liquidDepth, 7, 5)} {hoverMeta.liquidLevel}
-              </span>
-            </div>
-
-            {(hoverMeta.yieldLabel || hoverMeta.designationLabel) && (
-              <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-[#1e1e1e]">
-                {hoverMeta.yieldLabel ? (
-                  <span className="text-[#ff9900] font-bold">
-                    YIELD: {hoverMeta.yieldLabel}
-                  </span>
-                ) : (
-                  <span className="text-[#808080]">
-                    {hoverMeta.walkableLabel}
-                  </span>
-                )}
-                {hoverMeta.designationLabel && (
-                  <span className="text-[#ff0099] font-bold">
-                    [ORDER: {hoverMeta.designationLabel}]
-                  </span>
-                )}
-              </div>
-            )}
-
-            {hoverMeta.buildingFunction && (
-              <div
-                data-testid="hover-building-function"
-                className="pt-1 border-t border-[#1e1e1e] space-y-0.5"
-              >
-                <div className="text-[#00ffff] font-bold leading-snug">
-                  FN: {hoverMeta.buildingFunction}
-                </div>
-                {hoverMeta.buildingActionLabel && (
-                  <div className="text-[#33ff00] text-[9px] font-bold">
-                    ACTUATOR: [{hoverMeta.buildingActionLabel}] (Inspect to run)
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+      {preferences.tooltips && hoverMeta && !dragStart && !preview && !inspectMode && !mapOptions && !showBuildDrawer && (
+        <aside data-testid="hover-tile-inspector" aria-label="Hover tile inspector" className="compact-tile-tooltip">
+          <div><span style={{ color: hoverMeta.fg }}>{hoverMeta.char}</span><strong>{hoverMeta.terrainLabel}</strong>
+            <span className="tooltip-coord">{hoverMeta.x},{hoverMeta.y}</span></div>
+          <p>{hoverMeta.materialType}</p>
+          {hoverMeta.occupancy.some(o => o.startsWith('☺') || o.includes('HP)')) && <p>{hoverMeta.occupancy.join(' · ')}</p>}
         </aside>
       )}
-
       {/* FLOATING ORDER PREVIEW & CONFIRMATION CARD (Above FAB Dock) */}
       {preview && selection && (
         <section
           aria-label="Order preview"
-          className="pointer-events-auto absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-[min(92vw,500px)] bg-[#0c0c0c]/95 backdrop-blur-md border-2 border-[#00ffff] p-3 shadow-2xl text-xs space-y-1.5"
+          className="pointer-events-auto map-context-card absolute bottom-2 left-1/2 -translate-x-1/2 z-30 w-[min(92vw,500px)] bg-[#0c0c0c]/95 backdrop-blur-md border-2 border-[#00ffff] p-3 shadow-2xl text-xs space-y-1.5"
         >
           <div className="flex items-center justify-between gap-2">
             <strong className="text-[#00ffff] text-sm">
@@ -1540,7 +1304,7 @@ export default function ASCIIViewport() {
 
       {/* FLOATING INSPECTOR CARD (Shown when Inspect Mode is ON) */}
       {inspectMode && !preview && activeInspect.tile && (
-        <div className="pointer-events-auto absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-[min(94vw,640px)] bg-[#0c0c0c]/95 backdrop-blur-md border-2 border-[#ff0099] p-3 shadow-2xl text-xs">
+        <div className="pointer-events-auto map-context-card absolute bottom-2 left-1/2 -translate-x-1/2 z-30 w-[min(94vw,640px)] bg-[#0c0c0c]/95 backdrop-blur-md border-2 border-[#ff0099] p-3 shadow-2xl text-xs">
           <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 mb-2 border-b border-[#202020]">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[#ff0099] font-bold whitespace-nowrap">
@@ -1661,6 +1425,10 @@ export default function ASCIIViewport() {
             </div>
           </div>
 
+          {activeInspect.tile.revealed && (() => {
+            const meta = getTileHoverMetadata(gameState, activeInspect.tile);
+            return <p className="inspector-material">{meta.materialType} · {meta.temperature} · {meta.liquidLevel}</p>;
+          })()}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {activeInspect.dwarf ? (
               <div className="p-2 bg-[#050505] border border-[#222222] flex items-center justify-between gap-2">
@@ -1774,12 +1542,12 @@ export default function ASCIIViewport() {
         <div
           data-testid="workshops-build-drawer"
           aria-label="Workshops and civic structures"
-          className="pointer-events-auto absolute bottom-14 left-1/2 -translate-x-1/2 z-30 w-[min(94vw,660px)] bg-[#0c0c0c]/95 backdrop-blur-md border border-[#ff0099] p-2.5 shadow-2xl space-y-2"
+          className="pointer-events-auto map-context-card absolute bottom-2 left-1/2 -translate-x-1/2 z-30 w-[min(94vw,660px)] bg-[#0c0c0c]/95 backdrop-blur-md border border-[#ff0099] p-2.5 shadow-2xl space-y-2"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-[#222222] text-xs">
             <div className="flex items-center gap-2">
               <span className="text-[#ff0099] font-bold">
-                [ ⚒ ARCHITECTURAL BLUEPRINTS &amp; WORKSHOPS ]
+                [ BUILD &amp; DEFENSE ]
               </span>
               <span className="text-[10px] text-[#00ffff] tabular-nums">
                 UNLOCKED: {unlockedTierBuildingsCount}/{totalTierBuildingsCount}
@@ -1796,7 +1564,7 @@ export default function ASCIIViewport() {
           <p className="text-[10px] text-[#808080]">
             Gather Stone, Wood, Iron Ore, and Steel Bars to unlock higher-tier workshops and civic halls.
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {SECONDARY_FAB_TOOLS.map((item) => {
               const active = !inspectMode && selectedTool === item.id;
               const cost = getConstructionCost(item.id);
@@ -1865,11 +1633,16 @@ export default function ASCIIViewport() {
         </div>
       )}
 
+      </div>
+      <div className="map-status" role="status">
+        <span className="truncate">{orderStatus || (inspectMode ? 'Select a tile to inspect. Esc to close.' : 'Choose a tool · drag an area · Enter to queue')}</span>
+        {preferences.tooltips && hoverMeta && <span className="map-terrain-readout">{hoverMeta.terrainLabel} · {hoverMeta.x},{hoverMeta.y}</span>}
+      </div>
       {/* FLOATING ACTION BUTTON (FAB) TOOL DOCK ON MAP DISPLAY */}
       <div
         role="toolbar"
-        aria-label="Floating map designation tools"
-        className="pointer-events-auto absolute bottom-2 left-1/2 -translate-x-1/2 z-20 max-w-[calc(100%-1rem)] flex items-center gap-1 bg-[#0a0a0a]/95 backdrop-blur-md border border-[#333333] px-1.5 py-1 shadow-[0_8px_30px_rgba(0,0,0,0.85)] overflow-x-auto no-scrollbar"
+        aria-label="Map designation tools"
+        className="designation-toolbar"
       >
         {PRIMARY_FAB_TOOLS.map((item) => {
           const active = !inspectMode && selectedTool === item.id;
@@ -1921,13 +1694,13 @@ export default function ASCIIViewport() {
         })}
 
         {/* Divider */}
-        <span className="h-4 w-px bg-[#2a2a2a] mx-0.5 shrink-0" />
+
 
         {/* Workshops & Civic Pop-up Trigger FAB */}
         <button
           type="button"
           aria-expanded={showBuildDrawer}
-          onClick={() => setShowBuildDrawer((v) => !v)}
+          onClick={() => { setShowBuildDrawer(v => !v); setMapOptions(false); setInspectMode(false); setPending(null); }}
           className={`flex items-center gap-1 px-2 py-0.5 border text-[11px] font-mono whitespace-nowrap transition-all shrink-0 ${
             showBuildDrawer || isSecondaryToolActive
               ? "border-[#00ffff] bg-[#082228] text-[#00ffff] font-bold shadow-[0_0_12px_rgba(0,255,255,0.3)] -translate-y-0.5"
@@ -1941,9 +1714,7 @@ export default function ASCIIViewport() {
         >
           <span>⚒</span>
           <span>
-            {isSecondaryToolActive
-              ? TOOL_NAMES[selectedTool]
-              : `Workshops (${unlockedTierBuildingsCount}/${totalTierBuildingsCount})`}
+            Build
           </span>
           <span className="text-[10px]">{showBuildDrawer ? "v" : "^"}</span>
         </button>

@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { useDialog } from '@/hooks/use-dialog';
+import { usePauseWhileOpen } from '@/hooks/use-pause-while-open';
 import { useGame } from './GameProvider';
 import { FortressResources } from '@/lib/types';
 
@@ -52,6 +54,9 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
     return false;
   }, [gameState.grid]);
 
+  const dialogRef = useDialog(isOpen, onClose);
+  usePauseWhileOpen(isOpen);
+
   if (!isOpen) return null;
 
   const isAutumnCaravan = gameState.season.includes('Autumn') || gameState.season.includes('Summer');
@@ -100,7 +105,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 font-mono text-xs select-none">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Trade depot" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 font-mono text-xs select-none">
       <div className="w-full max-w-3xl bg-[#000000] border-2 border-[#00ffff] text-[#d0d0d0] flex flex-col max-h-[90vh] overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-3 py-2 bg-[#101010] border-b border-[#202020]">

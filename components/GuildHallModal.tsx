@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useGame } from "./GameProvider";
+import { usePauseWhileOpen } from "@/hooks/use-pause-while-open";
 import { useDialog } from "@/hooks/use-dialog";
 import { QUIRKS, RELIC_TEMPLATES } from "@/lib/guild";
 import type { Civilization, GuildAction } from "@/lib/types";
@@ -24,7 +25,7 @@ export default function GuildHallModal({
   isOpen: boolean;
   onClose: () => void;
 }) {
-  const { gameState, setGameState, performGuildAction } = useGame();
+  const { gameState, performGuildAction } = useGame();
   const dialogRef = useDialog(isOpen, onClose);
   const [tab, setTab] = useState<keyof typeof TAB_NAMES>("COMMISSIONS");
   const [status, setStatus] = useState("");
@@ -33,17 +34,7 @@ export default function GuildHallModal({
     {},
   );
 
-  // Guild decisions pause the clock. Restore the prior pause state on closing.
-  useEffect(() => {
-    if (!isOpen) return;
-    let wasPaused = false;
-    setGameState((previous) => {
-      wasPaused = previous.paused;
-      return { ...previous, paused: true };
-    });
-    return () =>
-      setGameState((previous) => ({ ...previous, paused: wasPaused }));
-  }, [isOpen, setGameState]);
+  usePauseWhileOpen(isOpen);
 
   if (!isOpen) return null;
   const { guild, resources, dwarves } = gameState;

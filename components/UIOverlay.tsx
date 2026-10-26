@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useDialog } from "@/hooks/use-dialog";
 import { FONT_SIZES, MAP_ZOOMS } from "@/lib/ui-preferences";
 import { TOOL_KEYS } from "@/lib/game-rules";
+import { getBuildingUnlockStatus } from "@/lib/progression";
+import { usePauseWhileOpen } from "@/hooks/use-pause-while-open";
 import { getConstructionCost } from "@/lib/game-engine";
 import { TOOL_NAMES } from "@/lib/ui-labels";
 import { TOOLS, formatCost } from "@/lib/tool-catalog";
@@ -37,7 +39,7 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
     updatePreferences,
     storageError,
   } = useUI();
-  const { gameState, setGameState, setSelectedTool, setInspectMode } =
+  const { gameState, setSelectedTool, setInspectMode } =
     useGame();
   const dialogRef = useDialog(overlay !== null, closeOverlay);
   const [query, setQuery] = useState("");
@@ -64,26 +66,14 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
         ?.scrollIntoView({ block: "nearest" });
   }, [activeIndex, filtered, overlay, dialogRef]);
 
-  useEffect(() => {
-    if (!overlay) return;
-    const id = gameState.id;
-    let wasPaused = false;
-    setGameState((previous) => {
-      wasPaused = previous.paused;
-      return { ...previous, paused: true };
-    });
-    return () =>
-      setGameState((previous) =>
-        previous.id === id ? { ...previous, paused: wasPaused } : previous,
-      );
-    // Capture only the world and pause state at the moment the dialog opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlay, setGameState]);
+  usePauseWhileOpen(overlay !== null);
 
   if (!overlay) return null;
   const choose = (index: number) => {
     const tool = filtered[index];
     if (!tool) return;
+    const unlock = getBuildingUnlockStatus(gameState, tool.id);
+    if (unlock && !unlock.unlocked) return;
     setSelectedTool(tool.id);
     setInspectMode(false);
     onShowMap();
@@ -168,6 +158,7 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
                 filtered.map((tool, i) => (
                   <button
                     key={tool.id}
+                    disabled={getBuildingUnlockStatus(gameState, tool.id)?.unlocked === false}
                     data-command-active={i === activeIndex}
                     className={`${button} command-result w-full ${i === activeIndex ? "border-[var(--ui-accent)] bg-[var(--ui-selection)]" : ""}`}
                     onClick={() => choose(i)}
@@ -186,6 +177,8 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
                     </span>
                     <span className="block text-xs text-[var(--ui-info)]">
                       {tool.group} · {formatCost(getConstructionCost(tool.id))}
+                      {getBuildingUnlockStatus(gameState, tool.id)?.unlocked === false &&
+                        ` · Locked: ${getBuildingUnlockStatus(gameState, tool.id)?.requirementLabel}`}
                     </span>
                     <span className="block text-xs text-[var(--ui-muted)]">
                       {tool.desc}

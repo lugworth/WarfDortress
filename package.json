@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "test": "node --test --experimental-strip-types lib/*.test.ts",
     "build": "NODE_ENV=production next build",
     "start": "node server.js",
     "lint": "eslint .",
