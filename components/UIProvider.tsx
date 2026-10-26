@@ -15,6 +15,7 @@ import {
   serializeUIPreferences,
   type UIPreferences,
 } from "@/lib/ui-preferences";
+import { playTactileSfx } from "@/lib/audio";
 
 type Overlay = "commands" | "settings" | null;
 interface UIContextValue {
@@ -98,6 +99,12 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
         className="fortress-ui"
         data-theme={preferences.theme}
         data-reduced-motion={preferences.reducedMotion}
+        onClickCapture={(e) => {
+          const btn = (e.target as HTMLElement)?.closest?.("button");
+          if (btn && !(btn as HTMLButtonElement).disabled) {
+            playTactileSfx("keycap");
+          }
+        }}
         style={
           {
             "--ui-font-size": `${preferences.fontSize}px`,

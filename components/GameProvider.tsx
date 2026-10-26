@@ -15,6 +15,7 @@ import {
   Tile,
   WorkOrder,
 } from '@/lib/types';
+import { performGuildAction as executeGuildAction } from '@/lib/guild';
 import {
   applyAreaDesignation,
   applyLaborPreset,
@@ -25,10 +26,7 @@ import {
   spawnGoblinRaid,
   stepSimulationTick,
 } from '@/lib/game-engine';
-import { performGuildAction as applyGuildAction } from '@/lib/guild';
-import { performActivityAction as applyActivityAction, type ActivityAction } from '@/lib/activities';
 import { generateRandomWorldSeed } from '@/lib/world-gen';
-import { readLocalSave, writeLocalSave, restoreCloudSave } from '@/lib/save-system';
 import {
   auth,
   CloudFortressSave,
@@ -70,9 +68,7 @@ interface GameContextType {
     give: Partial<FortressResources>,
     receive: Partial<FortressResources>,
     recruitMigrant?: boolean
-  ) => boolean;
-  performGuildAction: (action: GuildAction) => boolean;
-  performActivityAction: (action: ActivityAction) => boolean;
+  ) => void;
   addWorkOrder: (order: Omit<WorkOrder, 'id'>) => void;
   toggleWorkOrderAutoRepeat: (orderId: string) => void;
   removeWorkOrder: (orderId: string) => void;
@@ -89,28 +85,14 @@ interface GameContextType {
   handleGoogleSignIn: () => Promise<void>;
   handleSignOut: () => Promise<void>;
   loadCloudSave: (save: CloudFortressSave) => void;
-  hasLocalSave: boolean;
-  loadLocalSave: () => void;
+  performGuildAction: (action: GuildAction) => boolean;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [screen, setScreenState] = useState<ScreenMode>('title');
-  const [gameState, setGameStateValue] = useState<GameState>(() => createInitialGameState('Khazad-251'));
-  // Resolve commands once, synchronously. React may replay state updater functions
-  // in StrictMode; simulation commands contain generated IDs and must run once.
-  const gameStateRef = useRef(gameState);
-  const setGameState = useCallback<React.Dispatch<React.SetStateAction<GameState>>>((action) => {
-    const next = typeof action === 'function' ? action(gameStateRef.current) : action;
-    gameStateRef.current = next;
-    setGameStateValue(next);
-  }, []);
-  const generationRef = useRef(0);
-  const eventRequestRef = useRef(0);
-  const eventAbortRef = useRef<AbortController | null>(null);
-  const loreAbortRef = useRef<AbortController | null>(null);
-  const [hasLocalSave, setHasLocalSave] = useState(false);
+  const [gameState, setGameState] = useState<GameState>(() => createInitialGameState('Khazad-251'));
   const [currentZ, setCurrentZ] = useState<number>(0);
   const [selectedTool, setSelectedTool] = useState<DesignationType>('MINE');
   const [selectedDwarfId, setSelectedDwarfId] = useState<string | null>('dwarf-1');
@@ -146,8 +128,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const autostart = params.get('autostart') === '1';
       const frame = requestAnimationFrame(() => {
         setGameState(createInitialGameState(freshSeed));
-        try { setHasLocalSave(Boolean(readLocalSave(localStorage))); }
-        catch (error) { setSaveStatus(error instanceof Error ? error.message : 'Local save unavailable.'); }
         if (autostart) {
           setScreenState('playing');
           document.body.dataset.state = 'playing';
@@ -155,9 +135,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       });
       return () => cancelAnimationFrame(frame);
     }
-  }, [setGameState]);
-
-  useEffect(() => () => { eventAbortRef.current?.abort(); loreAbortRef.current?.abort(); }, []);
+  }, []);
 
   useEffect(() => {
     testFirestoreConnection();
@@ -172,7 +150,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (u) {
         try {
           const saves = await listUserCloudSaves();
-          if (auth.currentUser?.uid === u.uid) setCloudSaves(saves);
+          setCloudSaves(saves);
         } catch (e) {
           console.error('Failed to list cloud saves:', e);
         }
@@ -181,7 +159,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => unsub();
-  }, [setGameState]);
+  }, []);
+
+  const speedRef = useRef(gameState.speed);
+  const pausedRef = useRef(gameState.paused);
+  useEffect(() => {
+    speedRef.current = gameState.speed;
+    pausedRef.current = gameState.paused;
+  }, [gameState.speed, gameState.paused]);
 
   useEffect(() => {
     if (screen !== 'playing' || gameState.paused) return;
@@ -196,7 +181,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [screen, gameState.paused, gameState.speed, setGameState]);
+  }, [screen, gameState.paused, gameState.speed]);
 
   const jumpToLocation = useCallback((x: number, y: number, z: number) => {
     setCurrentZ(z);
@@ -207,12 +192,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const embarkNewWorld = useCallback(
     async (seed: string, enhanceWithAI = true) => {
       const cleanSeed = seed.trim() || 'Khazad-251';
-      const generation = ++generationRef.current;
-      eventAbortRef.current?.abort();
-      loreAbortRef.current?.abort();
-      const controller = new AbortController();
-      loreAbortRef.current = controller;
-      setIsGeneratingEvent(false);
       const freshState = createInitialGameState(cleanSeed);
       setGameState(freshState);
       setCurrentZ(0);
@@ -227,7 +206,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (enhanceWithAI) {
         try {
           const res = await fetch('/api/world/generate', {
-            signal: controller.signal,
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -238,13 +216,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             }),
           });
           const data = await res.json();
-          if (generationRef.current === generation && data && data.backstory && Array.isArray(data.history) && data.history.length > 0) {
+          if (data && data.backstory && Array.isArray(data.history) && data.history.length > 0) {
             setGameState((prev) => ({
               ...prev,
               world: {
                 ...prev.world,
                 backstory: data.backstory,
-                history: [...prev.world.history.slice(0, Math.max(0, prev.world.history.length - freshState.world.history.length)), ...data.history],
+                history: data.history,
               },
             }));
           }
@@ -253,30 +231,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [setScreen, setGameState]
+    [setScreen]
   );
 
   const designateBox = useCallback(
     (x1: number, y1: number, x2: number, y2: number, toolOverride?: DesignationType, zOverride?: number): number => {
       const activeTool = toolOverride || selectedTool;
+      const targetZ = zOverride !== undefined ? zOverride : currentZ;
       let modifiedCount = 0;
       setGameState((prev) => {
-        const { nextState, count } = applyAreaDesignation(prev, zOverride ?? currentZ, x1, y1, x2, y2, activeTool);
+        const { nextState, count } = applyAreaDesignation(prev, targetZ, x1, y1, x2, y2, activeTool);
         modifiedCount = count;
         return nextState;
       });
       return modifiedCount;
     },
-    [currentZ, selectedTool, setGameState]
+    [currentZ, selectedTool]
   );
-
-  const performActivityAction = useCallback((action: ActivityAction) => {
-    const previous = gameStateRef.current;
-    const next = applyActivityAction(previous, action);
-    if (next === previous) return false;
-    setGameState(next);
-    return true;
-  }, [setGameState]);
 
   const toggleDwarfLabor = useCallback((dwarfId: string, labor: DwarfLabor) => {
     setGameState((prev) => ({
@@ -293,11 +264,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           : d
       ),
     }));
-  }, [setGameState]);
+  }, []);
 
   const applyPreset = useCallback((preset: LaborPresetId) => {
     setGameState((prev) => applyLaborPreset(prev, preset));
-  }, [setGameState]);
+  }, []);
 
   const setMilitiaDoctrine = useCallback((doctrine: MilitiaDoctrine) => {
     setGameState((prev) => ({
@@ -315,11 +286,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev.chronicle.slice(0, 59),
       ],
     }));
-  }, [setGameState]);
+  }, []);
 
   const triggerGoblinRaid = useCallback(() => {
     setGameState((prev) => spawnGoblinRaid(prev));
-  }, [setGameState]);
+  }, []);
 
   const performTradeBarter = useCallback(
     (
@@ -327,22 +298,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       receive: Partial<FortressResources>,
       recruitMigrant = false
     ) => {
-      const prev = gameStateRef.current;
-      const next = executeTradeBarter(prev, give, receive, recruitMigrant);
-      if (next === prev) return false;
-      setGameState(next);
-      return true;
+      setGameState((prev) => executeTradeBarter(prev, give, receive, recruitMigrant));
     },
-    [setGameState]
+    []
   );
-
-  const performGuildAction = useCallback((action: GuildAction) => {
-    const previous = gameStateRef.current;
-    const next = applyGuildAction(previous, action);
-    if (next === previous) return false;
-    setGameState(next);
-    return true;
-  }, [setGameState]);
 
   const addWorkOrder = useCallback((order: Omit<WorkOrder, 'id'>) => {
     setGameState((prev) => ({
@@ -366,7 +325,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev.chronicle.slice(0, 59),
       ],
     }));
-  }, [setGameState]);
+  }, []);
 
   const toggleWorkOrderAutoRepeat = useCallback((orderId: string) => {
     setGameState((prev) => ({
@@ -375,22 +334,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         o.id === orderId ? { ...o, autoRepeat: !o.autoRepeat, remaining: Math.max(1, o.remaining) } : o
       ),
     }));
-  }, [setGameState]);
+  }, []);
 
   const removeWorkOrder = useCallback((orderId: string) => {
     setGameState((prev) => ({
       ...prev,
       workOrders: prev.workOrders.filter((o) => o.id !== orderId),
     }));
-  }, [setGameState]);
+  }, []);
 
   const triggerNarrativeEvent = useCallback(
     async (severity?: NarrativeEventSeverity, useAI = true) => {
-      eventAbortRef.current?.abort();
-      const request = ++eventRequestRef.current;
-      const generation = generationRef.current;
-      const deterministicEvt = generateContextAwareEvent(gameStateRef.current, severity);
       setGameState((prev) => {
+        const deterministicEvt = generateContextAwareEvent(prev, severity);
         return {
           ...prev,
           activeEvent: deterministicEvt,
@@ -408,14 +364,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
-      if (!useAI) { setIsGeneratingEvent(false); return; }
-      const controller = new AbortController();
-      eventAbortRef.current = controller;
+      if (!useAI) return;
 
       setIsGeneratingEvent(true);
       try {
         const res = await fetch('/api/events/generate', {
-          signal: controller.signal,
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -427,7 +380,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             resources: gameState.resources,
             population: gameState.dwarves.length,
             civilizations: gameState.world.civilizations,
-            history: gameState.world.history.slice(0, 10),
+            history: gameState.world.history,
             pastEvents: gameState.eventHistory.slice(0, 5).map((e) => ({
               title: e.title,
               chosenLabel: e.chosenLabel,
@@ -437,33 +390,33 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           }),
         });
         const data = await res.json();
-        if (data?.event && generationRef.current === generation && eventRequestRef.current === request) {
-          setGameState((prev) => (prev.activeEvent?.id === deterministicEvt.id ? { ...prev, activeEvent: data.event } : prev));
+        if (data?.event) {
+          setGameState((prev) => (prev.activeEvent ? { ...prev, activeEvent: data.event } : prev));
         }
       } catch {
         // Keep the instant context-aware event if network/API is unavailable
       } finally {
-        if (eventRequestRef.current === request && generationRef.current === generation) setIsGeneratingEvent(false);
+        setIsGeneratingEvent(false);
       }
     },
-    [gameState, setGameState]
+    [gameState]
   );
 
   const resolveActiveEvent = useCallback((choiceId: string) => {
     setGameState((prev) => resolveNarrativeEvent(prev, choiceId));
-  }, [setGameState]);
+  }, []);
 
   const stepManualTick = useCallback(() => {
     setGameState((prev) => stepSimulationTick(prev));
-  }, [setGameState]);
+  }, []);
 
   const togglePause = useCallback(() => {
     setGameState((prev) => ({ ...prev, paused: !prev.paused }));
-  }, [setGameState]);
+  }, []);
 
   const setSpeed = useCallback((speed: 1 | 2 | 4) => {
     setGameState((prev) => ({ ...prev, speed, paused: false }));
-  }, [setGameState]);
+  }, []);
 
   const handleGoogleSignIn = useCallback(async () => {
     try {
@@ -484,52 +437,54 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleCloudSave = useCallback(async () => {
-    const snapshot = gameStateRef.current;
-    let localError = '';
-    try { writeLocalSave(localStorage, snapshot); setHasLocalSave(true); }
-    catch (error) { localError = error instanceof Error ? error.message : 'Local storage unavailable.'; }
-    if (!auth.currentUser) {
-      setSaveStatus(localError || 'Saved locally. Use Continue on the realm screen to restore.');
-      return;
-    }
-    setSaveStatus('Syncing fortress to Firestore...');
     try {
-      await saveFortressToCloud(snapshot);
-      setCloudSaves(await listUserCloudSaves());
-      setSaveStatus(`Saved ${snapshot.world.dwarvenName} to cloud.${localError ? ' Local backup unavailable.' : ''}`);
-    } catch (error) {
-      setSaveStatus(`${localError ? 'Save failed. ' : 'Saved locally; cloud sync failed. '}${error instanceof Error ? error.message : ''}`);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ascii_fortress_autosave', JSON.stringify(gameState));
+      }
+      if (!auth.currentUser) {
+        setSaveStatus('Saved locally! Sign in with Google to sync to Firestore Cloud.');
+        return;
+      }
+      setSaveStatus('Syncing fortress to Firestore...');
+      await saveFortressToCloud(gameState);
+      const saves = await listUserCloudSaves();
+      setCloudSaves(saves);
+      setSaveStatus(`Saved ${gameState.world.dwarvenName} to Firestore Cloud!`);
+    } catch (e) {
+      setSaveStatus(e instanceof Error ? e.message : 'Cloud save failed');
     }
+  }, [gameState]);
+
+  const loadCloudSave = useCallback(
+    (save: CloudFortressSave) => {
+      const restored = createInitialGameState(save.seed);
+      setGameState({
+        ...restored,
+        id: save.id,
+        ticks: save.ticks,
+        year: save.year,
+        season: (save.season as GameState['season']) || 'Granite (Spring)',
+        resources: {
+          ...restored.resources,
+          ...(save.resources || {}),
+        },
+      });
+      setCurrentZ(0);
+      setScreen('playing');
+      setSaveStatus(`Loaded ${save.dwarvenName} (Year ${save.year})`);
+    },
+    [setScreen]
+  );
+
+  const performGuildAction = useCallback((action: GuildAction): boolean => {
+    let success = false;
+    setGameState((prev) => {
+      const res = executeGuildAction(prev, action);
+      success = res.success;
+      return res.nextState;
+    });
+    return success;
   }, []);
-
-  const restoreGame = useCallback((restored: GameState) => {
-    generationRef.current++;
-    eventAbortRef.current?.abort();
-    loreAbortRef.current?.abort();
-    setIsGeneratingEvent(false);
-    setGameState(restored);
-    setCurrentZ(0);
-    setSelectedDwarfId(restored.dwarves[0]?.id || null);
-    setInspectedCoord(null);
-    setHoveredTile(null);
-    setScreen('playing');
-  }, [setScreen, setGameState]);
-
-  const loadLocalSave = useCallback(() => {
-    try {
-      const restored = readLocalSave(localStorage);
-      if (!restored) throw new Error('No local fortress save found.');
-      restoreGame(restored);
-      setSaveStatus(`Restored ${restored.world.dwarvenName} from local storage.`);
-    } catch (error) { setSaveStatus(error instanceof Error ? error.message : 'Local load failed.'); }
-  }, [restoreGame]);
-
-  const loadCloudSave = useCallback((save: CloudFortressSave) => {
-    try {
-      restoreGame(restoreCloudSave(save));
-      setSaveStatus(save.snapshot ? `Loaded ${save.dwarvenName}.` : 'Loaded legacy summary. This old save did not contain buildings or dwarf progress. Save again to create a full snapshot.');
-    } catch (error) { setSaveStatus(error instanceof Error ? error.message : 'Cloud load failed.'); }
-  }, [restoreGame]);
 
   return (
     <GameContext.Provider
@@ -559,8 +514,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setMilitiaDoctrine,
         triggerGoblinRaid,
         performTradeBarter,
-        performGuildAction,
-        performActivityAction,
         addWorkOrder,
         toggleWorkOrderAutoRepeat,
         removeWorkOrder,
@@ -577,8 +530,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         handleGoogleSignIn,
         handleSignOut,
         loadCloudSave,
-        loadLocalSave,
-        hasLocalSave,
+        performGuildAction,
       }}
     >
       {children}

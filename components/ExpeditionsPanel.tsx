@@ -7,8 +7,16 @@ import {
   expeditionActionAvailable,
   type ExpeditionAction,
   type ExpeditionApproach,
+  type ExpeditionHistoryItem,
+  type ExpeditionState,
 } from "@/lib/expeditions";
 import { formatCost } from "@/lib/tool-catalog";
+import AsciiSelect from "./AsciiSelect";
+
+const APPROACH_OPTIONS: readonly { value: ExpeditionApproach; label: string }[] = [
+  { value: "CAUTIOUS", label: "Cautious" },
+  { value: "BOLD", label: "Bold" },
+];
 
 export default function ExpeditionsPanel({
   state,
@@ -21,8 +29,9 @@ export default function ExpeditionsPanel({
   const [approaches, setApproaches] = useState<
     Record<string, ExpeditionApproach>
   >({});
-  const expeditions = state.activities?.expeditions || createExpeditionState(),
-    active = expeditions.active;
+  const expeditions: ExpeditionState =
+    state.activities?.expeditions || createExpeditionState();
+  const active = expeditions.active;
   const act = (action: ExpeditionAction, message: string) =>
     setStatus(
       onAction(action)
@@ -90,21 +99,20 @@ export default function ExpeditionsPanel({
             <h3 className="font-bold text-[var(--ui-accent)]">{route.name}</h3>
             <p>{route.description}</p>
             <p>Departure cost: {formatCost(route.cost)}</p>
-            <label className="flex flex-wrap items-center gap-2">
-              Approach for {route.name}
-              <select
+            <div className="flex flex-wrap items-center gap-2">
+              <span>Approach for {route.name}</span>
+              <AsciiSelect<ExpeditionApproach>
+                ariaLabel={`Approach for ${route.name}`}
                 value={approach}
-                onChange={(e) =>
+                options={APPROACH_OPTIONS}
+                onChange={(nextApproach) =>
                   setApproaches((p) => ({
                     ...p,
-                    [route.id]: e.target.value as ExpeditionApproach,
+                    [route.id]: nextApproach,
                   }))
                 }
-              >
-                <option value="CAUTIOUS">Cautious</option>
-                <option value="BOLD">Bold</option>
-              </select>
-            </label>
+              />
+            </div>
             <p>
               {plan.duration} ticks · {plan.setbackChance}% setback risk
             </p>
@@ -147,7 +155,7 @@ export default function ExpeditionsPanel({
         <details open>
           <summary>Journey accounts ({expeditions.history.length})</summary>
           <ol className="space-y-2 pt-2">
-            {expeditions.history.map((result) => (
+            {expeditions.history.map((result: ExpeditionHistoryItem) => (
               <li
                 key={result.id}
                 className="border-b border-[var(--ui-border)] pb-2"

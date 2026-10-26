@@ -9,6 +9,8 @@ import {
 } from '@/lib/types';
 import { QUIRKS } from '@/lib/guild';
 import { scanWorldStrata } from '@/lib/game-engine';
+import { asciiBar } from '@/lib/ui-model';
+import { playTactileSfx } from '@/lib/audio';
 import ToolPicker from './ToolPicker';
 
 const ALL_LABORS: DwarfLabor[] = [
@@ -280,23 +282,25 @@ export default function Sidebar() {
                     </span>
                   </div>
 
-                  {/* Vital Needs & HP Readout */}
-                  <div className="clan-stats mt-2 text-[10px] tabular-nums bg-[var(--ui-panel)] p-1.5 border border-[var(--ui-border)]">
-                    <div>
-                      <span className="text-[var(--ui-muted)]">HP:</span>{' '}
+                  {/* Vital Needs & HP Readout with ASCII Block Gauges */}
+                  <div className="mt-2 space-y-1 text-[10px] tabular-nums bg-[var(--ui-panel)] p-1.5 border border-[var(--ui-border)]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[var(--ui-muted)]">HP</span>
                       <span className={dwarf.hp < 50 ? 'text-[var(--ui-danger)]' : 'text-[var(--ui-success)]'}>
-                        {dwarf.hp}/{dwarf.maxHp}
+                        {asciiBar(dwarf.hp, dwarf.maxHp, 6)} {dwarf.hp}/{dwarf.maxHp}
                       </span>
                     </div>
-                    <div>
-                      <span className="text-[var(--ui-muted)]">ALE:</span>{' '}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[var(--ui-muted)]">ALE</span>
                       <span className={dwarf.thirst < 30 ? 'text-[var(--ui-danger)]' : 'text-[var(--ui-violet)]'}>
-                        {Math.round(dwarf.thirst)}%
+                        {asciiBar(dwarf.thirst, 100, 6)} {Math.round(dwarf.thirst)}%
                       </span>
                     </div>
-                    <div>
-                      <span className="text-[var(--ui-muted)]">MIRTH:</span>{' '}
-                      <span className="text-[var(--ui-accent)]">{Math.round(dwarf.happiness)}%</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[var(--ui-muted)]">MIRTH</span>
+                      <span className="text-[var(--ui-accent)]">
+                        {asciiBar(dwarf.happiness, 100, 6)} {Math.round(dwarf.happiness)}%
+                      </span>
                     </div>
                   </div>
 
@@ -558,10 +562,14 @@ export default function Sidebar() {
               <div className="space-y-1.5">
                 {strataSummaries.map((row) => {
                   const isCurrent = row.zLevel === currentZ;
+                  const stratumMeta = gameState.world.strata[row.zLevel];
                   return (
                     <div
                       key={row.zLevel}
-                      onClick={() => setCurrentZ(row.zLevel)}
+                      onClick={() => {
+                        playTactileSfx('zlevel');
+                        setCurrentZ(row.zLevel);
+                      }}
                       className={`p-1.5 border cursor-pointer transition-colors ${
                         isCurrent
                           ? 'bg-[var(--ui-border)] border-[var(--ui-info)]'
@@ -572,12 +580,43 @@ export default function Sidebar() {
                         <span className="font-bold text-[var(--ui-bright)] truncate">
                           [Z-{row.zLevel}] {row.name}
                         </span>
-                        {row.hostiles > 0 && (
-                          <span className="text-[var(--ui-danger)] font-bold text-[10px] whitespace-nowrap shrink-0">
-                            [! {row.hostiles} HOSTILE]
-                          </span>
-                        )}
                       </div>
+                      {stratumMeta && (
+                        <div className="text-[10px] text-[var(--ui-muted)] truncate mt-0.5">
+                          {stratumMeta.primaryRock} · {stratumMeta.hazard}
+                        </div>
+                      )}
+                      {(row.relicTiles > 0 || row.hostiles > 0) && (
+                        <div className="flex flex-wrap items-center justify-between gap-1 mt-1">
+                          {row.hostiles > 0 ? (
+                            <span className="text-[var(--ui-danger)] font-bold text-[10px] whitespace-nowrap">
+                              [! {row.hostiles} HOSTILE]
+                            </span>
+                          ) : (
+                            <span />
+                          )}
+                          {row.relicTiles > 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                playTactileSfx('zlevel');
+                                const relicTile = gameState.grid[row.zLevel]
+                                  ?.flat()
+                                  .find((t) => t.terrain === 'CAVERN_RELIC');
+                                if (relicTile) {
+                                  jumpToLocation(relicTile.x, relicTile.y, row.zLevel);
+                                } else {
+                                  setCurrentZ(row.zLevel);
+                                }
+                              }}
+                              className="px-1.5 py-0.5 border border-[var(--ui-success)] text-[var(--ui-success)] text-[10px] font-bold hover:bg-[var(--ui-bg)]"
+                            >
+                              [☼ PING RELIC]
+                            </button>
+                          )}
+                        </div>
+                      )}
                       <div className="grid grid-cols-4 gap-1 mt-1 text-[10px] tabular-nums text-[var(--ui-muted)]">
                         <div>
                           IRN:<span className="text-[var(--ui-warning)] font-bold ml-0.5">{row.ironTiles}</span>

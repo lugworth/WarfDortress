@@ -1,26 +1,51 @@
-'use client';
-import { useEffect, useRef } from 'react';
+"use client";
 
-export function useDialog(open: boolean, close: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(close);
-  useEffect(() => { closeRef.current = close; }, [close]);
+import { useEffect, useRef } from "react";
+
+export function useDialog(
+  isOpen: boolean,
+  onClose: () => void,
+): React.RefObject<HTMLDivElement | null> {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const root = ref.current;
-    root?.focus();
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeRef.current(); }
-      if (event.key !== 'Tab' || !root) return;
-      const elements = [...root.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, textarea, [tabindex="0"]')];
-      if (!elements.length) { event.preventDefault(); return; }
-      const index = elements.indexOf(document.activeElement as HTMLElement);
-      if (event.shiftKey && index <= 0) { event.preventDefault(); elements.at(-1)?.focus(); }
-      else if (!event.shiftKey && (index === elements.length - 1 || index < 0)) { event.preventDefault(); elements[0].focus(); }
+    if (!isOpen) return;
+
+    if (typeof document !== "undefined") {
+      previousActiveElement.current = document.activeElement as HTMLElement | null;
+    }
+
+    const element = ref.current;
+    if (element) {
+      // Focus the dialog or first focusable element
+      const focusable = element.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable) {
+        focusable.focus();
+      } else {
+        element.focus();
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
     };
-    root?.addEventListener('keydown', handler);
-    return () => { root?.removeEventListener('keydown', handler); previous?.focus(); };
-  }, [open]);
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement.current?.focus) {
+        previousActiveElement.current.focus();
+      }
+    };
+  }, [isOpen, onClose]);
+
   return ref;
 }

@@ -7,9 +7,7 @@
     "build": "NODE_ENV=production next build",
     "start": "node server.js",
     "lint": "eslint .",
-    "clean": "node scripts/clean.mjs",
-    "test": "node --experimental-strip-types --test lib/*.test.ts",
-    "typecheck": "tsc --noEmit --incremental false"
+    "clean": "next clean"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

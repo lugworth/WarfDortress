@@ -1,194 +1,209 @@
-import type { DesignationType, FortressResources } from "./types.ts";
-import { TRAP_DAMAGE } from "./game-rules.ts";
+import type { DesignationType, FortressResources } from "./types";
+import { TOOL_NAMES } from "./ui-labels";
 
-export const TOOL_GROUPS = [
-  "Dig",
-  "Build",
-  "Food & Drink",
-  "Industry",
-  "Defense",
-] as const;
-export type ToolGroup = (typeof TOOL_GROUPS)[number];
+export type ToolGroup =
+  | "Excavation & Harvest"
+  | "Architecture"
+  | "Workshops"
+  | "Civic & Community"
+  | "Orders";
+
+export const TOOL_GROUPS: readonly ToolGroup[] = [
+  "Excavation & Harvest",
+  "Architecture",
+  "Workshops",
+  "Civic & Community",
+  "Orders",
+];
+
 export interface ToolDefinition {
   id: DesignationType;
   label: string;
   desc: string;
-  color: string;
   group: ToolGroup;
+  color: string;
 }
 
 export const TOOLS: ToolDefinition[] = [
   {
     id: "MINE",
-    group: "Dig",
-    label: "MINE ROCK / ORE",
+    label: TOOL_NAMES.MINE,
+    desc: "Dig into subterranean rock walls and mine ore deposits.",
+    group: "Excavation & Harvest",
     color: "text-[var(--ui-warning)]",
-    desc: "Excavate rock and ore veins",
-  },
-  {
-    id: "STAIRS",
-    group: "Dig",
-    label: "CARVE STAIRS",
-    color: "text-[var(--ui-accent)]",
-    desc: "Link current Z-level with Z+1 cavern",
-  },
-  {
-    id: "RECLAIM_RELIC",
-    group: "Dig",
-    label: "RECLAIM RELIC (☼)",
-    color: "text-[var(--ui-info)]",
-    desc: "Recover ancient subterranean artifact",
   },
   {
     id: "CHOP",
-    group: "Dig",
-    label: "FELL TIMBER",
+    label: TOOL_NAMES.CHOP,
+    desc: "Fell surface trees to supply the carpenter with timber.",
+    group: "Excavation & Harvest",
     color: "text-[var(--ui-success)]",
-    desc: "Chop trees for logs (+4 Wood)",
   },
   {
     id: "GATHER",
-    group: "Food & Drink",
-    label: "GATHER SHRUBS",
+    label: TOOL_NAMES.GATHER,
+    desc: "Gather surface shrubs, roots, and wild plants for brewing.",
+    group: "Excavation & Harvest",
     color: "text-[var(--ui-success)]",
-    desc: "Forage plants (+4 Food)",
   },
   {
-    id: "BUILD_SMELTER",
-    group: "Industry",
-    label: "BUILD SMELTERY (£)",
+    id: "STAIRS",
+    label: TOOL_NAMES.STAIRS,
+    desc: "Carve stairways to connect surface strata with subterranean depths.",
+    group: "Excavation & Harvest",
     color: "text-[var(--ui-warning)]",
-    desc: "Smelt Iron Ore into Steel Bars",
-  },
-  {
-    id: "BUILD_FORGE",
-    group: "Industry",
-    label: "BUILD FORGE (⚒)",
-    color: "text-[var(--ui-info)]",
-    desc: "Forge Runed Weapons & Steel Armor",
-  },
-  {
-    id: "BUILD_TAVERN",
-    group: "Food & Drink",
-    label: "BUILD TAVERN (♫)",
-    color: "text-[var(--ui-violet)]",
-    desc: "Hearth hall for feasts & morale buffs",
-  },
-  {
-    id: "BUILD_TEMPLE",
-    group: "Build",
-    label: "BUILD TEMPLE (Ψ)",
-    color: "text-[var(--ui-accent)]",
-    desc: "Sanctuary granting meditative serenity",
-  },
-  {
-    id: "BUILD_DEPOT",
-    group: "Build",
-    label: "TRADE DEPOT (¤)",
-    color: "text-[var(--ui-info)]",
-    desc: "Caravan plaza (+15% export trade value)",
-  },
-  {
-    id: "BUILD_TRAP",
-    group: "Defense",
-    label: "STONE TRAP (^)",
-    color: "text-[var(--ui-danger)]",
-    desc: `Deadfall trap (${TRAP_DAMAGE} damage to hostiles)`,
-  },
-  {
-    id: "BUILD_WALL",
-    group: "Defense",
-    label: "STONE WALL",
-    color: "text-[var(--ui-bright)]",
-    desc: "Fortified masonry wall blocking raiders",
-  },
-  {
-    id: "BUILD_DOOR",
-    group: "Defense",
-    label: "STONE DOOR (+)",
-    color: "text-[var(--ui-text)]",
-    desc: "Install secure gateway portal",
   },
   {
     id: "STOCKPILE",
-    group: "Build",
-    label: "STOCKPILE ZONE",
-    color: "text-[var(--ui-blue)]",
-    desc: "Central storage for fortress wares",
-  },
-  {
-    id: "BUILD_FARM",
-    group: "Food & Drink",
-    label: "PLUMP HELMET FARM",
-    color: "text-[var(--ui-success)]",
-    desc: "Subterranean mushrooms for food & ale",
-  },
-  {
-    id: "BUILD_STILL",
-    group: "Food & Drink",
-    label: "BREWERY STILL",
-    color: "text-[var(--ui-violet)]",
-    desc: "Distill Plump Helmets into Dwarven Ale",
-  },
-  {
-    id: "BUILD_MASON",
-    group: "Industry",
-    label: "MASON WORKSHOP",
+    label: TOOL_NAMES.STOCKPILE,
+    desc: "Zone dedicated floor space to haul and organize fortress supplies.",
+    group: "Orders",
     color: "text-[var(--ui-info)]",
-    desc: "Carve stone thrones, statues & coffers",
   },
   {
-    id: "BUILD_CARPENTER",
-    group: "Industry",
-    label: "CARPENTER SHOP",
+    id: "RECLAIM_RELIC",
+    label: TOOL_NAMES.RECLAIM_RELIC,
+    desc: "Recover ancient cavern relics and bring them to your vaults.",
+    group: "Excavation & Harvest",
+    color: "text-[var(--ui-accent)]",
+  },
+  {
+    id: "BUILD_WALL",
+    label: TOOL_NAMES.BUILD_WALL,
+    desc: "Erect cut-stone walls to fortify corridors and defend the entrance.",
+    group: "Architecture",
+    color: "text-[var(--ui-bright)]",
+  },
+  {
+    id: "BUILD_DOOR",
+    label: TOOL_NAMES.BUILD_DOOR,
+    desc: "Construct reinforced wooden or stone doors with lock mechanisms.",
+    group: "Architecture",
     color: "text-[var(--ui-warning)]",
-    desc: "Craft wooden beds, barrels & shields",
+  },
+  {
+    id: "BUILD_TRAP",
+    label: TOOL_NAMES.BUILD_TRAP,
+    desc: "Set lethal falling-stone mechanisms triggered by intruder steps.",
+    group: "Architecture",
+    color: "text-[var(--ui-danger)]",
   },
   {
     id: "BUILD_BED",
-    group: "Build",
-    label: "DWARVEN BED",
+    label: TOOL_NAMES.BUILD_BED,
+    desc: "Place carved beds in pioneer quarters to restore energy and mood.",
+    group: "Architecture",
+    color: "text-[var(--ui-info)]",
+  },
+  {
+    id: "BUILD_FARM",
+    label: TOOL_NAMES.BUILD_FARM,
+    desc: "Establish subterranean plump helmet farms on rich muddy loam.",
+    group: "Workshops",
     color: "text-[var(--ui-success)]",
-    desc: "Quarters for fast fatigue recovery",
+  },
+  {
+    id: "BUILD_MASON",
+    label: TOOL_NAMES.BUILD_MASON,
+    desc: "Construct a stoneworker bench for blocks, statues, and furniture.",
+    group: "Workshops",
+    color: "text-[var(--ui-bright)]",
+  },
+  {
+    id: "BUILD_CARPENTER",
+    label: TOOL_NAMES.BUILD_CARPENTER,
+    desc: "Construct a woodworking shop for barrels, bins, and weapon racks.",
+    group: "Workshops",
+    color: "text-[var(--ui-warning)]",
+  },
+  {
+    id: "BUILD_STILL",
+    label: TOOL_NAMES.BUILD_STILL,
+    desc: "Construct a copper still to brew sweet dwarven ale from harvested plants.",
+    group: "Workshops",
+    color: "text-[var(--ui-violet)]",
+  },
+  {
+    id: "BUILD_SMELTER",
+    label: TOOL_NAMES.BUILD_SMELTER,
+    desc: "Construct a clay smeltery to process iron ore into gleaming steel.",
+    group: "Workshops",
+    color: "text-[var(--ui-warning)]",
+  },
+  {
+    id: "BUILD_FORGE",
+    label: TOOL_NAMES.BUILD_FORGE,
+    desc: "Construct an anvil forge to hammer steel battleaxes and chainmail.",
+    group: "Workshops",
+    color: "text-[var(--ui-accent)]",
+  },
+  {
+    id: "BUILD_TAVERN",
+    label: TOOL_NAMES.BUILD_TAVERN,
+    desc: "Designate a warm social gathering hall for tales, songs, and camaraderie.",
+    group: "Civic & Community",
+    color: "text-[var(--ui-violet)]",
+  },
+  {
+    id: "BUILD_TEMPLE",
+    label: TOOL_NAMES.BUILD_TEMPLE,
+    desc: "Consecrate an altar to ancestral mountain deities to lift clan spirits.",
+    group: "Civic & Community",
+    color: "text-[var(--ui-warning)]",
+  },
+  {
+    id: "BUILD_DEPOT",
+    label: TOOL_NAMES.BUILD_DEPOT,
+    desc: "Erect a broad merchant platform to barter with visiting seasonal caravans.",
+    group: "Civic & Community",
+    color: "text-[var(--ui-accent)]",
   },
   {
     id: "CANCEL",
-    group: "Dig",
-    label: "CLEAR ORDERS",
+    label: TOOL_NAMES.CANCEL,
+    desc: "Cancel queued designations and release assigned tasks.",
+    group: "Orders",
     color: "text-[var(--ui-danger)]",
-    desc: "Remove pending designations in box",
   },
 ];
 
-const RESOURCE_NAMES: Record<keyof FortressResources, string> = {
-  stone: "Stone",
-  wood: "Timber",
-  ironOre: "Iron ore",
-  goldOre: "Gold ore",
-  steelBars: "Steel bars",
-  food: "Food",
-  ale: "Ale",
-  furniture: "Furniture",
-  weapons: "Weapons",
-  armor: "Armor",
-  relics: "Relics",
-  wealth: "Wealth",
-};
-
-export function formatCost(cost: Partial<FortressResources>): string {
+export function getTool(id: DesignationType): ToolDefinition {
+  const match = TOOLS.find((t) => t.id === id);
   return (
-    Object.entries(cost)
-      .filter(([, amount]) => amount !== undefined && amount > 0)
-      .map(
-        ([resource, amount]) =>
-          `${amount} ${RESOURCE_NAMES[resource as keyof FortressResources]}`,
-      )
-      .join(" · ") || "Free"
+    match || {
+      id,
+      label: TOOL_NAMES[id] || id,
+      desc: "Fortress command order",
+      group: "Orders",
+      color: "text-[var(--ui-bright)]",
+    }
   );
 }
 
-export function getTool(id: DesignationType): ToolDefinition {
-  const tool = TOOLS.find((entry) => entry.id === id);
-  if (!tool) throw new Error(`Unknown designation tool: ${id}`);
-  return tool;
+export function formatCost(cost?: Partial<FortressResources>): string {
+  if (!cost) return "Free";
+  const parts: string[] = [];
+  const labels: Record<keyof FortressResources, string> = {
+    stone: "Stone",
+    wood: "Timber",
+    ironOre: "Iron Ore",
+    goldOre: "Gold Ore",
+    steelBars: "Steel",
+    food: "Food",
+    ale: "Ale",
+    furniture: "Furniture",
+    weapons: "Weapons",
+    armor: "Armor",
+    relics: "Relics",
+    wealth: "Wealth",
+  };
+
+  for (const [key, amount] of Object.entries(cost)) {
+    if (typeof amount === "number" && amount > 0) {
+      const name = labels[key as keyof FortressResources] || key;
+      parts.push(`${amount} ${name}`);
+    }
+  }
+
+  return parts.length > 0 ? parts.join(", ") : "Free";
 }

@@ -1,5 +1,3 @@
-import type { ActivitiesState } from './activities.ts';
-
 export type Biome =
   | 'DEEP_OCEAN'
   | 'COASTAL_WATER'
@@ -99,6 +97,16 @@ export interface Tile {
   revealed: boolean;
 }
 
+export type DwarfQuirk =
+  | 'DEEP_MINER'
+  | 'DRUNKARD'
+  | 'LONER'
+  | 'SCHOLAR'
+  | 'HOTHEAD'
+  | 'IRON_BORN'
+  | 'GREEDY'
+  | 'PIOUS';
+
 export interface DwarfEntity {
   id: string;
   name: string;
@@ -139,54 +147,6 @@ export interface DwarfEntity {
   kills?: number;
   quirk?: DwarfQuirk;
 }
-
-export type DwarfQuirk = 'STONEWISE' | 'ALE_LOVER' | 'BRAVE' | 'LONER';
-export type RelicTemplate = 'EMBER_CROWN' | 'STONE_SONG' | 'OATH_AXE';
-export type RelicMode = 'STORED' | 'DISPLAYED' | 'EQUIPPED' | 'GIFTED';
-
-export interface NamedRelic {
-  id: string;
-  name: string;
-  template: RelicTemplate;
-  discoveredBy: string;
-  discoveredAt: number;
-  mode: RelicMode;
-  ownerId?: string;
-  giftedTo?: Civilization['race'];
-  history: Array<{ tick: number; text: string }>;
-}
-
-export interface RoyalCommission {
-  id: string;
-  title: string;
-  patron: Civilization['race'];
-  requirement: { resource: keyof FortressResources; amount: number };
-  reward: { wealth: number; favor: number; relic: RelicTemplate };
-  offeredAt: number;
-  deadline: number;
-  status: 'OFFERED' | 'ACTIVE' | 'COMPLETED' | 'EXPIRED';
-}
-
-export interface DwarfRelationship {
-  a: string;
-  b: string;
-  score: number;
-  lastTick: number;
-  reason: string;
-}
-
-export interface GuildState {
-  seasonIndex: number;
-  commissions: RoyalCommission[];
-  relics: NamedRelic[];
-  favor: Record<Civilization['race'], number>;
-  relationships: DwarfRelationship[];
-}
-
-export type GuildAction =
-  | { type: 'ACCEPT_COMMISSION' | 'DELIVER_COMMISSION'; id: string }
-  | { type: 'SET_RELIC_MODE'; id: string; mode: Exclude<RelicMode, 'GIFTED'>; ownerId?: string }
-  | { type: 'GIFT_RELIC'; id: string; patron: Civilization['race'] };
 
 export type HostileKind =
   | 'GOBLIN_RAIDER'
@@ -349,10 +309,55 @@ export interface NarrativeEvent {
   outcomeSummary?: string;
 }
 
+export interface Commission {
+  id: string;
+  title: string;
+  description: string;
+  patron: Civilization['race'];
+  requirement: { resource: keyof FortressResources; amount: number };
+  reward: { wealth: number; favor: number; relic: string };
+  deadline: number;
+  status: 'OFFERED' | 'ACTIVE' | 'COMPLETED' | 'EXPIRED';
+}
+
+export interface RelicHistoryEntry {
+  tick: number;
+  text: string;
+}
+
+export interface Relic {
+  id: string;
+  template: string;
+  name: string;
+  discoveredBy: string;
+  discoveredAt: number;
+  mode: 'STORED' | 'DISPLAYED' | 'EQUIPPED' | 'GIFTED';
+  ownerId?: string;
+  giftedTo?: string;
+  history: RelicHistoryEntry[];
+}
+
+export interface DwarfRelationship {
+  a: string;
+  b: string;
+  score: number;
+  reason: string;
+}
+
+export interface GuildState {
+  favor: Record<Civilization['race'], number>;
+  commissions: Commission[];
+  relics: Relic[];
+  relationships: DwarfRelationship[];
+}
+
+export type GuildAction =
+  | { type: 'ACCEPT_COMMISSION'; id: string }
+  | { type: 'DELIVER_COMMISSION'; id: string }
+  | { type: 'SET_RELIC_MODE'; id: string; mode: 'STORED' | 'DISPLAYED' | 'EQUIPPED'; ownerId?: string }
+  | { type: 'GIFT_RELIC'; id: string; patron: Civilization['race'] };
+
 export interface GameState {
-  /** Additive, versioned gameplay extension. Absent in older v1/v2 saves. */
-  activities?: ActivitiesState;
-  guild: GuildState;
   id: string;
   world: WorldData;
   grid: Tile[][][]; // [z][y][x]
@@ -370,4 +375,8 @@ export interface GameState {
   season: 'Granite (Spring)' | 'Slate (Summer)' | 'Sands (Autumn)' | 'Timber (Winter)';
   paused: boolean;
   speed: 1 | 2 | 4;
+  guild: GuildState;
+  activities?: {
+    expeditions?: any;
+  };
 }

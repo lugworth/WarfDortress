@@ -7,6 +7,7 @@ import { useGame } from './GameProvider';
 import ReactMarkdown from 'react-markdown';
 import { groupChronicle } from '@/lib/ui-model';
 import type { ChronicleEntry } from '@/lib/types';
+import AsciiSelect from './AsciiSelect';
 
 type GeminiModelOption = 'gemini-3.8-flash' | 'gemini-4-argon' | 'gemini-3.1-flash-lite';
 type ChronicleFilter = 'ALL' | ChronicleEntry['type'];
@@ -19,6 +20,12 @@ const chronicleCategories: { value: ChronicleFilter; label: string }[] = [
   { value: 'CRAFT', label: 'Crafting' },
   { value: 'LORE', label: 'Lore' },
   { value: 'INFO', label: 'Information' },
+];
+
+const MODEL_OPTIONS: { value: GeminiModelOption; label: string }[] = [
+  { value: 'gemini-3.8-flash', label: 'Flash' },
+  { value: 'gemini-4-argon', label: 'Argon' },
+  { value: 'gemini-3.1-flash-lite', label: 'Lite' },
 ];
 
 export default function AdvisorPanel() {
@@ -174,17 +181,17 @@ export default function AdvisorPanel() {
             [ READ LATEST ]
           </button>
         </div>
-        <label className="flex shrink-0 items-center gap-2 border-b border-[var(--ui-border)] px-2 py-1 text-[var(--ui-muted)]">
-          Category
-          <select
-            aria-label="Chronicle category"
+        <div className="flex shrink-0 items-center gap-2 border-b border-[var(--ui-border)] px-2 py-1 text-[var(--ui-muted)]">
+          <span>Category</span>
+          <AsciiSelect<ChronicleFilter>
+            ariaLabel="Chronicle category"
+            size="sm"
+            className="min-w-0 flex-1"
             value={chronicleFilter}
-            onChange={(event) => setChronicleFilter(event.target.value as ChronicleFilter)}
-            className="min-w-0 flex-1 border border-[var(--ui-border)] bg-[var(--ui-panel)] p-1 text-[var(--ui-info)] focus-visible:outline-2 focus-visible:outline-[var(--ui-accent)]"
-          >
-            {chronicleCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
-          </select>
-        </label>
+            options={chronicleCategories}
+            onChange={(next) => setChronicleFilter(next)}
+          />
+        </div>
         <ol aria-label="Fortress chronicle" className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1 font-mono text-[11px] custom-scrollbar bg-[var(--ui-bg)]">
           {chronicleEntries.map((entry) => (
             <li
@@ -211,16 +218,14 @@ export default function AdvisorPanel() {
           </span>
 
           <div className="flex items-center gap-1 shrink-0 text-[10px]">
-            <select
-              aria-label="Gemini Model"
+            <AsciiSelect<GeminiModelOption>
+              ariaLabel="Gemini Model"
+              size="sm"
+              align="right"
               value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value as GeminiModelOption)}
-              className="bg-[var(--ui-bg)] border border-[var(--ui-border)] text-[var(--ui-info)] px-1 py-0.5 focus:outline-none whitespace-nowrap shrink-0"
-            >
-              <option value="gemini-3.8-flash">Flash</option>
-              <option value="gemini-4-argon">Argon</option>
-              <option value="gemini-3.1-flash-lite">Lite</option>
-            </select>
+              options={MODEL_OPTIONS}
+              onChange={(nextModel) => setSelectedModel(nextModel)}
+            />
 
             <button
               type="button"

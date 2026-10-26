@@ -45,29 +45,6 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
-    // Versioned full snapshots live inside the signed-in user's namespace.
-    match /users/{userId}/saves/{saveId} {
-      function ownsSave() { return isSignedIn() && request.auth.uid == userId; }
-      function validSnapshot() {
-        let data = request.resource.data;
-        return data.keys().hasAll(['id', 'userId', 'worldName', 'dwarvenName', 'seed', 'ticks', 'year', 'season', 'wealth', 'population', 'resources', 'updatedAt', 'schemaVersion', 'snapshot'])
-          && data.keys().hasOnly(['id', 'userId', 'worldName', 'dwarvenName', 'seed', 'ticks', 'year', 'season', 'wealth', 'population', 'resources', 'updatedAt', 'schemaVersion', 'snapshot'])
-          && data.id == saveId && isValidId(saveId) && data.userId == userId
-          && data.schemaVersion in [1, 2] && data.snapshot is string && data.snapshot.size() < 900000
-          && data.worldName is string && data.worldName.size() <= 120
-          && data.dwarvenName is string && data.dwarvenName.size() <= 80
-          && data.seed is string && data.seed.size() <= 1024
-          && data.ticks is int && data.ticks >= 0 && data.year is int && data.year >= 1
-          && data.season in ['Granite (Spring)', 'Slate (Summer)', 'Sands (Autumn)', 'Timber (Winter)']
-          && data.wealth is int && data.wealth >= 0
-          && data.population is int && data.population >= 1 && data.population <= 200
-          && data.resources is map && data.resources.size() <= 16
-          && data.updatedAt == request.time;
-      }
-      allow read, delete: if ownsSave();
-      allow create, update: if ownsSave() && validSnapshot();
-    }
-
     match /saves/{saveId} {
       allow get: if isSignedIn() && isValidId(saveId) && existing().userId == request.auth.uid;
       allow list: if isSignedIn() && existing().userId == request.auth.uid;

@@ -5,6 +5,7 @@ import { useGame } from "./GameProvider";
 import { useDialog } from "@/hooks/use-dialog";
 import { QUIRKS, RELIC_TEMPLATES } from "@/lib/guild";
 import type { Civilization, GuildAction } from "@/lib/types";
+import AsciiSelect from "./AsciiSelect";
 
 const buttonClass =
   "border border-[#404040] px-2 py-1 text-[var(--ui-info)] hover:border-[var(--ui-info)] focus-visible:outline-2 focus-visible:outline-[var(--ui-accent)] disabled:opacity-40 disabled:cursor-not-allowed";
@@ -311,26 +312,24 @@ export default function GuildHallModal({
                           </button>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <label className="text-xs">
-                            Bearer{" "}
-                            <select
-                              aria-label={`Bearer for ${relic.name}`}
+                          <div className="flex items-center gap-2 text-xs">
+                            <span>Bearer</span>
+                            <AsciiSelect<string>
+                              ariaLabel={`Bearer for ${relic.name}`}
+                              size="sm"
                               value={ownerId}
-                              onChange={(e) =>
+                              options={dwarves.map((d) => ({
+                                value: d.id,
+                                label: d.name,
+                              }))}
+                              onChange={(nextOwner) =>
                                 setOwners((previous) => ({
                                   ...previous,
-                                  [relic.id]: e.target.value,
+                                  [relic.id]: nextOwner,
                                 }))
                               }
-                              className="ml-2 max-w-full border border-[#404040] bg-black p-1"
-                            >
-                              {dwarves.map((d) => (
-                                <option key={d.id} value={d.id}>
-                                  {d.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                            />
+                          </div>
                           <button
                             type="button"
                             className={buttonClass}
@@ -350,27 +349,26 @@ export default function GuildHallModal({
                           </button>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <label className="text-xs">
-                            Recipient{" "}
-                            <select
-                              aria-label={`Gift recipient for ${relic.name}`}
+                          <div className="flex items-center gap-2 text-xs">
+                            <span>Recipient</span>
+                            <AsciiSelect<Civilization["race"]>
+                              ariaLabel={`Gift recipient for ${relic.name}`}
+                              size="sm"
                               value={patron}
-                              onChange={(e) =>
+                              options={gameState.world.civilizations.map(
+                                (civ) => ({
+                                  value: civ.race,
+                                  label: civ.race,
+                                }),
+                              )}
+                              onChange={(nextPatron) =>
                                 setPatrons((previous) => ({
                                   ...previous,
-                                  [relic.id]: e.target
-                                    .value as Civilization["race"],
+                                  [relic.id]: nextPatron,
                                 }))
                               }
-                              className="ml-2 border border-[#404040] bg-black p-1"
-                            >
-                              {gameState.world.civilizations.map((civ) => (
-                                <option key={civ.id} value={civ.race}>
-                                  {civ.race}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                            />
+                          </div>
                           <button
                             type="button"
                             className={buttonClass}

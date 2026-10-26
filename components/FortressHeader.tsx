@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { GameState } from "@/lib/types";
+import { isTactileSfxMuted, setTactileSfxMuted, playTactileSfx } from "@/lib/audio";
+import AsciiSelect from "./AsciiSelect";
 
 interface Props {
   state: GameState;
@@ -37,10 +39,29 @@ const stockNames = {
   wealth: "Wealth",
 } as const;
 
+const stockGlyphs: Record<
+  "food" | "ale" | "stone" | "wood" | "wealth",
+  { glyph: string; color: string }
+> = {
+  food: { glyph: "♣", color: "text-[var(--ui-success)]" },
+  ale: { glyph: "♫", color: "text-[var(--ui-violet)]" },
+  stone: { glyph: "▓", color: "text-[var(--ui-bright)]" },
+  wood: { glyph: "♠", color: "text-[var(--ui-warning)]" },
+  wealth: { glyph: "☼", color: "text-[var(--ui-accent)]" },
+};
+
+const SPEED_OPTIONS = [
+  { value: 1 as const, label: "1× Normal" },
+  { value: 2 as const, label: "2× Fast" },
+  { value: 4 as const, label: "4× Turbo" },
+];
+
 export default function FortressHeader(props: Props) {
   const { state } = props;
   const [more, setMore] = useState(false);
+  const [sfxMuted, setSfxMuted] = useState(() => isTactileSfxMuted());
   const moreRef = useRef<HTMLButtonElement>(null);
+
   const closeMore = () => {
     setMore(false);
     moreRef.current?.focus();
@@ -71,26 +92,43 @@ export default function FortressHeader(props: Props) {
   return (
     <header className="fortress-header shrink-0 border-b border-[var(--ui-border)] bg-[var(--ui-panel)]">
       <div className="fortress-heading flex flex-wrap items-center justify-between gap-x-5 gap-y-1 px-3 pt-2">
-        <div className="min-w-0">
-          <strong className="text-[var(--ui-accent)]">
+        <div className="min-w-0 flex items-center gap-2">
+          <span aria-hidden="true" className="text-[var(--ui-accent)] font-bold">
+            ╔═[
+          </span>
+          <strong className="text-[var(--ui-accent)] tracking-wide">
             {state.world.dwarvenName}
           </strong>
-          <span className="ui-caption ml-3 text-[var(--ui-muted)]">
+          <span aria-hidden="true" className="text-[var(--ui-accent)] font-bold">
+            ]
+          </span>
+          <span className="ui-caption ml-1 text-[var(--ui-muted)] tabular-nums">
             Y{state.year} · {state.season.split(" ")[0]} · T{state.ticks}
           </span>
         </div>
         <dl
           aria-label="Essential stores"
-          className="resource-strip flex gap-4 overflow-x-auto tabular-nums"
+          className="resource-strip flex gap-2 overflow-x-auto tabular-nums"
         >
-          {(["food", "ale", "stone", "wood", "wealth"] as const).map((key) => (
-            <div key={key} className="flex shrink-0 items-baseline gap-1.5">
-              <dt className="ui-caption text-[var(--ui-muted)]">
-                {stockNames[key]}
-              </dt>
-              <dd>{state.resources[key]}</dd>
-            </div>
-          ))}
+          {(["food", "ale", "stone", "wood", "wealth"] as const).map((key) => {
+            const meta = stockGlyphs[key];
+            return (
+              <div
+                key={key}
+                className="flex shrink-0 items-baseline gap-1.5 border border-[var(--ui-border)] bg-[var(--ui-bg)] px-2 py-0.5"
+              >
+                <span aria-hidden="true" className={`font-bold ${meta.color}`}>
+                  {meta.glyph}
+                </span>
+                <dt className="ui-caption text-[var(--ui-muted)]">
+                  {stockNames[key]}
+                </dt>
+                <dd className="font-bold text-[var(--ui-bright)]">
+                  {state.resources[key]}
+                </dd>
+              </div>
+            );
+          })}
         </dl>
       </div>
       <nav
@@ -206,7 +244,7 @@ export default function FortressHeader(props: Props) {
           </section>
           <section>
             <h2 className="ui-caption mb-2 text-[var(--ui-muted)]">
-              VIEW & CLOCK
+              VIEW &amp; CLOCK
             </h2>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -230,20 +268,28 @@ export default function FortressHeader(props: Props) {
               >
                 +1 tick
               </button>
-              <label className="ui-caption flex items-center gap-2">
-                Speed
-                <select
-                  aria-label="Simulation speed"
+              <button
+                type="button"
+                className="ui-button"
+                aria-pressed={!sfxMuted}
+                onClick={() => {
+                  const nextMuted = !sfxMuted;
+                  setSfxMuted(nextMuted);
+                  setTactileSfxMuted(nextMuted);
+                  if (!nextMuted) playTactileSfx("keycap");
+                }}
+              >
+                SFX {sfxMuted ? "off" : "on"}
+              </button>
+              <div className="ui-caption flex items-center gap-2">
+                <span>Speed</span>
+                <AsciiSelect<1 | 2 | 4>
+                  ariaLabel="Simulation speed"
                   value={state.speed}
-                  onChange={(event) =>
-                    props.onSpeed(Number(event.target.value) as 1 | 2 | 4)
-                  }
-                >
-                  <option value="1">1×</option>
-                  <option value="2">2×</option>
-                  <option value="4">4×</option>
-                </select>
-              </label>
+                  options={SPEED_OPTIONS}
+                  onChange={(nextSpeed) => props.onSpeed(nextSpeed)}
+                />
+              </div>
             </div>
           </section>
           <details>
@@ -280,3 +326,4 @@ export default function FortressHeader(props: Props) {
     </header>
   );
 }
+

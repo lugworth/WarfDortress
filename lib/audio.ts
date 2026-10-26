@@ -42,3 +42,130 @@ export async function speakFortressText(text: string): Promise<void> {
     window.speechSynthesis.cancel(); window.speechSynthesis.speak(utterance);
   });
 }
+
+export type TactileSfxKind =
+  | 'keycap'
+  | 'tool'
+  | 'stamp'
+  | 'zlevel'
+  | 'alert'
+  | 'trade';
+
+const SFX_MUTE_KEY = 'warf-tactile-sfx-muted';
+let sharedAudioCtx: AudioContext | null = null;
+
+export function isTactileSfxMuted(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(SFX_MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setTactileSfxMuted(muted: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(SFX_MUTE_KEY, muted ? '1' : '0');
+  } catch {
+    // Ignore storage errors in restricted environments
+  }
+}
+
+export function playTactileSfx(kind: TactileSfxKind = 'keycap'): void {
+  if (typeof window === 'undefined' || isTactileSfxMuted()) return;
+  // Skip audio synthesis in automated headless browsers to keep test runs silent and fast
+  if (navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent)) return;
+
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!sharedAudioCtx) {
+      sharedAudioCtx = new AudioCtx();
+    }
+    const ctx = sharedAudioCtx;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    switch (kind) {
+      case 'keycap': {
+        // Crisp 22ms mechanical terminal switch click
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(780, now);
+        osc.frequency.exponentialRampToValueAtTime(210, now + 0.022);
+        gain.gain.setValueAtTime(0.045, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.022);
+        osc.start(now);
+        osc.stop(now + 0.024);
+        break;
+      }
+      case 'tool': {
+        // Metallic tool latch clink
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.setValueAtTime(780, now + 0.018);
+        gain.gain.setValueAtTime(0.035, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+        osc.start(now);
+        osc.stop(now + 0.048);
+        break;
+      }
+      case 'stamp': {
+        // Chisel / blueprint order stamp
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(360, now);
+        osc.frequency.setValueAtTime(540, now + 0.028);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+        osc.start(now);
+        osc.stop(now + 0.078);
+        break;
+      }
+      case 'zlevel': {
+        // Subterranean stone depth shift thrum
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(190, now);
+        osc.frequency.exponentialRampToValueAtTime(115, now + 0.065);
+        gain.gain.setValueAtTime(0.065, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.068);
+        osc.start(now);
+        osc.stop(now + 0.07);
+        break;
+      }
+      case 'alert': {
+        // Deep brass war-horn / anvil chime
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(293.66, now);
+        osc.frequency.setValueAtTime(440, now + 0.055);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        osc.start(now);
+        osc.stop(now + 0.145);
+        break;
+      }
+      case 'trade': {
+        // Gold coin / anvil strike
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.setValueAtTime(1318.5, now + 0.035);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.105);
+        break;
+      }
+    }
+  } catch {
+    // Ignore Web Audio errors when autoplay is blocked
+  }
+}
+

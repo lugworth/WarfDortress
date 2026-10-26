@@ -69,7 +69,7 @@ export async function generateWithModelFallback(options: {
       const response = await client.models.generateContent({
         model,
         contents: options.contents,
-        config: { ...options.config, httpOptions: { ...options.config?.httpOptions, timeout: 15_000 } },
+        config: options.config,
       });
       if (response.text) {
         return { text: response.text, modelUsed: model };

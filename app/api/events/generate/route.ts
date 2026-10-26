@@ -1,5 +1,3 @@
-import { formatGeneratedEvent } from '@/lib/event-validation';
-import { readAiRequest, textField, aiErrorResponse, AiRequestError } from '@/lib/ai-request';
 import { Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 import { generateWithModelFallback } from '@/lib/gemini-server';
@@ -18,10 +16,8 @@ export async function POST(req: NextRequest) {
       history,
       pastEvents,
       requestedSeverity,
-    } = await readAiRequest(req, 64000);
+    } = await req.json();
 
-    textField(worldName, 120); textField(dwarvenName, 80); textField(season, 40);
-    if (!Number.isSafeInteger(year) || !Number.isSafeInteger(ticks) || !Number.isSafeInteger(population)) throw new AiRequestError('Invalid simulation telemetry.');
     const prompt = `Generate a rich, interactive Dwarf Fortress-style narrative event for the fortress "${dwarvenName}" in "${worldName}" (Year ${year}, ${season}, Tick ${ticks}).
 Current Fortress State:
 - Population: ${population} Dwarves
@@ -103,12 +99,50 @@ Requirements:
       return NextResponse.json({ fallback: true, quotaFallback: true }, { status: 200 });
     }
 
-    const formattedEvent = formatGeneratedEvent(JSON.parse(result.text || '{}'), Number(ticks));
-    if (!formattedEvent) return NextResponse.json({ fallback: true });
+    const raw = JSON.parse(result.text || '{}');
+    if (!raw.title || !Array.isArray(raw.choices) || raw.choices.length === 0) {
+      return NextResponse.json({ fallback: true }, { status: 200 });
+    }
+
+    const formattedEvent = {
+      id: `evt-ai-${Date.now()}`,
+      title: raw.title,
+      severity: raw.severity || requestedSeverity || 'STRANGE_MOOD',
+      asciiArt: raw.asciiArt || '  ╔═══════╗\n  ║ ⚒ 👑 ⚒ ║\n  ╚═══════╝',
+      narrative: raw.narrative,
+      historicalConnection: raw.historicalConnection,
+      triggerReason:
+        raw.triggerReason ||
+        `AI Storyteller analyzed Year ${year} (${season}) stockpiles and world history.`,
+      tickTriggered: ticks || 0,
+      choices: raw.choices.map((c: Record<string, unknown>, idx: number) => {
+        const cost: Record<string, number> = {};
+        if (typeof c.stoneCost === 'number' && c.stoneCost > 0 && idx < 2) cost.stone = c.stoneCost;
+        if (typeof c.woodCost === 'number' && c.woodCost > 0 && idx < 2) cost.wood = c.woodCost;
+        if (typeof c.foodCost === 'number' && c.foodCost > 0 && idx < 2) cost.food = c.foodCost;
+
+        const reward: Record<string, number> = {};
+        if (typeof c.stoneReward === 'number' && c.stoneReward > 0) reward.stone = c.stoneReward;
+        if (typeof c.foodReward === 'number' && c.foodReward > 0) reward.food = c.foodReward;
+        if (typeof c.aleReward === 'number' && c.aleReward > 0) reward.ale = c.aleReward;
+        if (typeof c.wealthReward === 'number' && c.wealthReward > 0)
+          reward.wealth = c.wealthReward;
+
+        return {
+          id: String(c.id || `choice-${idx}`),
+          label: String(c.label || `Decree Option ${idx + 1}`),
+          description: String(c.description || ''),
+          cost: Object.keys(cost).length > 0 ? cost : undefined,
+          reward: Object.keys(reward).length > 0 ? reward : { wealth: 50 },
+          moraleDelta: typeof c.moraleDelta === 'number' ? c.moraleDelta : 5,
+          spawnMigrants: typeof c.spawnMigrants === 'number' ? c.spawnMigrants : 0,
+          outcomeLog: String(c.outcomeLog || 'The Overseer’s decree was carried out.'),
+        };
+      }),
+    };
 
     return NextResponse.json({ event: formattedEvent });
-  } catch (error) {
-    const invalid = aiErrorResponse(error); if (invalid) return invalid;
+  } catch {
     return NextResponse.json({ fallback: true }, { status: 200 });
   }
 }

@@ -1,9 +1,3 @@
-import { initializeGuild, stepGuild, makeNamedRelic, workProgressBonus, combatBonus, addRelationship } from './guild.ts';
-import { initializeActivities, stepActivities } from './activities.ts';
-import { getResearchBonuses } from './research.ts';
-import { getFestivalWorkBonus } from './festivals.ts';
-import { adjacent, reachableRoutes } from './navigation.ts';
-import { MAX_POPULATION, MAX_SEED_LENGTH, TRAP_DAMAGE, validResourceMap, EXPORT_VALUES, IMPORT_VALUES, tradeValues } from './game-rules.ts';
 import type {
   ChronicleEntry,
   DesignationType,
@@ -29,6 +23,8 @@ import {
   generateMultiLevelGrid,
   getTerrainVisuals,
 } from './world-gen.ts';
+import { createInitialGuildState } from './guild.ts';
+import { createExpeditionState } from './expeditions.ts';
 
 export function getSeasonModifiers(season: GameState['season']): {
   cropMultiplier: number;
@@ -267,13 +263,7 @@ export function executeTradeBarter(
   receive: Partial<FortressResources>,
   recruitMigrant = false
 ): GameState {
-  const depot = state.grid[0].some((row) => row.some((tile) => tile.terrain === 'TRADE_DEPOT'));
-  const values = tradeValues(give, receive, recruitMigrant, depot);
-  if (!validResourceMap(give) || !validResourceMap(receive) ||
-      Object.keys(give).some((key) => !(key in EXPORT_VALUES)) ||
-      Object.keys(receive).some((key) => !(key in IMPORT_VALUES)) ||
-      values.offered <= 0 || values.requested <= 0 || values.offered < values.requested ||
-      (recruitMigrant && state.dwarves.length >= MAX_POPULATION) || !hasResources(state.resources, give)) {
+  if (!hasResources(state.resources, give)) {
     return state;
   }
 
@@ -294,7 +284,7 @@ export function executeTradeBarter(
     thought: 'Pleased by brisk bartering at the Trade Depot.',
   }));
 
-  if (recruitMigrant && dwarves.length < MAX_POPULATION) {
+  if (recruitMigrant) {
     const cx = Math.floor(state.world.width / 2);
     const cy = Math.floor(state.world.height / 2);
     const idx = dwarves.length + 1;
@@ -325,8 +315,8 @@ export function executeTradeBarter(
         HAULING: true,
       },
       thought: `Joined ${state.world.dwarvenName} via Trade Depot charter!`,
-      weaponEquipped: resources.weapons > 0 ? (resources.weapons--, true) : false,
-      armorEquipped: resources.armor > 0 ? (resources.armor--, true) : false,
+      weaponEquipped: resources.weapons > 0,
+      armorEquipped: resources.armor > 0,
       kills: 0,
       skills: { MINING: 2, SMITHING: 2, COMBAT: 2, HAULING: 2 },
     });
@@ -341,12 +331,12 @@ export function executeTradeBarter(
     type: 'CRAFT',
   };
 
-  return initializeGuild({
+  return {
     ...state,
     resources,
     dwarves,
     chronicle: [entry, ...state.chronicle.slice(0, 59)],
-  });
+  };
 }
 
 export function generateContextAwareEvent(
@@ -389,8 +379,6 @@ export function generateContextAwareEvent(
       triggerReason += ` · Following "${lastDecision.chosenLabel}"`;
     }
   }
-
-  if (!severityOverride && chosenSeverity === 'MAJOR_CRISIS' && !world.civilizations.some((c) => c.race === 'Goblins' && c.stance === 'Hostile')) chosenSeverity = 'MINOR_OMEN';
 
   switch (chosenSeverity) {
     case 'STRANGE_MOOD':
@@ -614,11 +602,8 @@ export function resolveNarrativeEvent(
   const active = state.activeEvent;
   if (!active) return state;
 
-  const choice = active.choices.find((c) => c.id === choiceId);
-  if (!choice || !hasResources(state.resources, choice.cost) ||
-      (choice.reward && !validResourceMap(choice.reward)) ||
-      (choice.spawnMigrants !== undefined && (!Number.isInteger(choice.spawnMigrants) || choice.spawnMigrants < 0 || choice.spawnMigrants > 5)) ||
-      dwarvesWouldOverflow(state, choice.spawnMigrants || 0)) return state;
+  const choice = active.choices.find((c) => c.id === choiceId) || active.choices[0];
+  if (!choice) return { ...state, activeEvent: null };
 
   const resources: FortressResources = { ...state.resources };
 
@@ -646,7 +631,7 @@ export function resolveNarrativeEvent(
         : `Concerned by recent events: "${active.title}".`,
   }));
 
-  for (let migrant = 0; migrant < (choice.spawnMigrants || 0); migrant++) {
+  if (choice.spawnMigrants && choice.spawnMigrants > 0) {
     const cx = Math.floor(state.world.width / 2);
     const cy = Math.floor(state.world.height / 2);
     const migrantIndex = dwarves.length + 1;
@@ -677,8 +662,8 @@ export function resolveNarrativeEvent(
         HAULING: true,
       },
       thought: `Proud to join the thriving halls of ${state.world.dwarvenName}!`,
-      weaponEquipped: resources.weapons > 0 ? (resources.weapons--, true) : false,
-      armorEquipped: resources.armor > 0 ? (resources.armor--, true) : false,
+      weaponEquipped: resources.weapons > 0,
+      armorEquipped: resources.armor > 0,
       kills: 0,
       skills: { MINING: 2, MASONRY: 2, SMITHING: 1, HAULING: 2 },
     });
@@ -727,9 +712,8 @@ export function resolveNarrativeEvent(
     type: 'LORE',
   };
 
-  return initializeGuild({
+  return {
     ...state,
-    guild: { ...state.guild, relics: [...state.guild.relics, ...Array.from({ length: Math.min(20, choice.reward?.relics || 0) }, (_, i) => makeNamedRelic(state.world.seed, state.guild.relics.length + i, state.ticks, "The Overseer", active.title))] },
     world: {
       ...state.world,
       civilizations: updatedCivilizations,
@@ -740,15 +724,10 @@ export function resolveNarrativeEvent(
     activeEvent: null,
     eventHistory: [resolvedEvent, ...state.eventHistory.slice(0, 29)],
     chronicle: [newChronicleEntry, ...state.chronicle.slice(0, 59)],
-  });
-}
-
-function dwarvesWouldOverflow(state: GameState, migrants: number) {
-  return state.dwarves.length + migrants > MAX_POPULATION;
+  };
 }
 
 export function createInitialGameState(seed = 'Khazad-251'): GameState {
-  if (seed.length > MAX_SEED_LENGTH) throw new Error(`Seed must be at most ${MAX_SEED_LENGTH} characters.`);
   const world = generateDeterministicWorldMeta(seed, 76, 42, 6);
   const grid = generateMultiLevelGrid(world);
   const centerX = Math.floor(world.width / 2);
@@ -818,8 +797,8 @@ export function createInitialGameState(seed = 'Khazad-251'): GameState {
     },
   ];
 
-  return initializeActivities(initializeGuild({
-    id: `fort-${crypto.randomUUID()}`,
+  return {
+    id: `fort-${seed}`,
     world,
     grid,
     dwarves,
@@ -886,7 +865,11 @@ export function createInitialGameState(seed = 'Khazad-251'): GameState {
     season: 'Granite (Spring)',
     paused: false,
     speed: 1,
-  }));
+    guild: createInitialGuildState(),
+    activities: {
+      expeditions: createExpeditionState(),
+    },
+  };
 }
 
 export function canDesignateTile(tile: Tile, type: DesignationType): boolean {
@@ -927,7 +910,7 @@ export function canDesignateTile(tile: Tile, type: DesignationType): boolean {
     case 'BUILD_TEMPLE':
     case 'BUILD_DEPOT':
     case 'BUILD_FARM':
-      return ['ROCK_FLOOR', 'GRASS', 'SAND', 'SHRUB'].includes(tile.terrain);
+      return tile.walkable && tile.terrain !== 'STAIRS_UP_DOWN' && tile.terrain !== 'WATER';
     default:
       return false;
   }
@@ -1003,7 +986,6 @@ export function hasResources(
   cost?: Partial<FortressResources>
 ): boolean {
   if (!cost) return true;
-  if (!validResourceMap(cost)) return false;
   for (const [k, v] of Object.entries(cost)) {
     const key = k as keyof FortressResources;
     if ((resources[key] || 0) < (v || 0)) return false;
@@ -1115,8 +1097,6 @@ function setTileTerrain(tile: Tile, terrain: TileTerrain) {
 }
 
 export function stepSimulationTick(state: GameState): GameState {
-  const researchBonuses = getResearchBonuses(state);
-  const festivalWorkBonus = getFestivalWorkBonus(state);
   const nextTicks = state.ticks + 1;
   const seasons: GameState['season'][] = [
     'Granite (Spring)',
@@ -1187,7 +1167,7 @@ export function stepSimulationTick(state: GameState): GameState {
   let bedCount = 0;
   let tavernCount = 0;
   let templeCount = 0;
-  const builtWorkshops = new Map<TileTerrain, number>();
+  const builtWorkshops = new Set<TileTerrain>();
 
   for (let z = 0; z < state.world.depth; z++) {
     for (let y = 0; y < state.world.height; y++) {
@@ -1204,7 +1184,7 @@ export function stepSimulationTick(state: GameState): GameState {
           t === 'WORKSHOP_SMELTER' ||
           t === 'WORKSHOP_FORGE'
         ) {
-          builtWorkshops.set(t, (builtWorkshops.get(t) || 0) + 1);
+          builtWorkshops.add(t);
         }
       }
     }
@@ -1212,7 +1192,7 @@ export function stepSimulationTick(state: GameState): GameState {
 
   // Passive farm production every 25 ticks scaled by seasonal multiplier
   if (nextTicks % 25 === 0 && farmCount > 0) {
-    const harvested = Math.max(1, Math.round(farmCount * 2 * seasonMods.cropMultiplier)) + farmCount * researchBonuses.foodPerFarm;
+    const harvested = Math.max(1, Math.round(farmCount * 2 * seasonMods.cropMultiplier));
     resources.food += harvested;
     resources.wealth += harvested * 3;
     addLog(
@@ -1223,12 +1203,9 @@ export function stepSimulationTick(state: GameState): GameState {
 
   // Process active Work Orders every 12 ticks if the corresponding workshop exists
   if (nextTicks % 12 === 0 && workOrders.length > 0) {
-    const offset = Math.floor(nextTicks / 12) % workOrders.length;
-    for (let i = 0; i < workOrders.length; i++) {
-      const order = workOrders[(i + offset) % workOrders.length];
+    for (const order of workOrders) {
       if (order.remaining <= 0 && !order.autoRepeat) continue;
-      if ((builtWorkshops.get(order.workshop) || 0) > 0 && hasResources(resources, order.cost)) {
-        builtWorkshops.set(order.workshop, builtWorkshops.get(order.workshop)! - 1);
+      if (builtWorkshops.has(order.workshop) && hasResources(resources, order.cost)) {
         for (const [k, v] of Object.entries(order.cost)) {
           const key = k as keyof FortressResources;
           resources[key] = Math.max(0, (resources[key] || 0) - (v || 0));
@@ -1246,6 +1223,7 @@ export function stepSimulationTick(state: GameState): GameState {
           `Completed workshop order: ${order.title}${order.autoRepeat ? ' [AUTO]' : ''}.`,
           'CRAFT'
         );
+        break;
       }
     }
   }
@@ -1255,8 +1233,7 @@ export function stepSimulationTick(state: GameState): GameState {
     nextTicks > 0 &&
     nextTicks % 85 === 0 &&
     hostiles.filter((h) => h.z === 0).length === 0 &&
-    resources.wealth >= 600 &&
-    state.world.civilizations.some((c) => c.race === 'Goblins' && c.stance === 'Hostile')
+    resources.wealth >= 600
   ) {
     const goblinCiv = state.world.civilizations[3]?.name || 'The Fang Scourge';
     const sx = Math.max(2, state.world.width - 4);
@@ -1331,7 +1308,7 @@ export function stepSimulationTick(state: GameState): GameState {
     // Check if hostile stepped onto a constructed Stone Deadfall Trap (^)
     const currentTile = grid[h.z]?.[h.y]?.[h.x];
     if (currentTile && currentTile.terrain === 'TRAP_STONE') {
-      h.hp -= TRAP_DAMAGE;
+      h.hp -= 40;
       setTileTerrain(currentTile, 'ROCK_FLOOR');
       if (h.hp <= 0) {
         resources.wealth += 50;
@@ -1352,27 +1329,12 @@ export function stepSimulationTick(state: GameState): GameState {
     }
   });
 
-  // Processed entries point at this tick's mutable copies; unprocessed entries
-  // retain their current positions until their turn. Construction must use these
-  // positions rather than the stale start-of-tick roster.
-  const currentDwarves = new Map<string, DwarfEntity>(state.dwarves.map((d) => [d.id, d]));
-  const designatedTiles = grid.flat(2).filter((tile) => tile.designation);
-  let namedRelics = state.guild.relics;
-  let relationships = state.guild.relationships;
   const nextDwarves: DwarfEntity[] = state.dwarves.map((dwarfRaw) => {
     const dwarf: DwarfEntity = {
       ...dwarfRaw,
       labors: { ...dwarfRaw.labors },
       skills: { ...dwarfRaw.skills },
       currentTask: dwarfRaw.currentTask ? { ...dwarfRaw.currentTask } : undefined,
-    };
-
-    currentDwarves.set(dwarf.id, dwarf);
-
-    let routes: ReturnType<typeof reachableRoutes> | undefined;
-    const routeTo = (target: { x: number; y: number; z: number; type?: DesignationType; designation?: DesignationType }) => {
-      routes ??= reachableRoutes(grid, dwarf);
-      return routes.toWorkSite(target, (target.type || target.designation) === 'BUILD_WALL');
     };
 
     // Auto-equip forged weapons & armor from stockpile onto militia dwarves
@@ -1410,7 +1372,7 @@ export function stepSimulationTick(state: GameState): GameState {
       for (const h of hostiles) {
         if (h.z !== dwarf.z || h.hp <= 0) continue;
         const dist = Math.max(Math.abs(h.x - dwarf.x), Math.abs(h.y - dwarf.y));
-        if (dist < bestDist && (dist <= 1 || routeTo(h))) {
+        if (dist < bestDist) {
           bestDist = dist;
           targetHostile = h;
         }
@@ -1420,7 +1382,7 @@ export function stepSimulationTick(state: GameState): GameState {
         dwarf.currentTask = undefined;
         if (bestDist <= 1) {
           dwarf.state = 'FIGHTING';
-          const dmg = (dwarf.weaponEquipped ? 18 : 10) + ((dwarf.skills.COMBAT || 1) * 2) + combatBonus(state, dwarf) + (dwarf.labors.COMBAT ? researchBonuses.combat : 0);
+          const dmg = (dwarf.weaponEquipped ? 18 : 10) + ((dwarf.skills.COMBAT || 1) * 2);
           targetHostile.hp -= dmg;
           const incomingDmg = Math.max(
             1,
@@ -1429,12 +1391,6 @@ export function stepSimulationTick(state: GameState): GameState {
           dwarf.hp = Math.max(20, dwarf.hp - incomingDmg);
 
           if (targetHostile.hp <= 0) {
-            for (const ally of state.dwarves) {
-              if (ally.id !== dwarf.id && ally.z === dwarf.z && Math.max(Math.abs(ally.x - targetHostile.x), Math.abs(ally.y - targetHostile.y)) <= 4) {
-                relationships = addRelationship(relationships, dwarf.id, ally.id, 2, `Stood together against ${targetHostile.name}.`, nextTicks);
-              }
-            }
-            namedRelics = namedRelics.map((r) => r.mode === 'EQUIPPED' && r.ownerId === dwarf.id ? { ...r, history: [...r.history, { tick: nextTicks, text: `${dwarf.name} carried it in victory over ${targetHostile.name}.` }].slice(-20) } : r);
             dwarf.kills = (dwarf.kills || 0) + 1;
             dwarf.skills.COMBAT = (dwarf.skills.COMBAT || 1) + 1;
             dwarf.happiness = Math.min(100, dwarf.happiness + 8);
@@ -1451,9 +1407,14 @@ export function stepSimulationTick(state: GameState): GameState {
           return dwarf;
         } else {
           dwarf.state = 'MOVING';
-          const route = routeTo(targetHostile);
-          if (route) Object.assign(dwarf, route.first);
-          else { dwarf.state = 'IDLE'; dwarf.thought = 'No safe route to the hostile.'; }
+          dwarf.x = Math.max(
+            0,
+            Math.min(state.world.width - 1, dwarf.x + Math.sign(targetHostile.x - dwarf.x))
+          );
+          dwarf.y = Math.max(
+            0,
+            Math.min(state.world.height - 1, dwarf.y + Math.sign(targetHostile.y - dwarf.y))
+          );
           return dwarf;
         }
       }
@@ -1463,8 +1424,7 @@ export function stepSimulationTick(state: GameState): GameState {
     if (dwarf.thirst < 32 && resources.ale > 0) {
       resources.ale = Math.max(0, resources.ale - 1);
       dwarf.thirst = Math.min(100, dwarf.thirst + 58);
-      const tavernBonus = (tavernCount > 0 ? 12 : 6) + (dwarf.quirk === 'ALE_LOVER' ? 4 : 0);
-      if (dwarf.quirk === 'ALE_LOVER' && resources.ale > 0) resources.ale--;
+      const tavernBonus = tavernCount > 0 ? 12 : 6;
       dwarf.happiness = Math.min(100, dwarf.happiness + tavernBonus);
       if (tavernCount > 0) {
         dwarf.energy = Math.min(100, dwarf.energy + 10);
@@ -1511,9 +1471,7 @@ export function stepSimulationTick(state: GameState): GameState {
 
     if (dwarf.currentTask) {
       const targetTile = grid[dwarf.currentTask.z]?.[dwarf.currentTask.y]?.[dwarf.currentTask.x];
-      if (!targetTile || targetTile.designation !== dwarf.currentTask.type ||
-          !dwarf.labors[getRequiredLabor(dwarf.currentTask.type)] || !routeTo(dwarf.currentTask)) {
-        claimedTargets.delete(`${dwarf.currentTask.z}:${dwarf.currentTask.x}:${dwarf.currentTask.y}`);
+      if (!targetTile || targetTile.designation !== dwarf.currentTask.type) {
         dwarf.currentTask = undefined;
         dwarf.state = 'IDLE';
       }
@@ -1522,13 +1480,26 @@ export function stepSimulationTick(state: GameState): GameState {
     if (!dwarf.currentTask) {
       let bestCandidate: { x: number; y: number; z: number; type: DesignationType; dist: number } | null = null;
 
-      for (const t of designatedTiles) {
-        const { x, y, z } = t;
-        if (!t.designation || claimedTargets.has(`${z}:${x}:${y}`)) continue;
-        if (!dwarf.labors[getRequiredLabor(t.designation)] || !hasResources(resources, getConstructionCost(t.designation))) continue;
-        const route = routeTo(t);
-        if (route && (!bestCandidate || route.distance < bestCandidate.dist)) {
-          bestCandidate = { x, y, z, type: t.designation, dist: route.distance };
+      for (let z = 0; z < state.world.depth; z++) {
+        for (let y = 0; y < state.world.height; y++) {
+          for (let x = 0; x < state.world.width; x++) {
+            const t = grid[z][y][x];
+            if (!t.designation) continue;
+            const key = `${z}:${x}:${y}`;
+            if (claimedTargets.has(key)) continue;
+
+            const reqLabor = getRequiredLabor(t.designation);
+            if (!dwarf.labors[reqLabor]) continue;
+
+            const cost = getConstructionCost(t.designation);
+            if (!hasResources(resources, cost)) continue;
+
+            const zPenalty = Math.abs(z - dwarf.z) * 18;
+            const dist = Math.abs(x - dwarf.x) + Math.abs(y - dwarf.y) + zPenalty;
+            if (!bestCandidate || dist < bestCandidate.dist) {
+              bestCandidate = { x, y, z, type: t.designation, dist };
+            }
+          }
         }
       }
 
@@ -1545,7 +1516,6 @@ export function stepSimulationTick(state: GameState): GameState {
         dwarf.state = 'MOVING';
       } else {
         dwarf.state = 'IDLE';
-        if (designatedTiles.length) dwarf.thought = 'Work waiting: no available reachable job for my labors and materials.';
         if (nextTicks % 5 === 0) {
           const dirs = [
             { dx: 1, dy: 0 },
@@ -1557,7 +1527,7 @@ export function stepSimulationTick(state: GameState): GameState {
           const nx = dwarf.x + d.dx;
           const ny = dwarf.y + d.dy;
           const nt = grid[dwarf.z]?.[ny]?.[nx];
-          if (nt && nt.walkable && nt.designation !== 'BUILD_WALL') {
+          if (nt && nt.walkable) {
             dwarf.x = nx;
             dwarf.y = ny;
           }
@@ -1569,31 +1539,49 @@ export function stepSimulationTick(state: GameState): GameState {
     const task = dwarf.currentTask;
     if (!task) return dwarf;
 
-    if (!adjacent(dwarf, task) || (task.type === 'BUILD_WALL' && dwarf.x === task.x && dwarf.y === task.y)) {
-      const route = routeTo(task);
-      if (route) {
-        dwarf.state = 'MOVING';
-        Object.assign(dwarf, route.first);
-        revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 2);
-      } else {
-        claimedTargets.delete(`${task.z}:${task.x}:${task.y}`);
-        dwarf.currentTask = undefined;
-        dwarf.state = 'IDLE';
-        dwarf.thought = 'Work blocked: no connected, walkable route.';
+    if (dwarf.z !== task.z) {
+      let stairPos: { x: number; y: number } | null = null;
+      for (let y = 0; y < state.world.height; y++) {
+        for (let x = 0; x < state.world.width; x++) {
+          if (grid[dwarf.z][y][x].terrain === 'STAIRS_UP_DOWN') {
+            stairPos = { x, y };
+            break;
+          }
+        }
+        if (stairPos) break;
+      }
+
+      if (stairPos) {
+        if (dwarf.x === stairPos.x && dwarf.y === stairPos.y) {
+          dwarf.z += task.z > dwarf.z ? 1 : -1;
+          revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 3);
+        } else {
+          dwarf.x += Math.sign(stairPos.x - dwarf.x);
+          dwarf.y += Math.sign(stairPos.y - dwarf.y);
+        }
       }
       return dwarf;
     }
 
+    const dist = Math.max(Math.abs(task.x - dwarf.x), Math.abs(task.y - dwarf.y));
+    if (dist > 1) {
+      dwarf.state = 'MOVING';
+      const stepX = Math.sign(task.x - dwarf.x);
+      const stepY = Math.sign(task.y - dwarf.y);
+      dwarf.x = Math.max(0, Math.min(state.world.width - 1, dwarf.x + stepX));
+      dwarf.y = Math.max(0, Math.min(state.world.height - 1, dwarf.y + stepY));
+      revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 2);
+      return dwarf;
+    }
+
     dwarf.state = 'WORKING';
-    const labor = getRequiredLabor(task.type);
-    task.progress += 1 + workProgressBonus(state, dwarf, labor) + (labor === 'MINING' ? researchBonuses.mining : 0) + festivalWorkBonus;
-    if (dwarf.quirk === 'STONEWISE' && (labor === 'MINING' || labor === 'MASONRY')) dwarf.energy = Math.max(15, dwarf.energy - 1);
+    task.progress += 1;
 
     if (task.progress >= task.totalTicks) {
       const targetTile = grid[task.z][task.y][task.x];
       const cost = getConstructionCost(task.type);
 
-      if (hasResources(resources, cost) && !(task.type === 'BUILD_WALL' && [...currentDwarves.values()].some((d) => d.x === task.x && d.y === task.y && d.z === task.z))) {
+      if (hasResources(resources, cost)) {
         for (const [k, v] of Object.entries(cost)) {
           const key = k as keyof FortressResources;
           resources[key] -= v || 0;
@@ -1632,8 +1620,6 @@ export function stepSimulationTick(state: GameState): GameState {
             break;
           }
           case 'RECLAIM_RELIC': {
-            const relic = makeNamedRelic(state.world.seed, namedRelics.length, nextTicks, dwarf.name, `recovered at (${task.x}, ${task.y}, Z-${task.z})`);
-            namedRelics = [...namedRelics, relic];
             resources.relics += 1;
             resources.wealth += 300;
             setTileTerrain(targetTile, 'ROCK_FLOOR');
@@ -1642,7 +1628,7 @@ export function stepSimulationTick(state: GameState): GameState {
             dwarf.thought = 'Recovered an Ancient Dwarven Relic from the deep caverns!';
             addAlert('CAVERN RELIC RECLAIMED', 'DISCOVERY', task.x, task.y, task.z);
             addLog(
-              `[RELIC] ${dwarf.name} reclaimed ${relic.name} at (${task.x}, ${task.y}, Z-${task.z}) (+1 Relic, +300 Wealth)!`,
+              `[RELIC] ${dwarf.name} reclaimed an Ancient Vault Relic at (${task.x}, ${task.y}, Z-${task.z}) (+1 Relic, +300 Wealth)!`,
               'LORE'
             );
             break;
@@ -1762,7 +1748,6 @@ export function stepSimulationTick(state: GameState): GameState {
         }
       }
 
-      claimedTargets.delete(`${task.z}:${task.x}:${task.y}`);
       dwarf.currentTask = undefined;
       dwarf.state = 'IDLE';
     }
@@ -1787,9 +1772,8 @@ export function stepSimulationTick(state: GameState): GameState {
     addLog(`[EVENT] ${nextActiveEvent.title} — Awaiting Overseer Decree!`, 'ALERT');
   }
 
-  return stepActivities(stepGuild({
+  return {
     ...state,
-    guild: { ...state.guild, relics: namedRelics, relationships },
     grid,
     dwarves: nextDwarves,
     hostiles,
@@ -1801,5 +1785,5 @@ export function stepSimulationTick(state: GameState): GameState {
     ticks: nextTicks,
     year: nextYear,
     season: nextSeason,
-  }));
+  };
 }

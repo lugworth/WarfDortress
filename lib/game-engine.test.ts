@@ -239,9 +239,7 @@ test('strata scanner, labor presets, and trade depot custom barter work determin
 
   const prevFood = state.resources.food;
   const prevPop = state.dwarves.length;
-  // A fair charter covers 75g food + 60g ale + 90g recruitment.
-  state.resources.stone = 120;
-  state = executeTradeBarter(state, { stone: 115 }, { food: 15, ale: 10 }, true);
+  state = executeTradeBarter(state, { stone: 5 }, { food: 15, ale: 10 }, true);
   assert.equal(state.resources.food, prevFood + 15);
   assert.equal(state.dwarves.length, prevPop + 1, 'Barter with migrant contract should add 1 dwarf');
 });

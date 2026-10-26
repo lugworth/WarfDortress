@@ -5,10 +5,12 @@ import { applyAreaDesignation, createInitialGameState } from "./game-engine.ts";
 import { getTerrainVisuals } from "./world-gen.ts";
 import { TOOL_KEYS } from "./game-rules.ts";
 import {
+  asciiBar,
   getDesignationPreview,
   getFortressNotices,
   getMapPoints,
   groupChronicle,
+  TOOL_GLYPHS,
 } from "./ui-model.ts";
 
 function terrain(
@@ -294,3 +296,15 @@ test("chronicle recurrence groups text and type while retaining the latest compl
   assert.equal(JSON.stringify(entries), before);
   assert.deepEqual(groupChronicle([]), []);
 });
+
+test("asciiBar and TOOL_GLYPHS render deterministic tactile block gauges and tool badges", () => {
+  assert.equal(asciiBar(0, 100, 6), "[░░░░░░]");
+  assert.equal(asciiBar(50, 100, 6), "[███░░░]");
+  assert.equal(asciiBar(100, 100, 6), "[██████]");
+  assert.equal(asciiBar(-25, 100, 4), "[░░░░]");
+  assert.equal(asciiBar(250, 100, 4), "[████]");
+  for (const tool of Object.values(TOOL_KEYS)) {
+    assert.ok(TOOL_GLYPHS[tool]?.length >= 1, `Missing glyph for ${tool}`);
+  }
+});
+

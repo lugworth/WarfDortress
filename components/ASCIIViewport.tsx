@@ -17,6 +17,8 @@ import { formatCost, getTool } from "@/lib/tool-catalog";
 import { TOOL_NAMES } from "@/lib/ui-labels";
 import { MAP_ZOOMS } from "@/lib/ui-preferences";
 import { useUI } from "./UIProvider";
+import AsciiSelect from "./AsciiSelect";
+import { playTactileSfx } from "@/lib/audio";
 
 const DESIGNATION_BADGE: Record<
   DesignationType,
@@ -91,6 +93,11 @@ export default function ASCIIViewport() {
   const [dragCurrent, setDragCurrent] = useState<{
     x: number;
     y: number;
+  } | null>(null);
+  const [stampFlash, setStampFlash] = useState<{
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+    z: number;
   } | null>(null);
   const contextKey = `${gameState.id}:${currentZ}:${selectedTool}:${panMode}`;
   const [selectionContext, setSelectionContext] = useState(contextKey);
@@ -185,6 +192,12 @@ export default function ASCIIViewport() {
       selection.tool,
       selection.z,
     );
+    playTactileSfx("stamp");
+    setStampFlash({
+      start: selection.start,
+      end: selection.end,
+      z: selection.z,
+    });
     setOrderStatus(
       `${selection.tool === "CANCEL" ? "Cleared" : "Accepted"} ${count} tiles; skipped ${preview.tiles.length - count}. ${selection.tool === "CANCEL" ? "" : "Materials are consumed when built."}`,
     );
@@ -223,6 +236,11 @@ export default function ASCIIViewport() {
       window.removeEventListener("resize", update);
     };
   }, []);
+  useEffect(() => {
+    if (!stampFlash) return;
+    const timer = window.setTimeout(() => setStampFlash(null), 260);
+    return () => window.clearTimeout(timer);
+  }, [stampFlash]);
   useEffect(() => {
     let active = true;
     document.fonts
@@ -424,13 +442,68 @@ export default function ASCIIViewport() {
       }
     }
 
-    // 3. Render Hovered Tile Reticle
+    // 2b. Render Tactile Order Stamp Flash
+    if (stampFlash && stampFlash.z === currentZ) {
+      const minX = Math.min(stampFlash.start.x, stampFlash.end.x);
+      const maxX = Math.max(stampFlash.start.x, stampFlash.end.x);
+      const minY = Math.min(stampFlash.start.y, stampFlash.end.y);
+      const maxY = Math.max(stampFlash.start.y, stampFlash.end.y);
+      const sx = minX * CELL_W;
+      const sy = minY * CELL_H;
+      const sw = (maxX - minX + 1) * CELL_W;
+      const sh = (maxY - minY + 1) * CELL_H;
+      ctx.fillStyle = "rgba(51, 255, 0, 0.22)";
+      ctx.fillRect(sx, sy, sw, sh);
+      ctx.strokeStyle = palette.good;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx - 1, sy - 1, sw + 2, sh + 2);
+    }
+
+    // 3. Render Hovered Tile Reticle with Tactile Corner Brackets & Ghost Tool Preview
     if (hoveredTile && hoveredTile.z === currentZ) {
       const hx = hoveredTile.x * CELL_W;
       const hy = hoveredTile.y * CELL_H;
-      ctx.strokeStyle = inspectMode ? "#ff0099" : ISOTOPE.base0C;
+      const canApply =
+        !inspectMode &&
+        canDesignateTile(hoveredTile, selectedTool) &&
+        !selection;
+      const reticleColor = inspectMode
+        ? "#ff0099"
+        : canApply
+          ? palette.good
+          : ISOTOPE.base0C;
+      ctx.strokeStyle = reticleColor;
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(hx + 0.5, hy + 0.5, CELL_W - 1, CELL_H - 1);
+      const arm = Math.max(3, Math.min(CELL_W, CELL_H) * 0.32);
+      ctx.beginPath();
+      // Top-left bracket
+      ctx.moveTo(hx + 0.5, hy + arm);
+      ctx.lineTo(hx + 0.5, hy + 0.5);
+      ctx.lineTo(hx + arm, hy + 0.5);
+      // Top-right bracket
+      ctx.moveTo(hx + CELL_W - arm, hy + 0.5);
+      ctx.lineTo(hx + CELL_W - 0.5, hy + 0.5);
+      ctx.lineTo(hx + CELL_W - 0.5, hy + arm);
+      // Bottom-left bracket
+      ctx.moveTo(hx + 0.5, hy + CELL_H - arm);
+      ctx.lineTo(hx + 0.5, hy + CELL_H - 0.5);
+      ctx.lineTo(hx + arm, hy + CELL_H - 0.5);
+      // Bottom-right bracket
+      ctx.moveTo(hx + CELL_W - arm, hy + CELL_H - 0.5);
+      ctx.lineTo(hx + CELL_W - 0.5, hy + CELL_H - 0.5);
+      ctx.lineTo(hx + CELL_W - 0.5, hy + CELL_H - arm);
+      ctx.stroke();
+
+      if (!inspectMode && !selection) {
+        const badge = DESIGNATION_BADGE[selectedTool];
+        if (badge && badge.char.trim()) {
+          ctx.save();
+          ctx.globalAlpha = canApply ? 0.85 : 0.38;
+          ctx.fillStyle = canApply ? badge.color : palette.danger;
+          ctx.fillText(badge.char, hx + CELL_W / 2, hy + CELL_H / 2);
+          ctx.restore();
+        }
+      }
     }
 
     // 4. Render Inspected Coordinate Highlight
@@ -582,6 +655,8 @@ export default function ASCIIViewport() {
     preview,
     cursor,
     fontReady,
+    selectedTool,
+    stampFlash,
   ]);
 
   const handleMouseDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -818,7 +893,10 @@ export default function ASCIIViewport() {
           className="ui-button"
           aria-label="Ascend Z-Level"
           disabled={currentZ === 0}
-          onClick={() => setCurrentZ((z) => Math.max(0, z - 1))}
+          onClick={() => {
+            playTactileSfx("zlevel");
+            setCurrentZ((z) => Math.max(0, z - 1));
+          }}
         >
           ↑
         </button>
@@ -827,12 +905,34 @@ export default function ASCIIViewport() {
           className="ui-button"
           aria-label="Descend Z-Level"
           disabled={currentZ >= gameState.world.depth - 1}
-          onClick={() =>
-            setCurrentZ((z) => Math.min(gameState.world.depth - 1, z + 1))
-          }
+          onClick={() => {
+            playTactileSfx("zlevel");
+            setCurrentZ((z) => Math.min(gameState.world.depth - 1, z + 1));
+          }}
         >
           ↓
         </button>
+        <div
+          className="hidden sm:flex items-center gap-1"
+          role="group"
+          aria-label="Strata depth selector"
+        >
+          {gameState.world.strata.map((stratum) => (
+            <button
+              key={stratum.zLevel}
+              type="button"
+              aria-pressed={currentZ === stratum.zLevel}
+              title={`Z-${stratum.zLevel}: ${stratum.name} (${stratum.primaryRock})`}
+              onClick={() => {
+                playTactileSfx("zlevel");
+                setCurrentZ(stratum.zLevel);
+              }}
+              className="ui-button !px-1.5 !py-0.5 text-[11px] tabular-nums"
+            >
+              Z{stratum.zLevel}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           className="ui-button"
@@ -937,28 +1037,28 @@ export default function ASCIIViewport() {
               Starter workshops
             </button>
           </div>
-          <label className="flex flex-wrap items-center gap-2 ui-caption">
-            Find
-            <select
-              aria-label="Find map object"
+          <div className="flex flex-wrap items-center gap-2 ui-caption">
+            <span>Find</span>
+            <AsciiSelect
+              ariaLabel="Find map object"
               value=""
               className="min-w-0 max-w-full"
-              onChange={(event) => {
-                const point = points.find((p) => p.id === event.target.value);
+              onChange={(val) => {
+                const point = points.find((p) => p.id === val);
                 if (point) {
                   inspectPoint(point);
                   canvasRef.current?.focus();
                 }
               }}
-            >
-              <option value="">Visible objects ({points.length})</option>
-              {points.map((point) => (
-                <option key={point.id} value={point.id}>
-                  {point.label} ({point.x},{point.y})
-                </option>
-              ))}
-            </select>
-          </label>
+              options={[
+                { value: "", label: `Visible objects (${points.length})` },
+                ...points.map((point) => ({
+                  value: point.id,
+                  label: `${point.label} (${point.x},${point.y})`,
+                })),
+              ]}
+            />
+          </div>
           <details>
             <summary className="ui-caption">Landmarks &amp; map legend</summary>
             <ul className="mt-2 space-y-2">
@@ -1142,9 +1242,30 @@ export default function ASCIIViewport() {
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
+              {activeInspect.tile.revealed &&
+                activeInspect.tile.terrain === "CAVERN_RELIC" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTactileSfx("stamp");
+                      designateBox(
+                        activeInspect.coord.x,
+                        activeInspect.coord.y,
+                        activeInspect.coord.x,
+                        activeInspect.coord.y,
+                        "RECLAIM_RELIC",
+                        activeInspect.coord.z,
+                      );
+                    }}
+                    className="px-1.5 py-0.5 border border-[var(--ui-success)] text-[var(--ui-success)] hover:bg-[var(--ui-border)] font-bold whitespace-nowrap shrink-0"
+                  >
+                    [ ☼ RECLAIM RELIC ]
+                  </button>
+                )}
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  playTactileSfx("stamp");
                   designateBox(
                     activeInspect.coord.x,
                     activeInspect.coord.y,
@@ -1152,8 +1273,8 @@ export default function ASCIIViewport() {
                     activeInspect.coord.y,
                     "MINE",
                     activeInspect.coord.z,
-                  )
-                }
+                  );
+                }}
                 className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-warning)] hover:bg-[var(--ui-border)] whitespace-nowrap shrink-0"
               >
                 [ MINE TILE ]

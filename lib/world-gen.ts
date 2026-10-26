@@ -1066,6 +1066,7 @@ export function createInitialDwarves(centerX: number, centerY: number): DwarfEnt
     weaponEquipped: r.weaponEquipped || false,
     armorEquipped: r.armorEquipped || false,
     kills: 0,
+    quirk: (['DEEP_MINER', 'DRUNKARD', 'LONER', 'SCHOLAR', 'HOTHEAD', 'IRON_BORN', 'PIOUS'] as const)[idx % 7],
     skills: {
       MINING: r.labors.MINING ? 2 : 0,
       WOODCUTTING: r.labors.WOODCUTTING ? 2 : 0,

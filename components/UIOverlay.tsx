@@ -7,11 +7,27 @@ import { TOOL_KEYS } from "@/lib/game-rules";
 import { getConstructionCost } from "@/lib/game-engine";
 import { TOOL_NAMES } from "@/lib/ui-labels";
 import { TOOLS, formatCost } from "@/lib/tool-catalog";
+import AsciiSelect from "./AsciiSelect";
 import { useGame } from "./GameProvider";
 import { useUI } from "./UIProvider";
 
 const button =
   "border border-[var(--ui-border)] px-3 py-2 text-left hover:bg-[var(--ui-selection)]";
+
+const FONT_SIZE_OPTIONS = FONT_SIZES.map((size) => ({
+  value: size,
+  label: `${size}px${size === 14 ? " · Default" : ""}`,
+}));
+
+const MAP_ZOOM_OPTIONS: readonly { value: number | "fit"; label: string }[] = [
+  { value: "fit", label: "Fit whole map" },
+  ...MAP_ZOOMS.map((zoom) => ({ value: zoom, label: `${zoom}%` })),
+];
+
+const THEME_OPTIONS = [
+  { value: "terminal" as const, label: "Isotope Dark" },
+  { value: "contrast" as const, label: "High contrast" },
+];
 
 export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
   const {
@@ -181,61 +197,40 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
           </div>
         ) : (
           <div className="space-y-5 overflow-y-auto p-4">
-            <label className="flex flex-wrap items-center justify-between gap-2">
-              Interface text size
-              <select
-                aria-label="Interface text size"
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>Interface text size</span>
+              <AsciiSelect<number>
+                ariaLabel="Interface text size"
+                align="right"
                 value={preferences.fontSize}
-                onChange={(e) =>
-                  updatePreferences({ fontSize: Number(e.target.value) })
-                }
-              >
-                {FONT_SIZES.map((size) => (
-                  <option key={size} value={size}>
-                    {size}px{size === 14 ? " · Default" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-wrap items-center justify-between gap-2">
-              Map zoom
-              <select
-                aria-label="Map zoom"
+                options={FONT_SIZE_OPTIONS}
+                onChange={(fontSize) => updatePreferences({ fontSize })}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>Map zoom</span>
+              <AsciiSelect<number | "fit">
+                ariaLabel="Map zoom"
+                align="right"
                 value={preferences.mapZoom}
-                onChange={(e) =>
-                  updatePreferences({
-                    mapZoom:
-                      e.target.value === "fit" ? "fit" : Number(e.target.value),
-                  })
-                }
-              >
-                <option value="fit">Fit whole map</option>
-                {MAP_ZOOMS.map((zoom) => (
-                  <option key={zoom} value={zoom}>
-                    {zoom}%
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={MAP_ZOOM_OPTIONS}
+                onChange={(mapZoom) => updatePreferences({ mapZoom })}
+              />
+            </div>
             <p className="text-xs text-[var(--ui-muted)]">
               Text size and map zoom are independent. At larger map sizes,
               scroll or use the arrow keys to explore.
             </p>
-            <label className="flex flex-wrap items-center justify-between gap-2">
-              Color theme
-              <select
-                aria-label="Color theme"
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>Color theme</span>
+              <AsciiSelect<"terminal" | "contrast">
+                ariaLabel="Color theme"
+                align="right"
                 value={preferences.theme}
-                onChange={(e) =>
-                  updatePreferences({
-                    theme: e.target.value as "terminal" | "contrast",
-                  })
-                }
-              >
-                <option value="terminal">Isotope Dark</option>
-                <option value="contrast">High contrast</option>
-              </select>
-            </label>
+                options={THEME_OPTIONS}
+                onChange={(theme) => updatePreferences({ theme })}
+              />
+            </div>
             <label className="flex items-center gap-3">
               <input
                 type="checkbox"
