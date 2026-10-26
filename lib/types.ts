@@ -173,7 +173,9 @@ export interface DwarfEntity {
   thoughtLog?: DwarfThoughtEntry[];
   skills: Partial<Record<DwarfLabor, number>>;
   weaponEquipped?: boolean;
+  weaponType?: WeaponType;
   armorEquipped?: boolean;
+  armorType?: ArmorType;
   kills?: number;
   quirk?: DwarfQuirk;
   squadId?: MilitiaSquadId | null;
@@ -253,6 +255,36 @@ export type HostileKind =
 
 export type HostileBehavior = 'RAID_SEEK' | 'CAVERN_GUARD' | 'FLANK_PATROL';
 
+export type WeaponType =
+  | 'BARE_FISTS'
+  | 'WOODEN_STAFF'
+  | 'IRON_AXE'
+  | 'STEEL_BATTLEAXE'
+  | 'RUNED_MITHRIL_AXE'
+  | 'GOBLIN_PIKE'
+  | 'TROLL_CLUB';
+
+export type ArmorType =
+  | 'LEATHER'
+  | 'IRON_MAIL'
+  | 'STEEL_PLATE'
+  | 'MITHRIL_MAIL';
+
+export interface Weapon {
+  type: WeaponType;
+  name: string;
+  attackDamage: number;
+  attackSpeed: number; // lower is faster (ticks between attacks)
+  range: number;
+}
+
+export interface Armor {
+  type: ArmorType;
+  name: string;
+  defense: number;
+  maxHpBonus: number;
+}
+
 export interface HostileEntity {
   id: string;
   name: string;
@@ -265,6 +297,8 @@ export interface HostileEntity {
   hp: number;
   maxHp: number;
   attack: number;
+  weaponType?: WeaponType;
+  armorType?: ArmorType;
   behavior: HostileBehavior;
   tactic?: RaidTactic;
   targetCoord?: { x: number; y: number; z: number };

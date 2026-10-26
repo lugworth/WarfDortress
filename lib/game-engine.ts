@@ -39,6 +39,7 @@ import {
   isShelteredOrPavedTile,
 } from './weather.ts';
 import { findPath, nextStepAlongPath } from './pathfinding.ts';
+import { getWeapon, getArmor, weaponTier, armorTier } from './equipment.ts';
 import {
   createDefaultMilitiaState,
   ensureMilitiaState,
@@ -1408,6 +1409,7 @@ export function stepSimulationTick(state: GameState): GameState {
     if (!dwarf.weaponEquipped && resources.weapons > 0 && dwarf.labors.COMBAT) {
       resources.weapons -= 1;
       dwarf.weaponEquipped = true;
+      dwarf.weaponType = 'IRON_AXE';
       appendDwarfThought(dwarf, {
         tick: nextTicks,
         year: nextYear,
@@ -1514,15 +1516,17 @@ export function stepSimulationTick(state: GameState): GameState {
         dwarf.currentTask = undefined;
         if (bestDist <= 1) {
           dwarf.state = 'FIGHTING';
-          const baseDmg = (dwarf.weaponEquipped ? 18 : 10) + ((dwarf.skills.COMBAT || 1) * 2);
-          const dmg = baseDmg + squadMods.cohesionAttackBonus + squadMods.patrolAttackBonus;
+          const weapon = getWeapon(dwarf.weaponType || (dwarf.weaponEquipped ? 'IRON_AXE' : 'BARE_FISTS'));
+          const enemyArmor = getArmor(targetHostile.armorType || 'LEATHER');
+          const baseDmg = weapon.attackDamage + ((dwarf.skills.COMBAT || 1) * 2);
+          const dmg = Math.floor(baseDmg * enemyArmor.defense) + squadMods.cohesionAttackBonus + squadMods.patrolAttackBonus;
           targetHostile.hp -= dmg;
           const wallShield = wallCount >= 4 ? 0.85 : 1;
           const incomingDmg = Math.max(
             1,
             Math.round(
               targetHostile.attack *
-                (dwarf.armorEquipped ? 0.5 : 1) *
+                getArmor(dwarf.armorType || (dwarf.armorEquipped ? 'IRON_MAIL' : 'LEATHER')).defense *
                 wallShield *
                 squadMods.stationDefenseMultiplier
             )
