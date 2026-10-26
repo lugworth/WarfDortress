@@ -1397,6 +1397,48 @@ export function stepSimulationTick(state: GameState): GameState {
     }
   });
 
+  // Precompute available tasks once (avoids scanning grid N times for N dwarves)
+  const availableTasks: Array<{ x: number; y: number; z: number; type: DesignationType; dist: number; dwarf: DwarfEntity }> = [];
+  for (let z = 0; z < state.world.depth; z++) {
+    for (let y = 0; y < state.world.height; y++) {
+      for (let x = 0; x < state.world.width; x++) {
+        const t = grid[z][y][x];
+        if (!t.designation || t.designation === 'MILITIA_STATION' || t.designation === 'MILITIA_PATROL') {
+          continue;
+        }
+        const key = `${z}:${x}:${y}`;
+        if (claimedTargets.has(key)) continue;
+        const reqLabor = getRequiredLabor(t.designation);
+        const cost = getConstructionCost(t.designation);
+        if (!hasResources(resources, cost)) continue;
+        // Find the nearest dwarf qualified for this task
+        let nearestDwarf = null;
+        let nearestDist = Infinity;
+        for (const d of state.dwarves) {
+          if (d.currentTask || !d.labors[reqLabor]) continue;
+          const zPenalty = Math.abs(z - d.z) * 18;
+          const dist = Math.abs(x - d.x) + Math.abs(y - d.y) + zPenalty;
+          if (dist < nearestDist) {
+            nearestDist = dist;
+            nearestDwarf = d;
+          }
+        }
+        if (nearestDwarf) {
+          availableTasks.push({ x, y, z, type: t.designation, dist: nearestDist, dwarf: nearestDwarf });
+        }
+      }
+    }
+  }
+  availableTasks.sort((a, b) => a.dist - b.dist);
+
+  // Assign tasks from precomputed list
+  const assignedDwarves = new Set<string>();
+  for (const task of availableTasks) {
+    if (assignedDwarves.has(task.dwarf.id)) continue;
+    assignedDwarves.add(task.dwarf.id);
+    claimedTargets.add(`${task.z}:${task.x}:${task.y}`);
+  }
+
   let nextDwarves: DwarfEntity[] = state.dwarves.map((dwarfRaw) => {
     const dwarf: DwarfEntity = {
       ...dwarfRaw,
@@ -1745,34 +1787,12 @@ export function stepSimulationTick(state: GameState): GameState {
         }
       }
 
-      let bestCandidate: { x: number; y: number; z: number; type: DesignationType; dist: number } | null = null;
-
-      for (let z = 0; z < state.world.depth; z++) {
-        for (let y = 0; y < state.world.height; y++) {
-          for (let x = 0; x < state.world.width; x++) {
-            const t = grid[z][y][x];
-            if (
-              !t.designation ||
-              t.designation === 'MILITIA_STATION' ||
-              t.designation === 'MILITIA_PATROL'
-            ) {
-              continue;
-            }
-            const key = `${z}:${x}:${y}`;
-            if (claimedTargets.has(key)) continue;
-
-            const reqLabor = getRequiredLabor(t.designation);
-            if (!dwarf.labors[reqLabor]) continue;
-
-            const cost = getConstructionCost(t.designation);
-            if (!hasResources(resources, cost)) continue;
-
-            const zPenalty = Math.abs(z - dwarf.z) * 18;
-            const dist = Math.abs(x - dwarf.x) + Math.abs(y - dwarf.y) + zPenalty;
-            if (!bestCandidate || dist < bestCandidate.dist) {
-              bestCandidate = { x, y, z, type: t.designation, dist };
-            }
-          }
+      // Look up precomputed task assignment
+      let bestCandidate = null;
+      for (const task of availableTasks) {
+        if (task.dwarf.id === dwarf.id) {
+          bestCandidate = { x: task.x, y: task.y, z: task.z, type: task.type, dist: task.dist };
+          break;
         }
       }
 
