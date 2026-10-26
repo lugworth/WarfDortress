@@ -12,6 +12,8 @@ import {
   stepSimulationTick,
 } from './game-engine.ts';
 import { generateRandomWorldSeed, getSurfaceArchetype } from './world-gen.ts';
+import { findPath, nextStepAlongPath } from './pathfinding.ts';
+import type { Tile } from './types.ts';
 
 test('deterministic world generation creates multi-level strata, biomes, cavern relics, and 7 pioneers', () => {
   const state1 = createInitialGameState('Moria-777');
@@ -242,4 +244,138 @@ test('strata scanner, labor presets, and trade depot custom barter work determin
   state = executeTradeBarter(state, { stone: 5 }, { food: 15, ale: 10 }, true);
   assert.equal(state.resources.food, prevFood + 15);
   assert.equal(state.dwarves.length, prevPop + 1, 'Barter with migrant contract should add 1 dwarf');
+});
+
+test('A* pathfinding finds route on same Z level', () => {
+  // Build a simple 10x10 walkable grid with a few obstacles
+  const grid: Tile[][][] = [];
+  for (let z = 0; z < 1; z++) {
+    const level: Tile[][] = [];
+    for (let y = 0; y < 10; y++) {
+      const row: Tile[] = [];
+      for (let x = 0; x < 10; x++) {
+        row.push({
+          x, y, z, terrain: 'ROCK_FLOOR', biome: 'PLAINS', char: '.',
+          fg: '#fff', bg: '#333', walkable: true, revealed: true,
+        });
+      }
+      level.push(row);
+    }
+    grid.push(level);
+  }
+
+  // Add wall blocking direct path
+  grid[0][2][3].terrain = 'ROCK_WALL';
+  grid[0][2][3].walkable = false;
+  grid[0][3][3].terrain = 'ROCK_WALL';
+  grid[0][3][3].walkable = false;
+
+  const path = findPath(grid, { z: 0, y: 0, x: 0 }, { z: 0, y: 5, x: 5 });
+  assert.ok(path !== null, 'Should find a path around obstacles');
+  assert.equal(path![0].x, 0);
+  assert.equal(path![0].y, 0);
+  assert.equal(path![path!.length - 1].x, 5);
+  assert.equal(path![path!.length - 1].y, 5);
+  // Verify path doesn't go through walls
+  for (const step of path!) {
+    assert.ok(grid[0][step.y][step.x].walkable, `Path step ${step.x},${step.y} should be walkable`);
+  }
+});
+
+test('A* pathfinding finds route across Z levels via stairs', () => {
+  // Build 2-level grid with stairs
+  const grid: Tile[][][] = [];
+  for (let z = 0; z < 2; z++) {
+    const level: Tile[][] = [];
+    for (let y = 0; y < 10; y++) {
+      const row: Tile[] = [];
+      for (let x = 0; x < 10; x++) {
+        row.push({
+          x, y, z, terrain: 'ROCK_FLOOR', biome: 'PLAINS', char: '.',
+          fg: '#fff', bg: '#333', walkable: true, revealed: true,
+        });
+      }
+      level.push(row);
+    }
+    grid.push(level);
+  }
+
+  // Place stairs at (5,5) on both levels
+  grid[0][5][5].terrain = 'STAIRS_UP_DOWN';
+  grid[1][5][5].terrain = 'STAIRS_UP_DOWN';
+
+  const path = findPath(grid, { z: 0, y: 0, x: 0 }, { z: 1, y: 9, x: 9 });
+  assert.ok(path !== null, 'Should find path across Z levels via stairs');
+  // Path should go through stairs
+  let passedStairs = false;
+  for (const step of path!) {
+    if (step.x === 5 && step.y === 5) {
+      passedStairs = true;
+    }
+  }
+  assert.ok(passedStairs, 'Path should pass through the stairwell');
+});
+
+test('nextStepAlongPath returns correct sequential steps', () => {
+  const path = [
+    { z: 0, y: 0, x: 0 },
+    { z: 0, y: 0, x: 1 },
+    { z: 0, y: 1, x: 1 },
+    { z: 0, y: 1, x: 2 },
+  ];
+
+  let current = { z: 0, y: 0, x: 0 };
+  let step = nextStepAlongPath(path, current);
+  assert.ok(step !== null);
+  assert.equal(step.x, 1);
+  assert.equal(step.y, 0);
+
+  current = { z: 0, y: 0, x: 1 };
+  step = nextStepAlongPath(path, current);
+  assert.ok(step !== null);
+  assert.equal(step.x, 1);
+  assert.equal(step.y, 1);
+
+  // At end of path
+  current = { z: 0, y: 1, x: 2 };
+  step = nextStepAlongPath(path, current);
+  assert.equal(step, null, 'Should return null at end of path');
+});
+
+test('dwarves use pathfinding when assigned tasks (integration)', () => {
+  let state = createInitialGameState('Pathfinding-Integration');
+  const centerX = Math.floor(state.world.width / 2);
+  const centerY = Math.floor(state.world.height / 2);
+
+  // Designate a mine tile that requires walking through open floor
+  const { nextState } = applyAreaDesignation(
+    state,
+    0,
+    centerX + 8,
+    centerY,
+    centerX + 8,
+    centerY,
+    'MINE'
+  );
+  state = nextState;
+
+  // Run several ticks - dwarf should navigate there using pathfinding
+  let dwarfMoved = false;
+  for (let i = 0; i < 20; i++) {
+    const before = state.dwarves.map(d => ({ x: d.x, y: d.y, z: d.z }));
+    state = stepSimulationTick(state);
+    const after = state.dwarves.map(d => ({ x: d.x, y: d.y, z: d.z }));
+
+    for (let j = 0; j < before.length; j++) {
+      if (before[j].x !== after[j].x || before[j].y !== after[j].y) {
+        dwarfMoved = true;
+        break;
+      }
+    }
+    if (dwarfMoved) break;
+  }
+
+  // At least one dwarf should have moved toward the task
+  // (either moved or arrived and started working)
+  assert.ok(dwarfMoved, 'Dwarf should have moved toward the mine task using pathfinding');
 });

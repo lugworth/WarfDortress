@@ -166,6 +166,7 @@ export interface DwarfEntity {
     type: DesignationType;
     progress: number;
     totalTicks: number;
+    path?: { z: number; y: number; x: number }[];
   };
   labors: Record<DwarfLabor, boolean>;
   thought: string;

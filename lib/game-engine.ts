@@ -38,6 +38,7 @@ import {
   getCurrentWeather,
   isShelteredOrPavedTile,
 } from './weather.ts';
+import { findPath, nextStepAlongPath } from './pathfinding.ts';
 import {
   createDefaultMilitiaState,
   ensureMilitiaState,
@@ -1763,6 +1764,37 @@ export function stepSimulationTick(state: GameState): GameState {
 
       if (bestCandidate) {
         claimedTargets.add(`${bestCandidate.z}:${bestCandidate.x}:${bestCandidate.y}`);
+        
+        // For mining/building on non-walkable terrain, path to adjacent walkable tile
+        let pathTarget = { z: bestCandidate.z, y: bestCandidate.y, x: bestCandidate.x };
+        const targetTile = grid[bestCandidate.z]?.[bestCandidate.y]?.[bestCandidate.x];
+        if (targetTile && !targetTile.walkable) {
+          // Find closest walkable neighbor
+          let bestNeighbor = null;
+          let bestDist = Infinity;
+          for (const [dx, dy] of [[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[-1,1],[1,-1],[1,1]]) {
+            const nx = bestCandidate.x + dx;
+            const ny = bestCandidate.y + dy;
+            const nt = grid[bestCandidate.z]?.[ny]?.[nx];
+            if (nt && nt.walkable) {
+              const dist = Math.abs(dx) + Math.abs(dy);
+              if (dist < bestDist) {
+                bestDist = dist;
+                bestNeighbor = { z: bestCandidate.z, y: ny, x: nx };
+              }
+            }
+          }
+          if (bestNeighbor) {
+            pathTarget = bestNeighbor;
+          }
+        }
+        
+        const path = findPath(
+          grid,
+          { z: dwarf.z, y: dwarf.y, x: dwarf.x },
+          pathTarget
+        );
+        
         dwarf.currentTask = {
           x: bestCandidate.x,
           y: bestCandidate.y,
@@ -1770,6 +1802,7 @@ export function stepSimulationTick(state: GameState): GameState {
           type: bestCandidate.type,
           progress: 0,
           totalTicks: 2,
+          path: path ? path.map(p => ({ z: p.z, y: p.y, x: p.x })) : undefined,
         };
         dwarf.state = 'MOVING';
       } else {
@@ -1797,54 +1830,43 @@ export function stepSimulationTick(state: GameState): GameState {
     const task = dwarf.currentTask;
     if (!task) return dwarf;
 
-    if (dwarf.z !== task.z) {
-      let stairPos: { x: number; y: number } | null = null;
-      for (let y = 0; y < state.world.height; y++) {
-        for (let x = 0; x < state.world.width; x++) {
-          if (grid[dwarf.z][y][x].terrain === 'STAIRS_UP_DOWN') {
-            stairPos = { x, y };
-            break;
-          }
-        }
-        if (stairPos) break;
-      }
+    // Follow the precomputed path
+    const path = (task as any).path;
+    const nextPos = nextStepAlongPath(
+      path || [],
+      { z: dwarf.z, y: dwarf.y, x: dwarf.x }
+    );
 
-      if (stairPos) {
-        if (dwarf.x === stairPos.x && dwarf.y === stairPos.y) {
-          dwarf.z += task.z > dwarf.z ? 1 : -1;
+    if (nextPos) {
+      if (canDwarfStepThisTick(
+        dwarf,
+        { season: nextSeason, ticks: nextTicks, weatherOverride: state.weatherOverride },
+        currentDwarfTile,
+        nextTicks
+      )) {
+        // Check if this step involves changing Z levels (stair)
+        if (nextPos.z !== dwarf.z) {
+          dwarf.z = nextPos.z;
           revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 3);
-        } else if (
-          canDwarfStepThisTick(
-            dwarf,
-            { season: nextSeason, ticks: nextTicks, weatherOverride: state.weatherOverride },
-            currentDwarfTile,
-            nextTicks
-          )
-        ) {
-          dwarf.x += Math.sign(stairPos.x - dwarf.x);
-          dwarf.y += Math.sign(stairPos.y - dwarf.y);
+        }
+        dwarf.x = Math.max(0, Math.min(state.world.width - 1, nextPos.x));
+        dwarf.y = Math.max(0, Math.min(state.world.height - 1, nextPos.y));
+        if (nextPos.z === dwarf.z) {
+          revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 2);
         }
       }
-      return dwarf;
+    } else {
+      // No path or at goal — fall back to working
+      if (Math.max(Math.abs(task.x - dwarf.x), Math.abs(task.y - dwarf.y)) <= 1) {
+        // Close enough to work
+      } else {
+        // Path failed — recompute or fallback to old behavior
+        return dwarf;
+      }
     }
 
     const dist = Math.max(Math.abs(task.x - dwarf.x), Math.abs(task.y - dwarf.y));
     if (dist > 1) {
-      dwarf.state = 'MOVING';
-      if (
-        canDwarfStepThisTick(
-          dwarf,
-          { season: nextSeason, ticks: nextTicks, weatherOverride: state.weatherOverride },
-          currentDwarfTile,
-          nextTicks
-        )
-      ) {
-        const stepX = Math.sign(task.x - dwarf.x);
-        const stepY = Math.sign(task.y - dwarf.y);
-        dwarf.x = Math.max(0, Math.min(state.world.width - 1, dwarf.x + stepX));
-        dwarf.y = Math.max(0, Math.min(state.world.height - 1, dwarf.y + stepY));
-        revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 2);
-      }
       return dwarf;
     }
 
