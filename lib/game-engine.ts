@@ -41,6 +41,7 @@ import {
 import { findPath, nextStepAlongPath } from './pathfinding.ts';
 import { getWeapon, getArmor, weaponTier, armorTier } from './equipment.ts';
 import { getQuirkCombatModifiers } from './guild.ts';
+import { checkMentalBreak, getMentalBreakEntry, isMentalBreakOver, MENTAL_BREAK_INFO } from './mental-breaks.ts';
 import {
   createDefaultMilitiaState,
   ensureMilitiaState,
@@ -1520,6 +1521,52 @@ export function stepSimulationTick(state: GameState): GameState {
     }
     if (nextTicks % 35 === 0 && bedCount >= Math.ceil(state.dwarves.length / 2)) {
       dwarf.happiness = Math.min(100, dwarf.happiness + 1);
+    }
+
+    // Mental break system — dwarves can go mad when stressed
+    if (dwarf.mentalBreak) {
+      if (isMentalBreakOver(dwarf.mentalBreak, nextTicks)) {
+        // Break ended
+        const info = MENTAL_BREAK_INFO[dwarf.mentalBreak.type];
+        dwarf.mentalBreak = undefined;
+        dwarf.state = 'IDLE';
+        appendDwarfThought(dwarf, {
+          tick: nextTicks,
+          year: nextYear,
+          season: nextSeason,
+          text: `Regained composure after the ${info.name.toLowerCase()}.`,
+          category: 'FELLOWSHIP',
+          sentiment: 'POSITIVE',
+          moraleDelta: 3,
+        });
+      } else {
+        // Still in mental break
+        dwarf.state = 'MENTAL_BREAK';
+        return dwarf;
+      }
+    } else if (dwarf.happiness < 45) {
+      // Check if dwarf should have a mental break
+      const breakType = checkMentalBreak(dwarf, nextTicks);
+      if (breakType) {
+        const info = MENTAL_BREAK_INFO[breakType];
+        dwarf.mentalBreak = {
+          type: breakType,
+          startedAt: nextTicks,
+          duration: info.durationTicks,
+        };
+        dwarf.state = 'MENTAL_BREAK';
+        addLog(getMentalBreakEntry(dwarf, breakType, nextTicks, nextSeason, nextYear).text, 'ALERT');
+        appendDwarfThought(dwarf, {
+          tick: nextTicks,
+          year: nextYear,
+          season: nextSeason,
+          text: info.description,
+          category: 'FELLOWSHIP',
+          sentiment: 'NEGATIVE',
+          moraleDelta: -5,
+        });
+        return dwarf;
+      }
     }
 
     // 1. Check Militia Combat Intercept against Hostiles on the same Z-level

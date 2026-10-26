@@ -370,37 +370,61 @@ function FortressShell() {
 
         {/* Center: Live Resource Counters (scrollable on small screens) */}
         <div className="flex flex-wrap items-center gap-2 md:gap-2.5 tabular-nums text-xs overflow-x-auto max-w-full scrollbar-hide">
-          <div className="whitespace-nowrap shrink-0" title="Stone">
+          <div
+            className={`whitespace-nowrap shrink-0 ${gameState.resources.stone < 10 ? 'animate-pulse-danger text-[#ff0000]' : ''}`}
+            title="Stone"
+          >
             <span className="text-[#808080] text-[10px] mr-0.5">STN:</span>
-            <span className="text-[#ffffff] font-bold">{gameState.resources.stone}</span>
+            <span className="font-bold">{gameState.resources.stone}</span>
           </div>
-          <div className="whitespace-nowrap shrink-0" title="Timber / Wood">
+          <div
+            className={`whitespace-nowrap shrink-0 ${gameState.resources.wood < 8 ? 'animate-pulse-danger text-[#ff0000]' : ''}`}
+            title="Timber / Wood"
+          >
             <span className="text-[#808080] text-[10px] mr-0.5">WOD:</span>
             <span className="text-[#ff9900] font-bold">{gameState.resources.wood}</span>
           </div>
-          <div className="whitespace-nowrap shrink-0" title="Iron Ore">
+          <div
+            className={`whitespace-nowrap shrink-0 ${gameState.resources.ironOre < 3 ? 'animate-pulse-danger text-[#ff0000]' : ''}`}
+            title="Iron Ore"
+          >
             <span className="text-[#808080] text-[10px] mr-0.5">IRN:</span>
             <span className="text-[#ff9900] font-bold">{gameState.resources.ironOre}</span>
           </div>
-          <div className="hidden sm:block whitespace-nowrap shrink-0" title="Gold Ore">
+          <div
+            className={`hidden sm:block whitespace-nowrap shrink-0 ${gameState.resources.goldOre < 1 ? '' : ''}`}
+            title="Gold Ore"
+          >
             <span className="text-[#808080] text-[10px] mr-0.5">GLD:</span>
             <span className="text-[#ff0099] font-bold">{gameState.resources.goldOre}</span>
           </div>
-          <div className="whitespace-nowrap shrink-0" title="Steel Bars">
+          <div
+            className={`whitespace-nowrap shrink-0 ${gameState.resources.steelBars < 2 ? 'animate-pulse-danger text-[#ff0000]' : ''}`}
+            title="Steel Bars"
+          >
             <span className="text-[#808080] text-[10px] mr-0.5">STL:</span>
             <span className="text-[#00ffff] font-bold">{gameState.resources.steelBars}</span>
           </div>
-          <div className="hidden md:block whitespace-nowrap shrink-0" title="Weapons & Armor">
+          <div
+            className={`hidden md:block whitespace-nowrap shrink-0 ${gameState.resources.weapons + gameState.resources.armor < 2 ? 'animate-pulse-danger text-[#ff0000]' : ''}`}
+            title="Weapons & Armor"
+          >
             <span className="text-[#808080] text-[10px] mr-0.5">ARM:</span>
             <span className="text-[#ff9900] font-bold">
               {gameState.resources.weapons + gameState.resources.armor}
             </span>
           </div>
-          <div className="whitespace-nowrap shrink-0" title="Food Rations">
+          <div
+            className={`whitespace-nowrap shrink-0 ${gameState.resources.food < 15 ? 'animate-pulse-danger text-[#ff0000]' : gameState.resources.food < 25 ? 'text-[#ff9900]' : ''}`}
+            title="Food Rations"
+          >
             <span className="text-[#808080] text-[10px] mr-0.5">FOD:</span>
-            <span className="text-[#33ff00] font-bold">{gameState.resources.food}</span>
+            <span className="font-bold">{gameState.resources.food}</span>
           </div>
-          <div className="whitespace-nowrap shrink-0" title="Dwarven Ale">
+          <div
+            className={`whitespace-nowrap shrink-0 ${gameState.resources.ale < 10 ? 'animate-pulse-danger text-[#ff0000]' : ''}`}
+            title="Dwarven Ale"
+          >
             <span className="text-[#808080] text-[10px] mr-0.5">ALE:</span>
             <span className="text-[#cc00ff] font-bold">{gameState.resources.ale}</span>
           </div>
@@ -550,16 +574,16 @@ function FortressShell() {
 
       {/* Optional Save Feedback Toast */}
       {saveStatus && (
-        <div className="bg-[#101010] border-b border-[#ff0099] px-3 py-0.5 text-center text-xs text-[#ff0099]">
+        <div className="bg-[#101010] border-b border-[#ff0099] px-3 py-0.5 text-center text-xs text-[#ff0099] animate-slide-in-up">
           {saveStatus}
         </div>
       )}
 
       {/* Active Narrative Event Alert Banner */}
       {gameState.activeEvent && (
-        <div className="bg-[#101010] border-b border-[#ff0000] px-3 py-1 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+        <div className="bg-[#101010] border-b border-[#ff0000] px-3 py-1 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 animate-slide-in-up">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[#ff0000] font-bold whitespace-nowrap shrink-0">
+            <span className="text-[#ff0000] font-bold whitespace-nowrap shrink-0 animate-pulse-danger">
               [ ! {gameState.activeEvent.severity.replace('_', ' ')} ]
             </span>
             <span className="text-[#ffffff] font-bold truncate">

@@ -158,7 +158,10 @@ export interface DwarfEntity {
     | 'DRINKING'
     | 'SLEEPING'
     | 'FIGHTING'
-    | 'PRAYING';
+    | 'PRAYING'
+    | 'MENTAL_BREAK'
+    | 'INJURED'
+    | 'BRAWLING';
   currentTask?: {
     x: number;
     y: number;
@@ -180,6 +183,10 @@ export interface DwarfEntity {
   quirk?: DwarfQuirk;
   squadId?: MilitiaSquadId | null;
   patrolLeg?: 0 | 1;
+  // New: mental break, injury, brawler tracking
+  mentalBreak?: { type: 'DAZE' | 'TANTRUM' | 'FRENZY' | 'FEAR'; startedAt: number; duration: number };
+  injury?: { severity: number; ticksToHeal: number };
+  brawlerTarget?: string;
 }
 
 export type MilitiaSquadId = 'squad-1' | 'squad-2';
