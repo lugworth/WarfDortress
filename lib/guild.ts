@@ -1,7 +1,9 @@
 import type {
   Civilization,
   Commission,
+  DwarfEntity,
   DwarfQuirk,
+  FortressResources,
   GameState,
   GuildAction,
   GuildState,
@@ -306,4 +308,117 @@ export function performGuildAction(
   }
 
   return { nextState: state, success: false };
+}
+
+/**
+ * Apply dwarf quirk modifiers to combat effectiveness.
+ * Returns multipliers for attack and defense.
+ */
+export function getQuirkCombatModifiers(quirk: DwarfQuirk | undefined): {
+  attackMultiplier: number;
+  defenseMultiplier: number;
+} {
+  if (!quirk) return { attackMultiplier: 1.0, defenseMultiplier: 1.0 };
+
+  switch (quirk) {
+    case 'HOTHEAD':
+      return { attackMultiplier: 1.25, defenseMultiplier: 0.9 };
+    case 'IRON_BORN':
+      return { attackMultiplier: 1.15, defenseMultiplier: 1.05 };
+    case 'DEEP_MINER':
+      return { attackMultiplier: 1.05, defenseMultiplier: 1.1 };
+    default:
+      return { attackMultiplier: 1.0, defenseMultiplier: 1.0 };
+  }
+}
+
+/**
+ * Apply dwarf quirk modifiers to work speed.
+ * Returns a speed multiplier (higher = faster).
+ */
+export function getQuirkWorkSpeed(
+  quirk: DwarfQuirk | undefined,
+  labor: string,
+  depth: number
+): number {
+  if (!quirk) return 1.0;
+
+  switch (quirk) {
+    case 'DEEP_MINER':
+      if (labor === 'MINING' && depth >= 2) {
+        return 1.25;
+      }
+      if (labor === 'MINING') {
+        return 1.1;
+      }
+      return 1.0;
+    case 'IRON_BORN':
+      if (labor === 'SMITHING') {
+        return 1.2;
+      }
+      return 1.0;
+    case 'SCHOLAR':
+      if (labor === 'FARMING') {
+        return 1.15;
+      }
+      return 0.95;
+    default:
+      return 1.0;
+  }
+}
+
+/**
+ * Apply dwarf quirk modifiers to morale.
+ * Returns a morale delta based on fortress conditions.
+ */
+export function getQuirkMoraleModifier(
+  quirk: DwarfQuirk | undefined,
+  resources: FortressResources,
+  depth: number,
+  tavernCount: number
+): number {
+  if (!quirk) return 0;
+
+  switch (quirk) {
+    case 'GREEDY':
+      if (resources.wealth >= 1000) {
+        return 5;
+      }
+      return -3;
+    case 'DEEP_MINER':
+      if (depth >= 2) {
+        return 3;
+      }
+      return -2;
+    case 'DRUNKARD':
+      if (tavernCount > 0) {
+        return 4;
+      }
+      return -3;
+    case 'LONER':
+      return 0; // No penalty for being alone
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Apply dwarf quirk modifiers to production value.
+ * Returns a multiplier for wealth generated from crafted goods.
+ */
+export function getQuirkProductionModifier(
+  quirk: DwarfQuirk | undefined,
+  workshop: string
+): number {
+  if (!quirk) return 1.0;
+
+  switch (quirk) {
+    case 'IRON_BORN':
+      if (workshop === 'WORKSHOP_FORGE' || workshop === 'WORKSHOP_SMELTER') {
+        return 1.2;
+      }
+      return 1.0;
+    default:
+      return 1.0;
+  }
 }

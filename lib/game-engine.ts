@@ -40,6 +40,7 @@ import {
 } from './weather.ts';
 import { findPath, nextStepAlongPath } from './pathfinding.ts';
 import { getWeapon, getArmor, weaponTier, armorTier } from './equipment.ts';
+import { getQuirkCombatModifiers } from './guild.ts';
 import {
   createDefaultMilitiaState,
   ensureMilitiaState,
@@ -1518,8 +1519,9 @@ export function stepSimulationTick(state: GameState): GameState {
           dwarf.state = 'FIGHTING';
           const weapon = getWeapon(dwarf.weaponType || (dwarf.weaponEquipped ? 'IRON_AXE' : 'BARE_FISTS'));
           const enemyArmor = getArmor(targetHostile.armorType || 'LEATHER');
+          const quirkMods = getQuirkCombatModifiers(dwarf.quirk);
           const baseDmg = weapon.attackDamage + ((dwarf.skills.COMBAT || 1) * 2);
-          const dmg = Math.floor(baseDmg * enemyArmor.defense) + squadMods.cohesionAttackBonus + squadMods.patrolAttackBonus;
+          const dmg = Math.floor(baseDmg * quirkMods.attackMultiplier * enemyArmor.defense) + squadMods.cohesionAttackBonus + squadMods.patrolAttackBonus;
           targetHostile.hp -= dmg;
           const wallShield = wallCount >= 4 ? 0.85 : 1;
           const incomingDmg = Math.max(
@@ -1527,11 +1529,12 @@ export function stepSimulationTick(state: GameState): GameState {
             Math.round(
               targetHostile.attack *
                 getArmor(dwarf.armorType || (dwarf.armorEquipped ? 'IRON_MAIL' : 'LEATHER')).defense *
+                quirkMods.defenseMultiplier *
                 wallShield *
                 squadMods.stationDefenseMultiplier
             )
           );
-          dwarf.hp = Math.max(20, dwarf.hp - incomingDmg);
+          dwarf.hp -= incomingDmg;
 
           if (targetHostile.hp <= 0) {
             dwarf.kills = (dwarf.kills || 0) + 1;
@@ -1551,16 +1554,23 @@ export function stepSimulationTick(state: GameState): GameState {
               `[VICTORY] ${dwarf.name} (${squadMods.tacticalNote}) slew ${targetHostile.name} at (${targetHostile.x}, ${targetHostile.y}, Z-${dwarf.z}) (+65 Wealth)!`,
               'COMBAT'
             );
-          } else {
+          }
+
+          // Check if dwarf died in combat
+          if (dwarf.hp <= 0) {
             appendDwarfThought(dwarf, {
               tick: nextTicks,
               year: nextYear,
               season: nextSeason,
-              text: `Trading blows with ${targetHostile.name} (${squadMods.tacticalNote})!`,
+              text: `Fell in glorious combat against ${targetHostile.name}...`,
               category: 'COMBAT',
-              sentiment: 'NEGATIVE',
-              moraleDelta: 0,
+              sentiment: 'TERRIFIED',
+              moraleDelta: -10,
             });
+            addLog(
+              `☠ ${dwarf.name} fell in combat against ${targetHostile.name} at Z-${dwarf.z}. A monument shall be raised.`,
+              'COMBAT'
+            );
           }
           return dwarf;
         } else {
