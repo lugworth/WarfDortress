@@ -55,7 +55,18 @@ function FortressShell() {
   const [customSeedInput, setSeedInput] = useState<string | null>(null);
   const seedInput = customSeedInput ?? gameState.world.seed ?? 'Khazad-251';
   const [isEmbarking, setIsEmbarking] = useState(false);
-  const [panel, setPanel] = useState<'clan' | 'lore' | null>(null);
+  const [panels, setPanels] = useState({ clan: false, chronicle: false });
+  const showMap = () => setPanels({ clan: false, chronicle: false });
+  const togglePanel = (panel: 'clan' | 'chronicle') => {
+    const narrow = window.matchMedia('(max-width: 1023px)').matches;
+    setPanels(current => {
+      if (narrow) {
+        const visible = panel === 'chronicle' ? current.chronicle : current.clan && !current.chronicle;
+        return { clan: panel === 'clan' && !visible, chronicle: panel === 'chronicle' && !visible };
+      }
+      return { ...current, [panel]: !current[panel] };
+    });
+  };
   const { openOverlay } = useUI();
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
@@ -315,26 +326,34 @@ function FortressShell() {
   // PLAYING SCREEN
   return (
     <div className="game-shell">
-      <GameHeader panel={panel} onPanel={setPanel}
+      <GameHeader clanOpen={panels.clan} chronicleOpen={panels.chronicle}
+        onShowMap={showMap} onToggleClan={() => togglePanel('clan')} onToggleChronicle={() => togglePanel('chronicle')}
         onGuild={() => setIsGuildModalOpen(true)} onTrade={() => setIsTradeModalOpen(true)}
         onDecree={() => {
           if (!gameState.activeEvent) triggerNarrativeEvent(undefined, true);
           setIsEventModalOpen(true);
         }} />
       {saveStatus && <div className="save-feedback" role="status">{saveStatus}</div>}
-      <div className="game-workspace">
-        {panel && <aside className="workspace-sidebar" aria-label={panel === 'clan' ? 'Clan and orders' : 'Chronicle and advisor'}>
+      <div className="game-workspace" data-chronicle-open={panels.chronicle}>
+        {panels.clan && <aside id="clan-panel" className="workspace-sidebar workspace-sidebar--left" aria-label="Clan and orders">
           <div className="workspace-sidebar-heading">
-            <strong>{panel === 'clan' ? 'Clan & orders' : 'Chronicle'}</strong>
-            <button onClick={() => setPanel(null)} aria-label="Close side panel">×</button>
+            <strong>Clan & orders</strong>
+            <button onClick={() => setPanels(current => ({ ...current, clan: false }))} aria-label="Close clan panel">×</button>
           </div>
-          {panel === 'clan' ? <Sidebar /> : <AdvisorPanel />}
+          <Sidebar />
         </aside>}
-        <main className="game-map" data-panel-open={Boolean(panel)} aria-label="Fortress map workspace">
+        <main className="game-map" data-panel-open={panels.clan || panels.chronicle} aria-label="Fortress map workspace">
           <ASCIIViewport />
         </main>
+        {panels.chronicle && <aside id="chronicle-panel" className="workspace-sidebar workspace-sidebar--right" aria-label="Chronicle and advisor">
+          <div className="workspace-sidebar-heading">
+            <strong>Chronicle</strong>
+            <button onClick={() => setPanels(current => ({ ...current, chronicle: false }))} aria-label="Close chronicle panel">×</button>
+          </div>
+          <AdvisorPanel />
+        </aside>}
       </div>
-      <UIOverlay onShowMap={() => setPanel(null)} />
+      <UIOverlay onShowMap={showMap} />
 
       {/* Narrative Event & Decree Modal */}
       <NarrativeEventModal

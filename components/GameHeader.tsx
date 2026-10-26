@@ -3,26 +3,20 @@
 import { useEffect, useRef } from 'react';
 import { useGame } from './GameProvider';
 import { useUI } from './UIProvider';
-import { getCurrentWeather } from '@/lib/weather';
 import { getFortressProgression } from '@/lib/progression';
-import type { FortressResources } from '@/lib/types';
 
 interface Props {
-  panel: 'clan' | 'lore' | null;
-  onPanel: (panel: 'clan' | 'lore' | null) => void;
+  clanOpen: boolean;
+  chronicleOpen: boolean;
+  onShowMap: () => void;
+  onToggleClan: () => void;
+  onToggleChronicle: () => void;
   onGuild: () => void;
   onTrade: () => void;
   onDecree: () => void;
 }
 
-const resources: { key: keyof FortressResources; label: string; color?: string }[] = [
-  { key: 'food', label: 'Food' }, { key: 'ale', label: 'Ale', color: '#cc00ff' },
-  { key: 'stone', label: 'Stone' }, { key: 'wood', label: 'Wood', color: '#ff9900' },
-  { key: 'ironOre', label: 'Iron', color: '#ff9900' }, { key: 'steelBars', label: 'Steel', color: '#00ffff' },
-  { key: 'wealth', label: 'Wealth', color: '#ff0099' },
-];
-
-export default function GameHeader({ panel, onPanel, onGuild, onTrade, onDecree }: Props) {
+export default function GameHeader({ clanOpen, chronicleOpen, onShowMap, onToggleClan, onToggleChronicle, onGuild, onTrade, onDecree }: Props) {
   const { gameState: state, togglePause, stepManualTick, setSpeed, handleCloudSave, setScreen } = useGame();
   const { openOverlay } = useUI();
   const menu = useRef<HTMLDetailsElement>(null);
@@ -43,7 +37,6 @@ export default function GameHeader({ panel, onPanel, onGuild, onTrade, onDecree 
       document.removeEventListener('keydown', onKey);
     };
   }, []);
-  const weather = getCurrentWeather(state);
   const rank = getFortressProgression(state).currentRank;
   const menuAction = (action: () => void) => {
     if (menu.current) menu.current.open = false;
@@ -53,7 +46,7 @@ export default function GameHeader({ panel, onPanel, onGuild, onTrade, onDecree 
     <header className="game-header">
       <div className="game-command-row">
         <div className="fortress-identity">
-          <span className="fortress-mark" aria-hidden="true">⌂</span>
+          <span className="fortress-mark" aria-hidden="true" title="Dwarven warforge">⚒︎</span>
           <div className="min-w-0">
             <h1>{state.world.dwarvenName}</h1>
             <p>{rank.title}<span className="identity-calendar"> · Y{state.year} · {state.season} · T{state.ticks}</span></p>
@@ -83,23 +76,15 @@ export default function GameHeader({ panel, onPanel, onGuild, onTrade, onDecree 
           </details>
         </div>
       </div>
-      <div className="game-resource-row" aria-label="Fortress supplies">
-        <span className="population-stat" title="Dwarf population">☺ <strong>{state.dwarves.length}</strong></span>
-        {resources.map(({ key, label, color }) => {
-          const low = (key === 'food' || key === 'ale') && state.resources[key] < state.dwarves.length * 2;
-          return <span key={key} className={`resource-stat${low ? ' resource-low' : ''}`} title={low ? `${label} supplies are low` : label}>
-            <span>{label}</span><strong style={low ? undefined : { color }}>{state.resources[key]}</strong>{low && <span aria-label="Low supplies">!</span>}
-          </span>;
-        })}
-        <span className="weather-stat" style={{ color: weather.color }} title={weather.summary}>{weather.glyph} {weather.shortLabel} {weather.surfaceTempF}°F</span>
-      </div>
       <div className="workspace-nav">
         <div className="workspace-tabs" role="group" aria-label="Workspace panels">
-          <button aria-pressed={panel === null} onClick={() => onPanel(null)}>Map</button>
-          <button aria-pressed={panel === 'clan'} onClick={() => onPanel(panel === 'clan' ? null : 'clan')}>Clan & orders</button>
-          <button aria-pressed={panel === 'lore'} onClick={() => onPanel(panel === 'lore' ? null : 'lore')}>Chronicle</button>
+          <button aria-pressed={!clanOpen && !chronicleOpen} onClick={onShowMap}>Map</button>
+          <button aria-expanded={clanOpen} aria-controls="clan-panel" onClick={onToggleClan}>Clan & orders</button>
         </div>
-        <button className="command-search" onClick={() => openOverlay('commands')}>Find command <kbd>/</kbd></button>
+        <div className="workspace-actions">
+          <button className="command-search" onClick={() => openOverlay('commands')}>Find command <kbd>/</kbd></button>
+          <button className="workspace-panel-toggle" aria-expanded={chronicleOpen} aria-controls="chronicle-panel" onClick={onToggleChronicle}>Chronicle</button>
+        </div>
       </div>
       {state.activeEvent && <button className={`event-notice ${state.activeEvent.severity === 'MAJOR_CRISIS' ? 'event-danger' : ''}`}
         onClick={onDecree}>

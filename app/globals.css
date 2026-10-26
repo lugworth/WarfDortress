@@ -486,16 +486,18 @@
 .fortress-menu nav { position: absolute; top: calc(100% + 8px); right: 0; width: 210px; padding: 8px; background: var(--ui-panel); border: 1px solid var(--ui-border); border-radius: 0; z-index: 60; box-shadow: 0 12px 32px #0008; }
 .game-header .fortress-menu nav button { display: flex; justify-content: flex-start; border: 0; width: 100%; padding: 10px 12px; }
 .fortress-menu hr { border-color: var(--ui-border); margin: 6px 0; }
-.game-resource-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 22px; padding: 0 22px 14px; font-size: 12px; }
-.resource-stat { display: inline-flex; gap: 8px; color: var(--ui-muted); align-items: baseline; }
+.map-supplies { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 25; width: max-content; max-width: calc(100% - 24px); padding: 10px 14px; border: 1px solid var(--ui-border); background: var(--ui-panel); box-shadow: 0 6px 20px #000b; }
+.map-resource-row { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; }
+.resource-stat { display: inline-flex; gap: 8px; color: var(--ui-muted); align-items: baseline; white-space: nowrap; }
 .resource-stat strong, .population-stat strong { color: var(--ui-text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .resource-low, .resource-low strong { color: var(--ui-warning); }
 .population-stat { border-right: 1px solid var(--ui-border); padding-right: 18px; color: var(--ui-muted); }
-.weather-stat { margin-left: auto; color: var(--ui-muted); font-size: 11px; }
+.resource-weather { color: var(--ui-muted); font-size: 11px; white-space: nowrap; }
 .workspace-nav { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--ui-border); padding: 0 22px; gap: 12px; }
 .workspace-tabs { display: flex; gap: 20px; }
-.game-header .workspace-tabs button { min-height: 44px; border: 0; border-radius: 0; padding: 10px 0; border-bottom: 2px solid transparent; color: var(--ui-muted); }
-.game-header .workspace-tabs button[aria-pressed="true"] { color: var(--ui-text); border-bottom-color: var(--ui-accent); }
+.workspace-actions { display: flex; align-items: center; gap: 24px; margin-left: auto; }
+.game-header .workspace-tabs button, .game-header .workspace-panel-toggle { min-height: 44px; border: 0; border-radius: 0; padding: 10px 0; border-bottom: 2px solid transparent; color: var(--ui-muted); }
+.game-header .workspace-tabs button[aria-pressed="true"], .game-header .workspace-tabs button[aria-expanded="true"], .game-header .workspace-panel-toggle[aria-expanded="true"] { color: var(--ui-text); border-bottom-color: var(--ui-accent); }
 .game-header .command-search { border: 0; font-size: 11px; color: var(--ui-muted); gap: 10px; padding: 4px 0; }
 .game-header .event-notice { width: 100%; border: 0; border-top: 1px solid var(--ui-border); border-radius: 0; display: flex; justify-content: flex-start; gap: 12px; padding: 9px 22px; background: var(--ui-panel); color: var(--ui-warning); font-size: 11px; text-align: left; }
 .event-notice-label { flex-shrink: 0; font-weight: 700; }
@@ -503,6 +505,8 @@
 .game-header .event-danger { background: var(--ui-panel); color: var(--ui-danger); border-color: var(--ui-danger); }
 .game-workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .workspace-sidebar { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--ui-border); background: var(--ui-panel); }
+.workspace-sidebar--right { border-right: 0; border-left: 1px solid var(--ui-border); }
+.workspace-sidebar--right > aside { border-left: 0; }
 .workspace-sidebar > aside, .workspace-sidebar > div:last-child { flex: 1; min-height: 0; }
 .workspace-sidebar-heading { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--ui-border); font-size: 12px; }
 .workspace-sidebar-heading button { padding: 0 9px; color: var(--ui-muted); }
@@ -516,10 +520,10 @@
 .map-stage { position: relative; flex: 1; min-height: 0; min-width: 0; overflow: auto; background: #000; isolation: isolate; }
 .map-status { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 18px; border-top: 1px solid var(--ui-border); color: var(--ui-muted); font-size: 11px; min-width: 0; }
 .map-terrain-readout { flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.designation-toolbar { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 25; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100% - 24px); padding: 10px; border: 1px solid var(--ui-border); background: var(--ui-panel); box-shadow: 0 6px 20px #000b; }
-.fortress-ui .designation-toolbar button { justify-content: center; min-height: 38px; padding: 8px 12px; font-size: 12px; border-color: var(--ui-border); background: transparent; box-shadow: none; transform: none; color: var(--ui-text); }
+.designation-toolbar { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 25; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100% - 24px); padding: 0; border: 0; background: transparent; box-shadow: none; pointer-events: none; }
+.fortress-ui .designation-toolbar button { pointer-events: auto; justify-content: center; min-height: 38px; padding: 8px 12px; font-size: 12px; border-color: var(--ui-border); background: var(--ui-panel); box-shadow: none; transform: none; color: var(--ui-text); }
 .fortress-ui .designation-toolbar button[aria-pressed="true"], .fortress-ui .designation-toolbar button[aria-expanded="true"] { border-color: var(--ui-accent); background: var(--ui-selection); color: var(--ui-bright); }
-.fortress-ui .map-context-card { max-width: calc(100% - 24px); max-height: calc(100% - var(--tool-dock-height, 62px) - 36px); overflow-y: auto; border: 1px solid var(--ui-border); border-radius: 0; background: var(--ui-panel); padding: 16px; box-shadow: 0 8px 28px #0008; }
+.fortress-ui .map-context-card { max-width: calc(100% - 24px); max-height: calc(100% - var(--tool-dock-height, 62px) - var(--supplies-hud-height, 42px) - 60px); overflow-y: auto; border: 1px solid var(--ui-border); border-radius: 0; background: var(--ui-panel); padding: 16px; box-shadow: 0 8px 28px #0008; }
 .compact-tile-tooltip { position: absolute; bottom: calc(var(--tool-dock-height, 62px) + 24px); right: 12px; pointer-events: none; z-index: 20; width: 210px; max-width: calc(100% - 24px); padding: 8px 10px; border: 1px solid var(--ui-accent); border-radius: 0; background: var(--ui-panel); box-shadow: 0 4px 14px #0005; }
 .compact-tile-tooltip > div { display: flex; align-items: baseline; gap: 6px; font-size: 10px; }
 .compact-tile-tooltip strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ui-bright); }
@@ -540,23 +544,26 @@
 .fortress-ui .narrative-choice { padding: 16px; }
 @media (max-width: 1023px) {
   .workspace-sidebar { width: 100%; border: 0; }
+  .game-workspace[data-chronicle-open="true"] .workspace-sidebar--left { display: none; }
   .game-map[data-panel-open="true"] { display: none; }
 }
 @media (max-width: 640px) {
   .game-command-row { padding: 12px; gap: 10px; flex-wrap: wrap; }
   .fortress-identity { flex: 1; }
   .fortress-identity h1 { font-size: 14px; }
-  .identity-calendar, .step-control, .weather-stat, .map-terrain-readout { display: none !important; }
+  .identity-calendar, .step-control, .map-terrain-readout { display: none !important; }
   .simulation-controls { flex-wrap: wrap; gap: 6px; }
   .game-header .speed-controls button { padding: 4px 6px; }
   .game-header :is(button, summary) { padding: 6px 10px; font-size: 11px; }
   .game-header .play-control { min-width: 86px; }
-  .game-resource-row { padding: 2px 12px 12px; gap: 8px 14px; font-size: 11px; }
+  .map-supplies { padding: 8px 10px; }
+  .map-resource-row { gap: 6px 12px; font-size: 11px; }
   .population-stat { padding-right: 10px; }
   .resource-stat { gap: 5px; }
   .workspace-nav { padding: 0 12px; gap: 8px; }
   .workspace-tabs { gap: 16px; }
-  .game-header .workspace-tabs button { padding: 8px 0; }
+  .workspace-actions { gap: 16px; }
+  .game-header .workspace-tabs button, .game-header .workspace-panel-toggle { padding: 8px 0; }
   .game-header .command-search { font-size: 0; gap: 0; }
   .game-header .command-search kbd { font-size: 12px; padding: 4px 8px; }
   .game-header .event-notice { padding: 8px 12px; gap: 8px; }
@@ -566,7 +573,7 @@
   .map-topbar > button:last-child { margin-left: auto; padding: 6px 8px; font-size: 11px; }
   .map-depth-controls { gap: 4px; min-width: 0; }
   .map-status { padding: 7px 12px; font-size: 10px; }
-  .designation-toolbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(520px, calc(100% - 24px)); gap: 6px; padding: 8px; }
+  .designation-toolbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(520px, calc(100% - 24px)); gap: 6px; padding: 0; }
   .fortress-ui .designation-toolbar button { padding: 6px 4px; min-width: 0; min-height: 36px; font-size: 11px; gap: 4px; }
   .designation-toolbar button > span.text-\[9px\], .designation-toolbar button > span.text-\[10px\] { display: none; }
   .compact-tile-tooltip { width: 190px; padding: 6px 8px; right: 8px; }
@@ -589,7 +596,8 @@
 }
 
 .game-header .play-control[aria-pressed="true"] { color: var(--ui-success); border-color: var(--ui-border); background: var(--ui-bg); }
-/* Keep expanded cards above the floating tools, including when the dock wraps. */
+/* Keep expanded cards clear of both floating bars when either wraps. */
+.fortress-ui .map-context-card.top-2 { top: calc(var(--supplies-hud-height, 42px) + 24px); }
 .fortress-ui .map-context-card.bottom-2 { bottom: calc(var(--tool-dock-height, 62px) + 24px); }
 .fortress-ui .map-context-card[data-testid="workshops-build-drawer"] {
   position: fixed;

@@ -26,6 +26,7 @@ import { formatCost, getTool } from "@/lib/tool-catalog";
 import { TOOL_NAMES } from "@/lib/ui-labels";
 import { useUI } from "./UIProvider";
 import AsciiSelect from "./AsciiSelect";
+import FortressSupplies from "./FortressSupplies";
 import { playTactileSfx } from "@/lib/audio";
 import { getWeatherTileVisuals } from "@/lib/weather";
 import {
@@ -129,6 +130,8 @@ export default function ASCIIViewport() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const suppliesRef = useRef<HTMLDivElement>(null);
+  const [suppliesHeight, setSuppliesHeight] = useState(42);
   const [dockHeight, setDockHeight] = useState(62);
   const panOrigin = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -272,9 +275,13 @@ export default function ASCIIViewport() {
   useEffect(() => {
     const toolbar = toolbarRef.current;
     if (!toolbar) return;
-    const update = () => setDockHeight(toolbar.offsetHeight);
+    const update = () => {
+      setDockHeight(toolbar.offsetHeight);
+      if (suppliesRef.current) setSuppliesHeight(suppliesRef.current.offsetHeight);
+    };
     const observer = new ResizeObserver(update);
     observer.observe(toolbar);
+    if (suppliesRef.current) observer.observe(suppliesRef.current);
     update();
     return () => observer.disconnect();
   }, []);
@@ -1076,7 +1083,8 @@ export default function ASCIIViewport() {
           Map options {mapOptions ? '−' : '+'}
         </button>
       </div>
-      <div className="map-surface" style={{ '--tool-dock-height': `${dockHeight}px` } as React.CSSProperties}>
+      <div className="map-surface" style={{ '--tool-dock-height': `${dockHeight}px`, '--supplies-hud-height': `${suppliesHeight}px` } as React.CSSProperties}>
+      <div ref={suppliesRef} className="map-supplies"><FortressSupplies /></div>
       <div className="map-stage" ref={scrollRef}>
       {/* Full-Container Auto-Scaled ASCII Canvas (Zero Scrollbars) */}
       <canvas

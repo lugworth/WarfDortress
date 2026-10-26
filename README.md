@@ -23,8 +23,11 @@ Google sign-in and cloud archives use the project's Firebase configuration.
 - Space pauses or resumes. Selecting a speed preserves the current pause state.
 - `/` opens command search. `I` opens inspection. Escape cancels or closes.
 - `[` and `]` change depth. Arrow keys inspect; Shift+arrows select an area.
-- Mine, Chop, Gather, Stairs, and Stockpile stay in the floating tool bar.
+- Supplies and weather float over the top of the map.
+- Mine, Chop, Gather, Stairs, and Stockpile stay in the floating tool bar at the bottom.
   Build contains construction, workshop, and defense tools.
+- Clan & orders opens the left panel; Chronicle at the far right opens its own
+  right panel. Both can stay open on desktop. On small screens, panels fill the workspace.
 - Map options contains labels, compact tooltips, panning, and quick orders.
   Display settings in Menu controls text size, map zoom, and accessibility.
 
