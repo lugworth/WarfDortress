@@ -20,5 +20,7 @@ export const TOOL_NAMES: Record<DesignationType, string> = {
   BUILD_TEMPLE: "Temple Altar",
   BUILD_DEPOT: "Trade Depot",
   BUILD_FARM: "Plump Helmet Farm",
+  MILITIA_STATION: "Station Militia Squad",
+  MILITIA_PATROL: "Patrol Militia Route",
   CANCEL: "Cancel Orders",
 };

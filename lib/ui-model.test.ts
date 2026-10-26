@@ -710,3 +710,132 @@ test("tooltip toggle preference, configured migrant jobs, resource economy balan
     state = actRes.nextState;
   }
 });
+
+test("thought log IDs stay strictly unique past MAX_THOUGHT_LOG_ENTRIES cap and AI-driven Goblin raid combat & militia squads work deterministically", async () => {
+  const { appendDwarfThought, collectClanAnecdotes } = await import("./thoughts.ts");
+  const {
+    ensureMilitiaState,
+    performMilitiaAction,
+    spawnTacticalGoblinRaid,
+    getSquadCombatModifiers,
+    getSquadOrderDestination,
+  } = await import("./militia.ts");
+  const { applyAreaDesignation, stepSimulationTick } = await import("./game-engine.ts");
+
+  let state = createInitialGameState("Militia-And-Thought-Key-Test");
+
+  // 1. Regression test for duplicate key `th-dwarf-4-180-16` when log reaches 16 entries
+  const dwarf4 = state.dwarves.find((d) => d.id === "dwarf-4") || state.dwarves[0];
+  for (let i = 0; i < 25; i++) {
+    appendDwarfThought(dwarf4, {
+      tick: 180,
+      year: state.year,
+      season: state.season,
+      text: `Recorded unique memory #${i} during tick 180.`,
+      category: "AMBIENT_HALL",
+      sentiment: "POSITIVE",
+      moraleDelta: 1,
+    });
+  }
+  const ids = (dwarf4.thoughtLog || []).map((e) => e.id);
+  const uniqueIds = new Set(ids);
+  assert.equal(ids.length, 16, "Thought log should be capped at 16 entries");
+  assert.equal(uniqueIds.size, ids.length, "Every thought log entry ID must be strictly unique");
+
+  const anecdotes = collectClanAnecdotes(state.dwarves);
+  const anecdoteIds = new Set(anecdotes.map((a) => a.id));
+  assert.equal(anecdoteIds.size, anecdotes.length, "All clan anecdote IDs must be strictly unique");
+
+  // 2. Militia Squad assignments & Armory equipment
+  const initialMilitia = ensureMilitiaState(state);
+  assert.equal(Object.keys(initialMilitia.squads).length, 2);
+  const combatDwarf = state.dwarves.find((d) => d.labors.COMBAT)!;
+  assert.equal(combatDwarf.squadId, "squad-1");
+
+  const assignRes = performMilitiaAction(state, {
+    type: "ASSIGN_DWARF_SQUAD",
+    dwarfId: state.dwarves[2].id,
+    squadId: "squad-2",
+  });
+  assert.equal(assignRes.success, true);
+  state = assignRes.nextState;
+  assert.equal(state.dwarves[2].squadId, "squad-2");
+  assert.equal(state.dwarves[2].labors.COMBAT, true);
+
+  // Equip squad-2 from armory
+  state.resources.weapons = 4;
+  state.resources.armor = 4;
+  const equipRes = performMilitiaAction(state, {
+    type: "EQUIP_SQUAD_ARMORY",
+    squadId: "squad-2",
+  });
+  assert.equal(equipRes.success, true);
+  state = equipRes.nextState;
+  assert.equal(state.dwarves[2].weaponEquipped, true);
+  assert.equal(state.dwarves[2].armorEquipped, true);
+
+  // 3. Issue MILITIA_STATION and MILITIA_PATROL orders via ASCII map designation
+  state = performMilitiaAction(state, { type: "SELECT_SQUAD", squadId: "squad-1" }).nextState;
+  const cx = Math.floor(state.world.width / 2);
+  const cy = Math.floor(state.world.height / 2);
+  terrain(state, 0, cx - 4, cy, "ROCK_FLOOR", true);
+  const stationRes = applyAreaDesignation(
+    state,
+    0,
+    cx - 4,
+    cy,
+    cx - 4,
+    cy,
+    "MILITIA_STATION",
+  );
+  assert.equal(stationRes.count, 1);
+  state = stationRes.nextState;
+  const squad1AfterStation = ensureMilitiaState(state).squads["squad-1"];
+  assert.equal(squad1AfterStation.order.type, "STATION");
+  assert.equal(squad1AfterStation.order.x, cx - 4);
+  assert.equal(squad1AfterStation.order.y, cy);
+  assert.equal(squad1AfterStation.order.z, 0);
+
+  // Verify squad combat modifiers and destination when stationed near target
+  const stationedMember = state.dwarves.find((d) => d.squadId === "squad-1")!;
+  stationedMember.x = cx - 4;
+  stationedMember.y = cy;
+  stationedMember.z = 0;
+  const mods = getSquadCombatModifiers(
+    state.dwarves,
+    stationedMember,
+    ensureMilitiaState(state),
+  );
+  assert.equal(mods.stationDefenseMultiplier, 0.75, "Stationed squad member should gain -25% damage shield-wall multiplier");
+
+  // Select squad-2 and designate a MILITIA_PATROL route on the map
+  state = performMilitiaAction(state, { type: "SELECT_SQUAD", squadId: "squad-2" }).nextState;
+  terrain(state, 0, cx - 6, cy - 2, "ROCK_FLOOR", true);
+  terrain(state, 0, cx + 6, cy + 2, "ROCK_FLOOR", true);
+  const patrolRes = applyAreaDesignation(
+    state,
+    0,
+    cx - 6,
+    cy - 2,
+    cx + 6,
+    cy + 2,
+    "MILITIA_PATROL",
+  );
+  assert.ok(patrolRes.count >= 1);
+  state = patrolRes.nextState;
+  const squad2AfterPatrol = ensureMilitiaState(state).squads["squad-2"];
+  assert.equal(squad2AfterPatrol.order.type, "PATROL");
+  const dest = getSquadOrderDestination(state.dwarves[2], squad2AfterPatrol, 0);
+  assert.ok(dest, "Patrolling squad member should have an active patrol waypoint");
+
+  // 4. Spawn AI-driven Tactical Goblin Raid and step simulation combat
+  const beforeHostiles = state.hostiles.length;
+  state = spawnTacticalGoblinRaid(state);
+  assert.ok(state.hostiles.length > beforeHostiles, "Tactical Goblin raid should spawn raiders");
+  assert.ok(ensureMilitiaState(state).activeRaidPlan, "Active AI raid battle plan should be recorded");
+  assert.ok(state.hostiles.some((h) => Boolean(h.tactic) && Boolean(h.targetCoord)));
+
+  state = stepSimulationTick(state);
+  assert.ok(state.dwarves.length > 0);
+});
+

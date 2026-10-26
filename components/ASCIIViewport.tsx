@@ -33,6 +33,7 @@ import {
   getBuildingUnlockStatus,
   getBuildingUnlockStatuses,
 } from "@/lib/progression";
+import { ensureMilitiaState } from "@/lib/militia";
 
 
 const PRIMARY_FAB_TOOLS: Array<{
@@ -50,6 +51,8 @@ const PRIMARY_FAB_TOOLS: Array<{
   { id: "BUILD_DOOR", shortLabel: "Door", hotkey: "O", accent: "text-[#ff9900]" },
   { id: "BUILD_TRAP", shortLabel: "Trap", hotkey: "E", accent: "text-[#ff0000]" },
   { id: "BUILD_FARM", shortLabel: "Farm", hotkey: "A", accent: "text-[#33ff00]" },
+  { id: "MILITIA_STATION", shortLabel: "Station", hotkey: "J", accent: "text-[#ff0000]" },
+  { id: "MILITIA_PATROL", shortLabel: "Patrol", hotkey: "N", accent: "text-[#00ffff]" },
 ];
 
 const SECONDARY_FAB_TOOLS: Array<{
@@ -93,6 +96,8 @@ const DESIGNATION_BADGE: Record<
   BUILD_TEMPLE: { char: "Ψ", color: ISOTOPE.base0A },
   BUILD_DEPOT: { char: "¤", color: ISOTOPE.base0C },
   BUILD_FARM: { char: "≈", color: ISOTOPE.base0B },
+  MILITIA_STATION: { char: "♦", color: ISOTOPE.base08 },
+  MILITIA_PATROL: { char: "»", color: ISOTOPE.base0C },
   CANCEL: { char: " ", color: ISOTOPE.base08 },
 };
 
@@ -597,6 +602,42 @@ export default function ASCIIViewport() {
       ctx.strokeStyle = "#00ffff";
       ctx.lineWidth = 2;
       ctx.strokeRect(px - 2, py - 2, CELL_W + 4, CELL_H + 4);
+    }
+
+    // 5b. Render Active Militia Squad Station / Patrol Orders on current Z-level
+    const militia = ensureMilitiaState(gameState);
+    for (const squad of Object.values(militia.squads)) {
+      if (squad.order.type === "STATION" && squad.order.z === currentZ) {
+        const sx = squad.order.x * CELL_W;
+        const sy = squad.order.y * CELL_H;
+        ctx.strokeStyle = squad.color;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(sx - 1, sy - 1, CELL_W + 2, CELL_H + 2);
+        ctx.fillStyle = squad.color;
+        ctx.fillText(squad.glyph, sx + CELL_W / 2, sy + CELL_H / 2);
+      } else if (
+        squad.order.type === "PATROL" &&
+        squad.order.z === currentZ
+      ) {
+        const ax = squad.order.x * CELL_W;
+        const ay = squad.order.y * CELL_H;
+        ctx.strokeStyle = squad.color;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(ax - 1, ay - 1, CELL_W + 2, CELL_H + 2);
+        if (squad.order.x2 !== undefined && squad.order.y2 !== undefined) {
+          const bx = squad.order.x2 * CELL_W;
+          const by = squad.order.y2 * CELL_H;
+          ctx.save();
+          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = squad.color;
+          ctx.beginPath();
+          ctx.moveTo(ax + CELL_W / 2, ay + CELL_H / 2);
+          ctx.lineTo(bx + CELL_W / 2, by + CELL_H / 2);
+          ctx.stroke();
+          ctx.restore();
+          ctx.strokeRect(bx - 1, by - 1, CELL_W + 2, CELL_H + 2);
+        }
+      }
     }
 
     // 6. Render Hostiles (Goblin Raiders, Trolls, Cavern Beasts) on current Z-level
@@ -1573,6 +1614,42 @@ export default function ASCIIViewport() {
                 className="px-1.5 py-0.5 border border-[#2a2a2a] text-[#ff0000] hover:border-[#ff0000]"
               >
                 [ ^ TRAP ]
+              </button>
+              <button
+                type="button"
+                data-testid="inspect-station-squad-btn"
+                onClick={() => {
+                  playTactileSfx("stamp");
+                  designateBox(
+                    activeInspect.coord.x,
+                    activeInspect.coord.y,
+                    activeInspect.coord.x,
+                    activeInspect.coord.y,
+                    "MILITIA_STATION",
+                    activeInspect.coord.z,
+                  );
+                }}
+                className="px-1.5 py-0.5 border border-[#2a2a2a] text-[#ff0000] hover:border-[#ff0000]"
+              >
+                [ ♦ STATION SQUAD ]
+              </button>
+              <button
+                type="button"
+                data-testid="inspect-patrol-squad-btn"
+                onClick={() => {
+                  playTactileSfx("stamp");
+                  designateBox(
+                    activeInspect.coord.x,
+                    activeInspect.coord.y,
+                    Math.min(gridWidth - 1, activeInspect.coord.x + 5),
+                    activeInspect.coord.y,
+                    "MILITIA_PATROL",
+                    activeInspect.coord.z,
+                  );
+                }}
+                className="px-1.5 py-0.5 border border-[#2a2a2a] text-[#00ffff] hover:border-[#00ffff]"
+              >
+                [ » PATROL HERE ]
               </button>
               <button
                 type="button"

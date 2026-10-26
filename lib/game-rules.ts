@@ -20,5 +20,7 @@ export const TOOL_KEYS: Record<string, DesignationType> = {
   y: "BUILD_TEMPLE",
   u: "BUILD_DEPOT",
   a: "BUILD_FARM",
+  j: "MILITIA_STATION",
+  n: "MILITIA_PATROL",
   k: "CANCEL",
 };

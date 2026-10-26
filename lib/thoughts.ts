@@ -30,6 +30,17 @@ export interface RecordThoughtInput {
   moraleDelta?: number;
 }
 
+let thoughtSeqCounter = 1;
+
+function shortThoughtHash(text: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36).slice(0, 5);
+}
+
 /**
  * Mutates `dwarf.thought` and prepends a structured entry to `dwarf.thoughtLog`
  * if it differs from the most recent recorded thought text.
@@ -51,8 +62,14 @@ export function appendDwarfThought(
     dwarf.happiness = Math.max(5, Math.min(100, dwarf.happiness + moraleDelta));
   }
 
+  const seq = thoughtSeqCounter++;
+  const hash = shortThoughtHash(`${trimmedText}:${input.category}`);
+  const baseId = `th-${dwarf.id}-${input.tick}-${seq}-${hash}`;
+  const existingIds = new Set(existingLog.map((e) => e.id));
+  const uniqueId = existingIds.has(baseId) ? `${baseId}-${ existingLog.length }` : baseId;
+
   const entry: DwarfThoughtEntry = {
-    id: `th-${dwarf.id}-${input.tick}-${existingLog.length}`,
+    id: uniqueId,
     tick: input.tick,
     year: input.year,
     season: input.season,
@@ -62,7 +79,8 @@ export function appendDwarfThought(
     moraleDelta,
   };
 
-  dwarf.thoughtLog = [entry, ...existingLog].slice(0, MAX_THOUGHT_LOG_ENTRIES);
+  const dedupedExisting = existingLog.filter((e) => e.id !== entry.id);
+  dwarf.thoughtLog = [entry, ...dedupedExisting].slice(0, MAX_THOUGHT_LOG_ENTRIES);
   return entry;
 }
 
@@ -337,10 +355,16 @@ export function collectClanAnecdotes(
             },
           ];
 
-    for (const entry of entries) {
-      if (filterCategory !== 'ALL' && entry.category !== filterCategory) continue;
+    const seenEntryIds = new Set<string>();
+    entries.forEach((entry, idx) => {
+      if (filterCategory !== 'ALL' && entry.category !== filterCategory) return;
+      const safeId = seenEntryIds.has(entry.id)
+        ? `${entry.id}-dup-${idx}`
+        : entry.id;
+      seenEntryIds.add(safeId);
       list.push({
         ...entry,
+        id: safeId,
         dwarfId: d.id,
         dwarfName: d.name,
         dwarfTitle: d.title,
@@ -349,7 +373,7 @@ export function collectClanAnecdotes(
         dwarfHappiness: d.happiness,
         dwarfZ: d.z,
       });
-    }
+    });
   }
 
   list.sort((a, b) => {

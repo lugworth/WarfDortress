@@ -31,6 +31,14 @@ import {
   getCurrentWeather,
   isShelteredOrPavedTile,
 } from '@/lib/weather';
+import {
+  buildTacticalRaidPlan,
+  ensureMilitiaState,
+  evaluateFortressDefenseProfile,
+  performMilitiaAction,
+  spawnTacticalGoblinRaid,
+  type MilitiaAction,
+} from '@/lib/militia';
 
 import {
   activateBuildingTileFunction,
@@ -109,6 +117,8 @@ interface GameContextType {
   completeStrangeMood: () => boolean;
   cycleSeasonWeather: () => void;
   activateBuildingFunction: (x: number, y: number, z: number) => { triggered: boolean; message: string };
+  dispatchMilitiaAction: (action: MilitiaAction) => { success: boolean; message: string };
+  triggerAIRaidAnalysis: (spawnRaid?: boolean) => Promise<{ message: string }>;
 }
 
 
@@ -614,6 +624,69 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     [gameState]
   );
 
+  const dispatchMilitiaAction = useCallback(
+    (action: MilitiaAction) => {
+      const previewRes = performMilitiaAction(gameState, action);
+      setGameState((prev) => performMilitiaAction(prev, action).nextState);
+      return { success: previewRes.success, message: previewRes.message };
+    },
+    [gameState]
+  );
+
+  const triggerAIRaidAnalysis = useCallback(
+    async (spawnRaid = false) => {
+      const profile = evaluateFortressDefenseProfile(gameState);
+      const militia = ensureMilitiaState(gameState);
+      const goblinCiv =
+        gameState.world.civilizations.find((c) => c.race === 'Goblins') ||
+        gameState.world.civilizations[3];
+
+      let aiPlanOverride: Record<string, unknown> | undefined;
+      try {
+        const res = await fetch('/api/combat/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dwarvenName: gameState.world.dwarvenName,
+            year: gameState.year,
+            season: gameState.season,
+            ticks: gameState.ticks,
+            wealth: gameState.resources.wealth,
+            wallCount: profile.wallCount,
+            doorCount: profile.doorCount,
+            trapCount: profile.trapCount,
+            stockpileCount: profile.stockpileCount,
+            squads: Object.values(militia.squads),
+            goblinCiv,
+          }),
+        });
+        const data = await res.json();
+        if (data?.plan) {
+          aiPlanOverride = data.plan;
+        }
+      } catch {
+        // Fallback to deterministic tactical evaluation
+      }
+
+      const finalPlan = buildTacticalRaidPlan(gameState, aiPlanOverride);
+      if (spawnRaid) {
+        setGameState((prev) => spawnTacticalGoblinRaid(prev, finalPlan));
+        return {
+          message: `[WAR HORN · ${finalPlan.tactic}] ${finalPlan.raidName} launched!`,
+        };
+      } else {
+        setGameState((prev) => performMilitiaAction(prev, {
+          type: 'RECORD_AI_RAID_PLAN',
+          plan: finalPlan,
+        }).nextState);
+        return {
+          message: `Tactical Dispatch: ${finalPlan.raidName} [${finalPlan.tactic}] — ${finalPlan.recommendedCounter}`,
+        };
+      }
+    },
+    [gameState]
+  );
+
   return (
     <GameContext.Provider
       value={{
@@ -665,6 +738,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         completeStrangeMood,
         cycleSeasonWeather,
         activateBuildingFunction,
+        dispatchMilitiaAction,
+        triggerAIRaidAnalysis,
       }}
     >
       {children}

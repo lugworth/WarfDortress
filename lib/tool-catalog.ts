@@ -159,6 +159,20 @@ export const TOOLS: ToolDefinition[] = [
     color: "text-[var(--ui-accent)]",
   },
   {
+    id: "MILITIA_STATION",
+    label: TOOL_NAMES.MILITIA_STATION,
+    desc: "Order the active militia squad to form a fortified shield-wall station on the designated floor.",
+    group: "Orders",
+    color: "text-[var(--ui-danger)]",
+  },
+  {
+    id: "MILITIA_PATROL",
+    label: TOOL_NAMES.MILITIA_PATROL,
+    desc: "Order the active militia squad to march a continuous patrol route between the start and end corners.",
+    group: "Orders",
+    color: "text-[var(--ui-info)]",
+  },
+  {
     id: "CANCEL",
     label: TOOL_NAMES.CANCEL,
     desc: "Cancel queued designations and release assigned tasks.",

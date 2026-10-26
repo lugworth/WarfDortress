@@ -38,6 +38,15 @@ import {
   getCurrentWeather,
   isShelteredOrPavedTile,
 } from './weather.ts';
+import {
+  createDefaultMilitiaState,
+  ensureMilitiaState,
+  getDwarfSquad,
+  getSquadCombatModifiers,
+  getSquadOrderDestination,
+  performMilitiaAction,
+  spawnTacticalGoblinRaid,
+} from './militia.ts';
 
 
 export function getSeasonModifiers(season: GameState['season']): {
@@ -192,83 +201,7 @@ export function applyLaborPreset(state: GameState, preset: LaborPresetId): GameS
 }
 
 export function spawnGoblinRaid(state: GameState): GameState {
-  const goblinCiv = state.world.civilizations[3]?.name || 'The Fang Scourge';
-  const spawnX = Math.max(2, state.world.width - 4);
-  const spawnY = Math.max(3, Math.floor(state.world.height / 2) - 2);
-
-  const newHostiles: HostileEntity[] = [
-    {
-      id: `raider-gob-${state.ticks}-1`,
-      name: 'Snagtooth Goblin Pikeman',
-      kind: 'GOBLIN_RAIDER',
-      char: 'g',
-      color: '#ff0000',
-      x: spawnX,
-      y: spawnY,
-      z: 0,
-      hp: 40,
-      maxHp: 40,
-      attack: 7,
-      behavior: 'RAID_SEEK',
-    },
-    {
-      id: `raider-gob-${state.ticks}-2`,
-      name: 'Skargash Lasher',
-      kind: 'GOBLIN_RAIDER',
-      char: 'g',
-      color: '#ff9900',
-      x: spawnX - 1,
-      y: Math.min(state.world.height - 3, spawnY + 2),
-      z: 0,
-      hp: 35,
-      maxHp: 35,
-      attack: 6,
-      behavior: 'FLANK_PATROL',
-    },
-  ];
-
-  if (state.resources.wealth >= 850) {
-    newHostiles.push({
-      id: `raider-troll-${state.ticks}`,
-      name: 'Armored War-Troll',
-      kind: 'TROLL_BREAKER',
-      char: 'T',
-      color: '#ff0000',
-      x: spawnX,
-      y: Math.max(2, spawnY - 2),
-      z: 0,
-      hp: 75,
-      maxHp: 75,
-      attack: 12,
-      behavior: 'RAID_SEEK',
-    });
-  }
-
-  const alert: FortressAlert = {
-    id: `alert-raid-${state.ticks}`,
-    tick: state.ticks,
-    title: `GOBLIN RAID (${newHostiles.length} hostiles)`,
-    severity: 'DANGER',
-    x: spawnX,
-    y: spawnY,
-    z: 0,
-  };
-
-  const entry: ChronicleEntry = {
-    id: `chron-raid-${state.ticks}`,
-    tick: state.ticks,
-    season: state.season,
-    year: state.year,
-    text: `[ALERT] War horns of ${goblinCiv}! ${newHostiles.length} raiders spotted at (${spawnX}, ${spawnY}, Z-0)!`,
-    type: 'COMBAT',
-  };
-
-  return {
-    ...state,
-    hostiles: [...(state.hostiles || []), ...newHostiles],
-    alerts: [alert, ...(state.alerts || []).slice(0, 14)],
-    chronicle: [entry, ...state.chronicle.slice(0, 59)],
-  };
+  return spawnTacticalGoblinRaid(state);
 }
 
 export function executeTradeBarter(
@@ -705,7 +638,16 @@ export function createInitialGameState(seed = 'Khazad-251'): GameState {
   const grid = generateMultiLevelGrid(world);
   const centerX = Math.floor(world.width / 2);
   const centerY = Math.floor(world.height / 2);
-  const dwarves = createInitialDwarves(centerX, centerY);
+  const rawDwarves = createInitialDwarves(centerX, centerY);
+  const initialMilitia = createDefaultMilitiaState(
+    rawDwarves,
+    world.width,
+    world.height
+  );
+  const shieldSet = new Set(initialMilitia.squads['squad-1'].memberIds);
+  const dwarves = rawDwarves.map((d) =>
+    shieldSet.has(d.id) ? { ...d, squadId: 'squad-1' as const } : d
+  );
   const hostiles = createInitialCavernHostiles(world.width, world.height, seed);
 
   // Locate Z-3 relic tile for initial discovery alert
@@ -841,6 +783,7 @@ export function createInitialGameState(seed = 'Khazad-251'): GameState {
     guild: createInitialGuildState(),
     activities: {
       expeditions: createExpeditionState(),
+      militia: initialMilitia,
     },
   };
 }
@@ -883,6 +826,8 @@ export function canDesignateTile(tile: Tile, type: DesignationType): boolean {
     case 'BUILD_TEMPLE':
     case 'BUILD_DEPOT':
     case 'BUILD_FARM':
+    case 'MILITIA_STATION':
+    case 'MILITIA_PATROL':
       return tile.walkable && tile.terrain !== 'STAIRS_UP_DOWN' && tile.terrain !== 'WATER';
     default:
       return false;
@@ -1023,6 +968,8 @@ export function applyAreaDesignation(
     BUILD_TEMPLE: 'Ancestral temple altar site',
     BUILD_DEPOT: 'Seasonal trade depot site',
     BUILD_FARM: 'Subterranean Plump Helmet plot',
+    MILITIA_STATION: 'Militia squad station post',
+    MILITIA_PATROL: 'Militia squad patrol route',
     CANCEL: 'Cleared designations',
   };
 
@@ -1032,15 +979,43 @@ export function applyAreaDesignation(
     season: state.season,
     year: state.year,
     text: `${actionLabel[type]} designated across ${count} tile${count > 1 ? 's' : ''} at Depth Z-${z}.`,
-    type: 'INFO',
+    type: type === 'MILITIA_STATION' || type === 'MILITIA_PATROL' ? 'COMBAT' : 'INFO',
   };
 
-  return {
-    nextState: {
-      ...state,
+  let nextState: GameState = {
+    ...state,
+    grid: newGrid,
+    chronicle: [newEntry, ...state.chronicle.slice(0, 59)],
+  };
+
+  if (type === 'MILITIA_STATION' || type === 'MILITIA_PATROL') {
+    const militia = ensureMilitiaState(nextState);
+    const activeSquadId = militia.activeSquadId;
+    const clampedMinX = Math.ceil(minX);
+    const clampedMaxX = Math.floor(maxX);
+    const clampedMinY = Math.ceil(minY);
+    const clampedMaxY = Math.floor(maxY);
+    const midX = Math.round((clampedMinX + clampedMaxX) / 2);
+    const midY = Math.round((clampedMinY + clampedMaxY) / 2);
+
+    const orderRes = performMilitiaAction(nextState, {
+      type: 'ISSUE_SQUAD_ORDER',
+      squadId: activeSquadId,
+      orderType: type === 'MILITIA_STATION' ? 'STATION' : 'PATROL',
+      x: type === 'MILITIA_STATION' ? midX : clampedMinX,
+      y: type === 'MILITIA_STATION' ? midY : clampedMinY,
+      z,
+      x2: type === 'MILITIA_PATROL' ? clampedMaxX : undefined,
+      y2: type === 'MILITIA_PATROL' ? clampedMaxY : undefined,
+    });
+    nextState = {
+      ...orderRes.nextState,
       grid: newGrid,
-      chronicle: [newEntry, ...state.chronicle.slice(0, 59)],
-    },
+    };
+  }
+
+  return {
+    nextState,
     count,
   };
 }
@@ -1502,14 +1477,27 @@ export function stepSimulationTick(state: GameState): GameState {
     }
 
     // 1. Check Militia Combat Intercept against Hostiles on the same Z-level
-    const engageRadius =
+    const militiaState = ensureMilitiaState(state);
+    const squadMods = getSquadCombatModifiers(state.dwarves, dwarf, militiaState);
+    const activeSquad = squadMods.squad;
+    const baseDoctrineRadius =
       state.militiaDoctrine === 'SALLY_FORTH'
         ? 40
         : state.militiaDoctrine === 'PATROL'
         ? 14
         : 6;
+    const engageRadius =
+      activeSquad?.order.type === 'STATION' && activeSquad.order.z === dwarf.z
+        ? Math.max(10, baseDoctrineRadius)
+        : activeSquad?.order.type === 'PATROL' && activeSquad.order.z === dwarf.z
+        ? Math.max(16, baseDoctrineRadius)
+        : baseDoctrineRadius;
 
-    if (dwarf.labors.COMBAT || hostiles.some((h) => h.z === dwarf.z && Math.abs(h.x - dwarf.x) + Math.abs(h.y - dwarf.y) <= 2)) {
+    if (
+      dwarf.labors.COMBAT ||
+      Boolean(activeSquad) ||
+      hostiles.some((h) => h.z === dwarf.z && Math.abs(h.x - dwarf.x) + Math.abs(h.y - dwarf.y) <= 2)
+    ) {
       let targetHostile: HostileEntity | null = null;
       let bestDist = engageRadius + 1;
       for (const h of hostiles) {
@@ -1525,12 +1513,18 @@ export function stepSimulationTick(state: GameState): GameState {
         dwarf.currentTask = undefined;
         if (bestDist <= 1) {
           dwarf.state = 'FIGHTING';
-          const dmg = (dwarf.weaponEquipped ? 18 : 10) + ((dwarf.skills.COMBAT || 1) * 2);
+          const baseDmg = (dwarf.weaponEquipped ? 18 : 10) + ((dwarf.skills.COMBAT || 1) * 2);
+          const dmg = baseDmg + squadMods.cohesionAttackBonus + squadMods.patrolAttackBonus;
           targetHostile.hp -= dmg;
           const wallShield = wallCount >= 4 ? 0.85 : 1;
           const incomingDmg = Math.max(
             1,
-            Math.round(targetHostile.attack * (dwarf.armorEquipped ? 0.5 : 1) * wallShield)
+            Math.round(
+              targetHostile.attack *
+                (dwarf.armorEquipped ? 0.5 : 1) *
+                wallShield *
+                squadMods.stationDefenseMultiplier
+            )
           );
           dwarf.hp = Math.max(20, dwarf.hp - incomingDmg);
 
@@ -1541,7 +1535,7 @@ export function stepSimulationTick(state: GameState): GameState {
               tick: nextTicks,
               year: nextYear,
               season: nextSeason,
-              text: `Vanquished ${targetHostile.name} in defense of the clan!`,
+              text: `Vanquished ${targetHostile.name} in defense of the clan (${squadMods.tacticalNote})!`,
               category: 'COMBAT',
               sentiment: 'EUPHORIC',
               moraleDelta: 8,
@@ -1549,7 +1543,7 @@ export function stepSimulationTick(state: GameState): GameState {
             resources.wealth += 65;
             resources.ironOre += 1;
             addLog(
-              `[VICTORY] ${dwarf.name} slew ${targetHostile.name} at (${targetHostile.x}, ${targetHostile.y}, Z-${dwarf.z}) (+65 Wealth)!`,
+              `[VICTORY] ${dwarf.name} (${squadMods.tacticalNote}) slew ${targetHostile.name} at (${targetHostile.x}, ${targetHostile.y}, Z-${dwarf.z}) (+65 Wealth)!`,
               'COMBAT'
             );
           } else {
@@ -1557,7 +1551,7 @@ export function stepSimulationTick(state: GameState): GameState {
               tick: nextTicks,
               year: nextYear,
               season: nextSeason,
-              text: `Trading blows with ${targetHostile.name}!`,
+              text: `Trading blows with ${targetHostile.name} (${squadMods.tacticalNote})!`,
               category: 'COMBAT',
               sentiment: 'NEGATIVE',
               moraleDelta: 0,
@@ -1703,13 +1697,52 @@ export function stepSimulationTick(state: GameState): GameState {
     }
 
     if (!dwarf.currentTask) {
+      // If dwarf belongs to a squad with an active STATION or PATROL order on this Z-level, execute squad maneuver
+      const squadForOrder = getDwarfSquad(dwarf, militiaState);
+      if (
+        squadForOrder &&
+        squadForOrder.order.type !== 'FOLLOW_DOCTRINE' &&
+        squadForOrder.order.z === dwarf.z
+      ) {
+        const memberIdx = Math.max(0, squadForOrder.memberIds.indexOf(dwarf.id));
+        const dest = getSquadOrderDestination(dwarf, squadForOrder, memberIdx);
+        if (dest) {
+          dwarf.patrolLeg = dest.nextPatrolLeg;
+          if (dest.arrived) {
+            dwarf.state = 'IDLE';
+            return dwarf;
+          }
+          const nx = Math.max(
+            0,
+            Math.min(state.world.width - 1, dwarf.x + Math.sign(dest.x - dwarf.x))
+          );
+          const ny = Math.max(
+            0,
+            Math.min(state.world.height - 1, dwarf.y + Math.sign(dest.y - dwarf.y))
+          );
+          const destTile = grid[dwarf.z]?.[ny]?.[nx];
+          if (destTile && destTile.walkable) {
+            dwarf.x = nx;
+            dwarf.y = ny;
+            dwarf.state = 'MOVING';
+            return dwarf;
+          }
+        }
+      }
+
       let bestCandidate: { x: number; y: number; z: number; type: DesignationType; dist: number } | null = null;
 
       for (let z = 0; z < state.world.depth; z++) {
         for (let y = 0; y < state.world.height; y++) {
           for (let x = 0; x < state.world.width; x++) {
             const t = grid[z][y][x];
-            if (!t.designation) continue;
+            if (
+              !t.designation ||
+              t.designation === 'MILITIA_STATION' ||
+              t.designation === 'MILITIA_PATROL'
+            ) {
+              continue;
+            }
             const key = `${z}:${x}:${y}`;
             if (claimedTargets.has(key)) continue;
 

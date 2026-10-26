@@ -327,6 +327,8 @@ export const TOOL_GLYPHS: Record<DesignationType, string> = {
   BUILD_TEMPLE: 'Ψ',
   BUILD_DEPOT: '¤',
   BUILD_FARM: '≈',
+  MILITIA_STATION: '♦',
+  MILITIA_PATROL: '»',
   CANCEL: '×',
 };
 

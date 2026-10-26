@@ -62,6 +62,8 @@ export type DesignationType =
   | 'BUILD_TEMPLE'
   | 'BUILD_DEPOT'
   | 'BUILD_FARM'
+  | 'MILITIA_STATION'
+  | 'MILITIA_PATROL'
   | 'CANCEL';
 
 export type DwarfLabor =
@@ -173,6 +175,73 @@ export interface DwarfEntity {
   armorEquipped?: boolean;
   kills?: number;
   quirk?: DwarfQuirk;
+  squadId?: MilitiaSquadId | null;
+  patrolLeg?: 0 | 1;
+}
+
+export type MilitiaSquadId = 'squad-1' | 'squad-2';
+
+export type SquadOrderType = 'FOLLOW_DOCTRINE' | 'STATION' | 'PATROL';
+
+export interface SquadOrder {
+  type: SquadOrderType;
+  x: number;
+  y: number;
+  z: number;
+  x2?: number;
+  y2?: number;
+  issuedTick: number;
+  label: string;
+}
+
+export interface MilitiaSquad {
+  id: MilitiaSquadId;
+  name: string;
+  callsign: string;
+  glyph: string;
+  color: string;
+  memberIds: string[];
+  order: SquadOrder;
+}
+
+export type RaidTactic =
+  | 'GATE_BREAKER'
+  | 'PINCER_FLANK'
+  | 'SAPPING_SWARM'
+  | 'TROPHY_PLUNDER';
+
+export interface RaidBattlePlan {
+  id: string;
+  tick: number;
+  raidName: string;
+  warlordName: string;
+  tactic: RaidTactic;
+  threatLevel: 'MODERATE' | 'HIGH' | 'SEVERE';
+  warlordQuote: string;
+  targetSummary: string;
+  recommendedCounter: string;
+  aiGenerated?: boolean;
+}
+
+export interface CombatReportEntry {
+  id: string;
+  tick: number;
+  year: number;
+  season: string;
+  squadId?: MilitiaSquadId | null;
+  attackerName: string;
+  defenderName: string;
+  damageDealt: number;
+  damageTaken: number;
+  tacticalNote: string;
+  outcome: 'CLASH' | 'VANQUISHED' | 'TRAP_CRUSH' | 'RAID_WAVE';
+}
+
+export interface MilitiaState {
+  activeSquadId: MilitiaSquadId;
+  squads: Record<MilitiaSquadId, MilitiaSquad>;
+  activeRaidPlan: RaidBattlePlan | null;
+  battleLog: CombatReportEntry[];
 }
 
 export type HostileKind =
@@ -196,6 +265,8 @@ export interface HostileEntity {
   maxHp: number;
   attack: number;
   behavior: HostileBehavior;
+  tactic?: RaidTactic;
+  targetCoord?: { x: number; y: number; z: number };
 }
 
 export interface FortressAlert {
@@ -431,6 +502,7 @@ export interface GameState {
     claimedMilestones?: string[];
     strangeMood?: StrangeMoodState | null;
     unlockedBuildings?: DesignationType[];
+    militia?: MilitiaState;
   };
 }
 

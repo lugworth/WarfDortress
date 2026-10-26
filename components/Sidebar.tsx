@@ -6,6 +6,7 @@ import {
   DwarfLabor,
   LaborPresetId,
   MilitiaDoctrine,
+  MilitiaSquadId,
 } from '@/lib/types';
 import { QUIRKS } from '@/lib/guild';
 import {
@@ -18,6 +19,7 @@ import { formatCost } from '@/lib/tool-catalog';
 import { asciiBar } from '@/lib/ui-model';
 import { getSentimentBadge } from '@/lib/thoughts';
 import { playTactileSfx } from '@/lib/audio';
+import { ensureMilitiaState, getDwarfSquad } from '@/lib/militia';
 import ExpeditionsPanel from './ExpeditionsPanel';
 
 const ALL_LABORS: DwarfLabor[] = [
@@ -54,9 +56,13 @@ export default function Sidebar() {
     startStrangeMood,
     completeStrangeMood,
     activateBuildingFunction,
+    dispatchMilitiaAction,
+    triggerAIRaidAnalysis,
   } = useGame();
 
   const [buildingActionStatus, setBuildingActionStatus] = useState<string>('');
+  const [militiaActionStatus, setMilitiaActionStatus] = useState<string>('');
+  const [aiAnalyzeBusy, setAiAnalyzeBusy] = useState<boolean>(false);
 
 
   const [activeTab, setActiveTab] = useState<'PROGRESSION' | 'DWARVES' | 'STOCKS' | 'RADAR'>(
@@ -427,16 +433,46 @@ export default function Sidebar() {
           </div>
         )}
 
-        {activeTab === 'DWARVES' && (
+        {activeTab === 'DWARVES' && (() => {
+          const militia = ensureMilitiaState(gameState);
+          const squadsList = Object.values(militia.squads);
+          const activeSquad =
+            militia.squads[militia.activeSquadId] || squadsList[0];
+          const activeSquadMembers = gameState.dwarves.filter(
+            (d) =>
+              d.squadId === activeSquad.id ||
+              activeSquad.memberIds.includes(d.id)
+          );
+          const cx = Math.floor(gameState.world.width / 2);
+          const cy = Math.floor(gameState.world.height / 2);
+          const vanquishedCount = militia.battleLog.filter(
+            (b) => b.outcome === 'VANQUISHED' || b.outcome === 'TRAP_CRUSH'
+          ).length;
+
+          return (
           <div className="space-y-2.5">
-            {/* Militia Command & Doctrine Box */}
-            <div className="p-2 bg-[var(--ui-bg)] border border-[var(--ui-danger)]/60 space-y-1.5">
+            {/* Dwarven Militia Squads & AI Goblin Raid Command Box */}
+            <div
+              data-testid="militia-command-panel"
+              className="p-2 bg-[var(--ui-bg)] border border-[var(--ui-danger)]/70 space-y-2"
+            >
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-[var(--ui-danger)] font-bold">⚔ MILITIA DOCTRINE</span>
+                <span className="text-[var(--ui-danger)] font-bold">
+                  ⚔ MILITIA &amp; AI RAID COMMAND
+                </span>
                 <span className="text-[var(--ui-muted)] tabular-nums">
-                  HOSTILES: <strong className="text-[var(--ui-danger)]">{gameState.hostiles.length}</strong>
+                  HOSTILES:{' '}
+                  <strong className="text-[var(--ui-danger)]">
+                    {gameState.hostiles.length}
+                  </strong>{' '}
+                  · SLAIN:{' '}
+                  <strong className="text-[#33ff00]">
+                    {vanquishedCount}
+                  </strong>
                 </span>
               </div>
+
+              {/* Global Doctrine Selector */}
               <div className="button-grid">
                 {(
                   [
@@ -459,13 +495,259 @@ export default function Sidebar() {
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={triggerGoblinRaid}
-                className="w-full py-1 px-2 border border-[var(--ui-warning)] text-[var(--ui-warning)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] text-[10px] font-bold text-center whitespace-nowrap shrink-0"
-              >
-                Sound war horn
-              </button>
+
+              {/* Squad Selector Tabs (Shield-1 & Watch-2) */}
+              <div className="pt-1 border-t border-[var(--ui-border)] space-y-1.5">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-[#ff9900] font-bold">
+                    ACTIVE SQUAD ROSTER
+                  </span>
+                  <span className="text-[var(--ui-muted)]">
+                    Click tile with ♦/» tool
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  {squadsList.map((sq) => {
+                    const count = gameState.dwarves.filter(
+                      (d) => d.squadId === sq.id || sq.memberIds.includes(d.id)
+                    ).length;
+                    const isSel = sq.id === activeSquad.id;
+                    return (
+                      <button
+                        key={sq.id}
+                        type="button"
+                        data-testid={`select-${sq.id}-btn`}
+                        onClick={() => {
+                          playTactileSfx('tool');
+                          const res = dispatchMilitiaAction({
+                            type: 'SELECT_SQUAD',
+                            squadId: sq.id,
+                          });
+                          setMilitiaActionStatus(res.message);
+                        }}
+                        className={`p-1.5 border text-left transition-colors ${
+                          isSel
+                            ? 'border-[#ff0099] bg-[#1e0d18] text-[#ffffff]'
+                            : 'border-[var(--ui-border)] bg-[var(--ui-panel)] text-[var(--ui-muted)] hover:text-[#ffffff]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 text-[10px] font-bold">
+                          <span style={{ color: sq.color }}>
+                            [{sq.glyph}] {sq.callsign}
+                          </span>
+                          <span className="tabular-nums text-[#00ffff]">
+                            {count} DWF
+                          </span>
+                        </div>
+                        <div className="text-[9px] text-[var(--ui-muted)] truncate mt-0.5">
+                          {sq.order.label}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Active Squad Details & Orders (Map Designate or Quick Order) */}
+                <div
+                  data-testid="active-squad-orders"
+                  className="p-1.5 bg-[var(--ui-panel)] border border-[var(--ui-border)] space-y-1.5 text-[10px]"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-bold text-[#ffffff] truncate">
+                      <span style={{ color: activeSquad.color }}>
+                        {activeSquad.glyph}
+                      </span>{' '}
+                      {activeSquad.name} ({activeSquadMembers.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        jumpToLocation(
+                          activeSquad.order.x,
+                          activeSquad.order.y,
+                          activeSquad.order.z
+                        )
+                      }
+                      className="px-1 border border-[var(--ui-border)] text-[#00ffff] hover:text-[#ffffff] shrink-0"
+                    >
+                      [Z-{activeSquad.order.z}]
+                    </button>
+                  </div>
+                  <div className="text-[9px] text-[#33ff00] truncate">
+                    ORDER: {activeSquad.order.label}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <button
+                      type="button"
+                      data-testid="squad-map-station-tool-btn"
+                      onClick={() => {
+                        playTactileSfx('tool');
+                        setInspectMode(false);
+                        setSelectedTool('MILITIA_STATION');
+                        setMilitiaActionStatus(
+                          `Selected [♦ Station Tool] for ${activeSquad.callsign} — click/drag any map tile.`
+                        );
+                      }}
+                      className={`py-1 px-1.5 border font-bold text-center whitespace-nowrap ${
+                        selectedTool === 'MILITIA_STATION'
+                          ? 'border-[#ff0099] bg-[#24101c] text-[#ffffff]'
+                          : 'border-[#ff0000]/70 text-[#ff0000] hover:bg-[var(--ui-border)]'
+                      }`}
+                    >
+                      [ ♦ Map Station (J) ]
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="squad-map-patrol-tool-btn"
+                      onClick={() => {
+                        playTactileSfx('tool');
+                        setInspectMode(false);
+                        setSelectedTool('MILITIA_PATROL');
+                        setMilitiaActionStatus(
+                          `Selected [» Patrol Tool] for ${activeSquad.callsign} — drag patrol route on map.`
+                        );
+                      }}
+                      className={`py-1 px-1.5 border font-bold text-center whitespace-nowrap ${
+                        selectedTool === 'MILITIA_PATROL'
+                          ? 'border-[#ff0099] bg-[#24101c] text-[#ffffff]'
+                          : 'border-[#00ffff]/70 text-[#00ffff] hover:bg-[var(--ui-border)]'
+                      }`}
+                    >
+                      [ » Map Patrol (N) ]
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="squad-quick-station-gate-btn"
+                      onClick={() => {
+                        playTactileSfx('stamp');
+                        const res = dispatchMilitiaAction({
+                          type: 'ISSUE_SQUAD_ORDER',
+                          squadId: activeSquad.id,
+                          orderType: 'STATION',
+                          x: cx - 5,
+                          y: cy,
+                          z: currentZ,
+                        });
+                        setMilitiaActionStatus(res.message);
+                      }}
+                      className="py-1 px-1 border border-[var(--ui-border)] text-[#ff9900] hover:border-[#ff9900] text-center whitespace-nowrap"
+                    >
+                      [ Station Gate ]
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="squad-quick-patrol-perimeter-btn"
+                      onClick={() => {
+                        playTactileSfx('stamp');
+                        const res = dispatchMilitiaAction({
+                          type: 'ISSUE_SQUAD_ORDER',
+                          squadId: activeSquad.id,
+                          orderType: 'PATROL',
+                          x: Math.max(3, cx - 10),
+                          y: cy - 3,
+                          z: currentZ,
+                          x2: Math.min(gameState.world.width - 4, cx + 10),
+                          y2: cy + 3,
+                        });
+                        setMilitiaActionStatus(res.message);
+                      }}
+                      className="py-1 px-1 border border-[var(--ui-border)] text-[#33ff00] hover:border-[#33ff00] text-center whitespace-nowrap"
+                    >
+                      [ Patrol Gate ]
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid="squad-equip-armory-btn"
+                      onClick={() => {
+                        playTactileSfx('stamp');
+                        const res = dispatchMilitiaAction({
+                          type: 'EQUIP_SQUAD_ARMORY',
+                          squadId: activeSquad.id,
+                        });
+                        setMilitiaActionStatus(res.message);
+                      }}
+                      className="flex-1 py-0.5 px-1 border border-[#00ffff]/60 text-[#00ffff] hover:bg-[var(--ui-border)] text-[9px] font-bold"
+                    >
+                      [ ⚒ Equip Squad ({gameState.resources.weapons}⚔/{gameState.resources.armor}🛡) ]
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="squad-clear-order-btn"
+                      onClick={() => {
+                        const res = dispatchMilitiaAction({
+                          type: 'ISSUE_SQUAD_ORDER',
+                          squadId: activeSquad.id,
+                          orderType: 'FOLLOW_DOCTRINE',
+                          x: cx,
+                          y: cy,
+                          z: currentZ,
+                        });
+                        setMilitiaActionStatus(res.message);
+                      }}
+                      className="py-0.5 px-1.5 border border-[var(--ui-border)] text-[var(--ui-muted)] hover:text-[#ffffff] text-[9px]"
+                    >
+                      [Auto]
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Goblin Raid Tactical Dispatch & War Horn */}
+              {militia.activeRaidPlan && (
+                <div
+                  data-testid="ai-raid-battle-plan"
+                  className="p-1.5 bg-[#160608] border border-[#ff0000]/70 space-y-1 text-[10px]"
+                >
+                  <div className="flex items-center justify-between gap-1 text-[#ff0000] font-bold">
+                    <span>[ ! {militia.activeRaidPlan.warlordName} ]</span>
+                    <span className="text-[#ff9900] text-[9px]">
+                      {militia.activeRaidPlan.tactic} · {militia.activeRaidPlan.threatLevel}
+                    </span>
+                  </div>
+                  <p className="text-[#d0d0d0] italic leading-snug text-[9px]">
+                    &ldquo;{militia.activeRaidPlan.warlordQuote.replace(/^["“]+|["”]+$/g, '')}&rdquo;
+                  </p>
+                  <div className="text-[#00ffff] text-[9px] leading-snug">
+                    AI Counter: {militia.activeRaidPlan.recommendedCounter}
+                  </div>
+                </div>
+              )}
+
+              {militiaActionStatus && (
+                <div
+                  data-testid="militia-action-status"
+                  className="text-[9px] text-[#ff9900] bg-[#140e04] border border-[#ff9900]/40 px-1.5 py-1"
+                >
+                  {militiaActionStatus}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  data-testid="ai-tactical-brief-btn"
+                  disabled={aiAnalyzeBusy}
+                  onClick={async () => {
+                    setAiAnalyzeBusy(true);
+                    const res = await triggerAIRaidAnalysis(false);
+                    setMilitiaActionStatus(res.message);
+                    setAiAnalyzeBusy(false);
+                  }}
+                  className="py-1 px-1.5 border border-[#00ffff] text-[#00ffff] hover:bg-[var(--ui-border)] text-[10px] font-bold text-center whitespace-nowrap disabled:opacity-50"
+                >
+                  {aiAnalyzeBusy ? 'Scouting...' : '⚔ AI Raid Brief'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="sound-war-horn-btn"
+                  onClick={triggerGoblinRaid}
+                  className="py-1 px-1.5 border border-[var(--ui-warning)] text-[var(--ui-warning)] hover:bg-[var(--ui-border)] hover:text-[var(--ui-bright)] text-[10px] font-bold text-center whitespace-nowrap"
+                >
+                  Sound war horn
+                </button>
+              </div>
             </div>
 
             {/* Clan-Wide Labor Presets */}
@@ -621,6 +903,48 @@ export default function Sidebar() {
                     })}
                   </div>
 
+                  {/* Squad Assignment Bar */}
+                  <div className="mt-2 pt-1.5 border-t border-[var(--ui-border)] flex items-center justify-between gap-1">
+                    <span className="text-[10px] text-[var(--ui-muted)] shrink-0">
+                      SQUAD:
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {(
+                        [
+                          { id: null, label: 'None', color: 'text-[var(--ui-muted)]' },
+                          { id: 'squad-1', label: '♦Shield-1', color: 'text-[#ff5555]' },
+                          { id: 'squad-2', label: '»Watch-2', color: 'text-[#00ffff]' },
+                        ] as Array<{ id: MilitiaSquadId | null; label: string; color: string }>
+                      ).map((opt) => {
+                        const active = (dwarf.squadId ?? null) === opt.id;
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            data-testid={`assign-${dwarf.id}-${opt.id ?? 'none'}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              playTactileSfx('tool');
+                              const res = dispatchMilitiaAction({
+                                type: 'ASSIGN_DWARF_SQUAD',
+                                dwarfId: dwarf.id,
+                                squadId: opt.id,
+                              });
+                              setMilitiaActionStatus(res.message);
+                            }}
+                            className={`px-1.5 py-0.5 text-[9px] border transition-colors whitespace-nowrap ${
+                              active
+                                ? `border-[#ff0099] bg-[#22101a] font-bold ${opt.color}`
+                                : 'border-[var(--ui-border)] text-[var(--ui-muted)] hover:text-[#ffffff]'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Labor Toggles (8 Labors) */}
                   <div className="mt-2 pt-1.5 border-t border-[var(--ui-border)]">
                     <div className="text-[10px] text-[var(--ui-muted)] mb-1">ASSIGNED LABORS:</div>
@@ -651,7 +975,8 @@ export default function Sidebar() {
               );
             })}
           </div>
-        )}
+          );
+        })()}
 
         {activeTab === 'STOCKS' && (
           <div className="space-y-3">
