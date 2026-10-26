@@ -22,7 +22,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-[#070b12] text-slate-100 antialiased selection:bg-[#ff0099]/30 selection:text-[#ff0099]" suppressHydrationWarning>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+        <meta name="theme-color" content="#000000" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+      </head>
+      <body className="bg-[#070b12] text-slate-100 antialiased selection:bg-[#ff0099]/30 selection:text-[#ff0099] fortress-shell" suppressHydrationWarning>
         {children}
       </body>
     </html>

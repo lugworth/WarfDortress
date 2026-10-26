@@ -368,8 +368,8 @@ function FortressShell() {
         </div>
 
 
-        {/* Center: Live Resource Counters */}
-        <div className="flex flex-wrap items-center gap-2 md:gap-2.5 tabular-nums text-xs">
+        {/* Center: Live Resource Counters (scrollable on small screens) */}
+        <div className="flex flex-wrap items-center gap-2 md:gap-2.5 tabular-nums text-xs overflow-x-auto max-w-full scrollbar-hide">
           <div className="whitespace-nowrap shrink-0" title="Stone">
             <span className="text-[#808080] text-[10px] mr-0.5">STN:</span>
             <span className="text-[#ffffff] font-bold">{gameState.resources.stone}</span>

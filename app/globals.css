@@ -328,6 +328,14 @@
     overflow-x: auto;
   }
 }
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 @media (max-width: 480px) {
   .tool-choice kbd {
     display: none;
@@ -353,6 +361,10 @@
   .fortress-ui .ui-button,
   .fortress-ui button {
     min-height: 44px;
+  }
+  .fortress-ui .map-toolbar button,
+  .fortress-ui .button-grid button {
+    min-height: 38px;
   }
 }
 
