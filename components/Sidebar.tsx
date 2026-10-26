@@ -42,7 +42,7 @@ export default function Sidebar() {
   } = useGame();
 
   const [activeTab, setActiveTab] = useState<'DESIGNATE' | 'DWARVES' | 'STOCKS' | 'RADAR'>(
-    'DESIGNATE'
+    'DWARVES'
   );
 
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -139,10 +139,10 @@ export default function Sidebar() {
       <div className="sidebar-tabs border-b border-[var(--ui-border)] bg-[var(--ui-bg)] shrink-0">
         {(
           [
-            { id: 'DESIGNATE', label: 'Tools' },
-            { id: 'DWARVES', label: 'Clan' },
+            { id: 'DWARVES', label: `Clan (${gameState.dwarves.length})` },
             { id: 'STOCKS', label: 'Stocks' },
             { id: 'RADAR', label: 'Radar' },
+            { id: 'DESIGNATE', label: 'Catalog' },
           ] as const
         ).map((tab) => (
           <button

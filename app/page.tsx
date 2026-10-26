@@ -70,7 +70,16 @@ function FortressShell() {
     setIsEmbarking(false);
   };
 
-  // Keyboard shortcut: 'F' or 'M' to toggle Full Map mode
+  // Keyboard shortcut: 'F' or 'M' to toggle Full Map mode, plus ?autostart=1 support
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('autostart') === '1' && screen === 'title') {
+        setScreen('playing');
+      }
+    }
+  }, [screen, setScreen]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -305,72 +314,104 @@ function FortressShell() {
   // PLAYING SCREEN
   return (
     <div className="h-screen w-screen bg-[#000000] text-[#d0d0d0] flex flex-col overflow-hidden select-none font-mono">
-      {/* Top Terminal Status & Control Bar */}
-      <div className="bg-[#101010] border-b border-[#202020] px-2 py-1 flex flex-wrap items-center justify-between gap-x-2.5 gap-y-1 shrink-0 text-xs">
-        {/* Fortress Identity & Calendar */}
-        <div className="flex items-center gap-2 shrink-0">
+      {/* Unified Single-Row Top Command Header */}
+      <div className="bg-[#0d0d0d] border-b border-[#222222] px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 shrink-0 text-xs">
+        {/* Left: Drawer Toggles + Fortress Identity & Calendar */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowLeftSidebar((v) => !v)}
+            title="Toggle Clan & Stockpile Drawer (Hotkey: M)"
+            className={`hidden lg:inline-flex items-center px-1.5 py-0.5 border text-[11px] transition-colors whitespace-nowrap ${
+              showLeftSidebar
+                ? 'border-[#ff0099] bg-[#201018] text-[#ff0099] font-bold'
+                : 'border-[#262626] bg-[#050505] text-[#808080] hover:text-[#d0d0d0]'
+            }`}
+          >
+            {showLeftSidebar ? '« CLAN' : '» CLAN'}
+          </button>
+
           <span className="font-bold text-[#ff0099] whitespace-nowrap">
             [{gameState.world.dwarvenName}]
           </span>
-          <span className="text-[#808080]">|</span>
+          <span className="text-[#404040]">|</span>
           <span className="text-[#00ffff] tabular-nums whitespace-nowrap">
             Y{gameState.year}·{gameState.season}·T{gameState.ticks}
           </span>
         </div>
 
-        {/* Live Resource Counters (Tabular Base16 Isotope Colored Text) */}
+        {/* Center: Live Resource Counters */}
         <div className="flex flex-wrap items-center gap-2 md:gap-2.5 tabular-nums text-xs">
-          <div className="whitespace-nowrap shrink-0">
+          <div className="whitespace-nowrap shrink-0" title="Stone">
             <span className="text-[#808080] text-[10px] mr-0.5">STN:</span>
             <span className="text-[#ffffff] font-bold">{gameState.resources.stone}</span>
           </div>
-          <div className="whitespace-nowrap shrink-0">
+          <div className="whitespace-nowrap shrink-0" title="Timber / Wood">
             <span className="text-[#808080] text-[10px] mr-0.5">WOD:</span>
             <span className="text-[#ff9900] font-bold">{gameState.resources.wood}</span>
           </div>
-          <div className="whitespace-nowrap shrink-0">
+          <div className="whitespace-nowrap shrink-0" title="Iron Ore">
             <span className="text-[#808080] text-[10px] mr-0.5">IRN:</span>
             <span className="text-[#ff9900] font-bold">{gameState.resources.ironOre}</span>
           </div>
-          <div className="hidden sm:block whitespace-nowrap shrink-0">
+          <div className="hidden sm:block whitespace-nowrap shrink-0" title="Gold Ore">
             <span className="text-[#808080] text-[10px] mr-0.5">GLD:</span>
             <span className="text-[#ff0099] font-bold">{gameState.resources.goldOre}</span>
           </div>
-          <div className="whitespace-nowrap shrink-0">
+          <div className="whitespace-nowrap shrink-0" title="Steel Bars">
             <span className="text-[#808080] text-[10px] mr-0.5">STL:</span>
             <span className="text-[#00ffff] font-bold">{gameState.resources.steelBars}</span>
           </div>
-          <div className="hidden md:block whitespace-nowrap shrink-0">
+          <div className="hidden md:block whitespace-nowrap shrink-0" title="Weapons & Armor">
             <span className="text-[#808080] text-[10px] mr-0.5">ARM:</span>
             <span className="text-[#ff9900] font-bold">
               {gameState.resources.weapons + gameState.resources.armor}
             </span>
           </div>
-          <div className="hidden md:block whitespace-nowrap shrink-0">
-            <span className="text-[#808080] text-[10px] mr-0.5">RLC:</span>
-            <span className="text-[#ff0099] font-bold">{gameState.resources.relics}</span>
-          </div>
-          <div className="whitespace-nowrap shrink-0">
+          <div className="whitespace-nowrap shrink-0" title="Food Rations">
             <span className="text-[#808080] text-[10px] mr-0.5">FOD:</span>
             <span className="text-[#33ff00] font-bold">{gameState.resources.food}</span>
           </div>
-          <div className="whitespace-nowrap shrink-0">
+          <div className="whitespace-nowrap shrink-0" title="Dwarven Ale">
             <span className="text-[#808080] text-[10px] mr-0.5">ALE:</span>
             <span className="text-[#cc00ff] font-bold">{gameState.resources.ale}</span>
           </div>
-          <div className="whitespace-nowrap shrink-0">
+          <div className="whitespace-nowrap shrink-0" title="Fortress Wealth">
             <span className="text-[#808080] text-[10px] mr-0.5">WLTH:</span>
             <span className="text-[#ff0099] font-bold">{gameState.resources.wealth}</span>
           </div>
         </div>
 
-        {/* Clickable Terminal Action Text Buttons */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        {/* Right: Simulation & Modal Controls */}
+        <div className="flex flex-wrap items-center gap-1 text-xs">
+          {/* Latest Alert Quick-Jump Pill (inline instead of taking a whole row) */}
+          {gameState.alerts.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                jumpToLocation(
+                  gameState.alerts[0].x,
+                  gameState.alerts[0].y,
+                  gameState.alerts[0].z,
+                )
+              }
+              title={`${gameState.alerts[0].title} — Click to jump`}
+              className={`hidden xl:inline-flex items-center gap-1 px-1.5 py-0.5 border text-[11px] truncate max-w-[190px] ${
+                gameState.alerts[0].severity === 'DANGER'
+                  ? 'border-[#ff0000] text-[#ff0000]'
+                  : 'border-[#262626] text-[#ff9900] hover:border-[#ff9900]'
+              }`}
+            >
+              <span>!</span>
+              <span className="truncate">{gameState.alerts[0].title}</span>
+            </button>
+          )}
+
           {/* Trade Depot Barter Modal Button */}
           <button
             type="button"
             onClick={() => setIsTradeModalOpen(true)}
-            className="px-1.5 py-0.5 border border-[#202020] text-[#00ffff] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
+            className="px-1.5 py-0.5 border border-[#262626] text-[#00ffff] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
           >
             [ ¤ TRADE ]
           </button>
@@ -386,11 +427,11 @@ function FortressShell() {
             }}
             className={`px-1.5 py-0.5 border transition-colors whitespace-nowrap shrink-0 ${
               gameState.activeEvent
-                ? 'border-[#ff0000] bg-[#202020] text-[#ff0000] font-bold animate-pulse'
-                : 'border-[#202020] text-[#ff0099] hover:bg-[#202020] hover:text-[#ffffff]'
+                ? 'border-[#ff0000] bg-[#200808] text-[#ff0000] font-bold animate-pulse'
+                : 'border-[#262626] text-[#ff0099] hover:bg-[#202020] hover:text-[#ffffff]'
             }`}
           >
-            {gameState.activeEvent ? '[ ! DECREE AWAITS ]' : '[ ! DECREES ]'}
+            {gameState.activeEvent ? '[ ! DECREE ]' : '[ DECREES ]'}
           </button>
 
           {/* Pause / Resume */}
@@ -399,11 +440,11 @@ function FortressShell() {
             onClick={togglePause}
             className={`px-1.5 py-0.5 border transition-colors whitespace-nowrap shrink-0 ${
               gameState.paused
-                ? 'border-[#ff0099] bg-[#202020] text-[#ff0099] font-bold'
-                : 'border-[#202020] text-[#33ff00] hover:bg-[#202020] hover:text-[#ffffff]'
+                ? 'border-[#ff0099] bg-[#201018] text-[#ff0099] font-bold'
+                : 'border-[#262626] text-[#33ff00] hover:bg-[#202020] hover:text-[#ffffff]'
             }`}
           >
-            {gameState.paused ? '[ ▶ RESUME ]' : '[ ■ PAUSE ]'}
+            {gameState.paused ? '[ ▶ PLAY ]' : '[ ■ PAUSE ]'}
           </button>
 
           {/* +1 Tick */}
@@ -411,13 +452,13 @@ function FortressShell() {
             type="button"
             onClick={stepManualTick}
             title="Advance 1 Simulation Tick"
-            className="px-1.5 py-0.5 border border-[#202020] text-[#d0d0d0] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
+            className="px-1.5 py-0.5 border border-[#262626] text-[#d0d0d0] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
           >
-            [ +1 TICK ]
+            +1T
           </button>
 
           {/* Speed Toggle */}
-          <div className="hidden sm:flex items-center border border-[#202020] bg-[#000000] shrink-0">
+          <div className="hidden sm:flex items-center border border-[#262626] bg-[#000000] shrink-0">
             {([1, 2, 4] as const).map((spd) => (
               <button
                 key={spd}
@@ -438,32 +479,32 @@ function FortressShell() {
           <button
             type="button"
             onClick={handleCloudSave}
-            className="px-1.5 py-0.5 border border-[#202020] text-[#00ffff] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
+            className="hidden sm:inline-block px-1.5 py-0.5 border border-[#262626] text-[#00ffff] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
           >
-            [ S: SAVE ]
-          </button>
-
-          {/* Reroll Random Map Button */}
-          <button
-            type="button"
-            onClick={() => {
-              const nextSeed = generateRandomWorldSeed();
-              setSeedInput(nextSeed);
-              embarkNewWorld(nextSeed, false);
-            }}
-            title="Roll a brand-new random 76x42 map & topography"
-            className="px-1.5 py-0.5 border border-[#202020] text-[#ff9900] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
-          >
-            [ ~ NEW MAP ]
+            SAVE
           </button>
 
           {/* World Map Title Return */}
           <button
             type="button"
             onClick={() => setScreen('title')}
-            className="px-1.5 py-0.5 border border-[#202020] text-[#808080] hover:text-[#ff0099] hover:bg-[#202020] transition-colors whitespace-nowrap shrink-0"
+            className="px-1.5 py-0.5 border border-[#262626] text-[#808080] hover:text-[#ff0099] hover:bg-[#202020] transition-colors whitespace-nowrap shrink-0"
           >
-            [ &lt; REALM ]
+            REALM
+          </button>
+
+          {/* Right Chronicle Drawer Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowRightSidebar((v) => !v)}
+            title="Toggle Chronicle & Advisor Drawer"
+            className={`hidden lg:inline-flex items-center px-1.5 py-0.5 border text-[11px] transition-colors whitespace-nowrap ${
+              showRightSidebar
+                ? 'border-[#ff0099] bg-[#201018] text-[#ff0099] font-bold'
+                : 'border-[#262626] bg-[#050505] text-[#808080] hover:text-[#d0d0d0]'
+            }`}
+          >
+            {showRightSidebar ? 'LORE »' : '« LORE'}
           </button>
         </div>
       </div>
@@ -477,16 +518,13 @@ function FortressShell() {
 
       {/* Active Narrative Event Alert Banner */}
       {gameState.activeEvent && (
-        <div className="bg-[#101010] border-b-2 border-[#ff0000] px-3 py-1 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+        <div className="bg-[#101010] border-b border-[#ff0000] px-3 py-1 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[#ff0000] font-bold whitespace-nowrap shrink-0">
               [ ! {gameState.activeEvent.severity.replace('_', ' ')} ]
             </span>
             <span className="text-[#ffffff] font-bold truncate">
               {gameState.activeEvent.title}
-            </span>
-            <span className="hidden md:inline text-[#808080] truncate">
-              {'//'} {gameState.activeEvent.historicalConnection}
             </span>
           </div>
           <button
@@ -498,92 +536,6 @@ function FortressShell() {
           </button>
         </div>
       )}
-
-      {/* Fortress Spatial Alerts Ticker with Jump-to-Location Buttons */}
-      {gameState.alerts.length > 0 && (
-        <div className="bg-[#080808] border-b border-[#202020] px-3 py-1 flex flex-wrap items-center justify-between gap-2 text-[11px] shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <span
-              className={`font-bold whitespace-nowrap shrink-0 ${
-                gameState.alerts[0].severity === 'DANGER'
-                  ? 'text-[#ff0000]'
-                  : gameState.alerts[0].severity === 'DISCOVERY'
-                  ? 'text-[#00ffff]'
-                  : 'text-[#ff9900]'
-              }`}
-            >
-              [{gameState.alerts[0].severity}]
-            </span>
-            <span className="text-[#d0d0d0] truncate">{gameState.alerts[0].title}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            {gameState.alerts.slice(0, 2).map((al) => (
-              <button
-                key={al.id}
-                type="button"
-                onClick={() => jumpToLocation(al.x, al.y, al.z)}
-                className="px-1.5 py-0.5 border border-[#202020] text-[#00ffff] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0 tabular-nums"
-              >
-                [ JUMP ({al.x},{al.y},Z-{al.z}) ]
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Secondary Terminal Layout Toolbar: Gives Overseer Direct Control Over Screen Spacing */}
-      <div className="hidden lg:flex items-center justify-between px-2 py-0.5 bg-[#101010] border-b border-[#202020] text-[11px] text-[#808080]">
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowLeftSidebar((v) => !v)}
-            className={`px-1 py-0.5 transition-colors whitespace-nowrap shrink-0 ${
-              showLeftSidebar
-                ? 'text-[#ff0099] bg-[#202020]'
-                : 'text-[#808080] hover:text-[#d0d0d0]'
-            }`}
-          >
-            {showLeftSidebar ? '[ << HIDE ORDERS ]' : '[ >> SHOW ORDERS ]'}
-          </button>
-
-          <span className="text-[#202020]">|</span>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (showLeftSidebar || showRightSidebar) {
-                setShowLeftSidebar(false);
-                setShowRightSidebar(false);
-              } else {
-                setShowLeftSidebar(true);
-              }
-            }}
-            className={`px-1 py-0.5 transition-colors whitespace-nowrap shrink-0 ${
-              !showLeftSidebar && !showRightSidebar
-                ? 'text-[#33ff00] bg-[#202020] font-bold'
-                : 'text-[#808080] hover:text-[#d0d0d0]'
-            }`}
-          >
-            {!showLeftSidebar && !showRightSidebar
-              ? '[ [X] FULL MAP MODE (100%) ]'
-              : '[ [ ] FULL MAP MODE (HOTKEY: M) ]'}
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowRightSidebar((v) => !v)}
-            className={`px-1 py-0.5 transition-colors whitespace-nowrap shrink-0 ${
-              showRightSidebar
-                ? 'text-[#ff0099] bg-[#202020]'
-                : 'text-[#808080] hover:text-[#d0d0d0]'
-            }`}
-          >
-            {showRightSidebar ? '[ HIDE CHRONICLE >> ]' : '[ SHOW CHRONICLE >> ]'}
-          </button>
-        </div>
-      </div>
 
       {/* Main Screen Layout: MAP IS THE DOMINANT/BIGGEST PART */}
       <div className="flex-1 flex min-h-0 overflow-hidden bg-[#000000]">

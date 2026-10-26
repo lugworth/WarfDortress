@@ -10,15 +10,49 @@ import React, {
 import { useGame } from "./GameProvider";
 import { DesignationType, DwarfEntity, HostileEntity } from "@/lib/types";
 import { ISOTOPE } from "@/lib/colors";
-import { canDesignateTile } from "@/lib/game-engine";
+import { canDesignateTile, getConstructionCost } from "@/lib/game-engine";
 import { TOOL_KEYS } from "@/lib/game-rules";
-import { getDesignationPreview, getMapPoints } from "@/lib/ui-model";
+import { getDesignationPreview, getMapPoints, TOOL_GLYPHS } from "@/lib/ui-model";
 import { formatCost, getTool } from "@/lib/tool-catalog";
 import { TOOL_NAMES } from "@/lib/ui-labels";
-import { MAP_ZOOMS } from "@/lib/ui-preferences";
 import { useUI } from "./UIProvider";
 import AsciiSelect from "./AsciiSelect";
 import { playTactileSfx } from "@/lib/audio";
+
+const PRIMARY_FAB_TOOLS: Array<{
+  id: DesignationType;
+  shortLabel: string;
+  hotkey: string;
+  accent: string;
+}> = [
+  { id: "MINE", shortLabel: "Mine", hotkey: "D", accent: "text-[#ff9900]" },
+  { id: "CHOP", shortLabel: "Chop", hotkey: "T", accent: "text-[#33ff00]" },
+  { id: "GATHER", shortLabel: "Gather", hotkey: "G", accent: "text-[#33ff00]" },
+  { id: "STAIRS", shortLabel: "Stairs", hotkey: "X", accent: "text-[#ff0099]" },
+  { id: "STOCKPILE", shortLabel: "Stock", hotkey: "P", accent: "text-[#00ffff]" },
+  { id: "BUILD_WALL", shortLabel: "Wall", hotkey: "W", accent: "text-[#ffffff]" },
+  { id: "BUILD_DOOR", shortLabel: "Door", hotkey: "O", accent: "text-[#ff9900]" },
+  { id: "BUILD_TRAP", shortLabel: "Trap", hotkey: "E", accent: "text-[#ff0000]" },
+  { id: "BUILD_FARM", shortLabel: "Farm", hotkey: "A", accent: "text-[#33ff00]" },
+];
+
+const SECONDARY_FAB_TOOLS: Array<{
+  id: DesignationType;
+  shortLabel: string;
+  hotkey: string;
+  accent: string;
+}> = [
+  { id: "BUILD_BED", shortLabel: "Bed", hotkey: "B", accent: "text-[#00ffff]" },
+  { id: "BUILD_MASON", shortLabel: "Mason", hotkey: "M", accent: "text-[#d0d0d0]" },
+  { id: "BUILD_CARPENTER", shortLabel: "Carpenter", hotkey: "C", accent: "text-[#ff9900]" },
+  { id: "BUILD_STILL", shortLabel: "Still", hotkey: "S", accent: "text-[#cc00ff]" },
+  { id: "BUILD_SMELTER", shortLabel: "Smeltery", hotkey: "L", accent: "text-[#ff9900]" },
+  { id: "BUILD_FORGE", shortLabel: "Forge", hotkey: "F", accent: "text-[#00ffff]" },
+  { id: "BUILD_TAVERN", shortLabel: "Tavern", hotkey: "V", accent: "text-[#cc00ff]" },
+  { id: "BUILD_TEMPLE", shortLabel: "Temple", hotkey: "Y", accent: "text-[#ff9900]" },
+  { id: "BUILD_DEPOT", shortLabel: "Depot", hotkey: "U", accent: "text-[#ff0099]" },
+  { id: "RECLAIM_RELIC", shortLabel: "Relic", hotkey: "R", accent: "text-[#ff0099]" },
+];
 
 const DESIGNATION_BADGE: Record<
   DesignationType,
@@ -71,8 +105,9 @@ export default function ASCIIViewport() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState({ width: 800, height: 600, dpr: 1 });
+  const [viewport, setViewport] = useState({ width: 960, height: 640, dpr: 1 });
   const [mapOptions, setMapOptions] = useState(false);
+  const [showBuildDrawer, setShowBuildDrawer] = useState(false);
   const [panMode, setPanMode] = useState(false);
   const [focusedPointId, setFocusedPointId] = useState<string | null>(null);
   const [fontReady, setFontReady] = useState(false);
@@ -101,8 +136,6 @@ export default function ASCIIViewport() {
   } | null>(null);
   const contextKey = `${gameState.id}:${currentZ}:${selectedTool}:${panMode}`;
   const [selectionContext, setSelectionContext] = useState(contextKey);
-  // Reset transient selections in the render that changes their world/tool.
-  // An effect scheduled for the next frame could erase a new keyboard drag.
   if (selectionContext !== contextKey) {
     setSelectionContext(contextKey);
     setPending(null);
@@ -112,21 +145,12 @@ export default function ASCIIViewport() {
 
   const gridWidth = gameState.world.width;
   const gridHeight = gameState.world.height;
-  const scale =
-    preferences.mapZoom === "fit"
-      ? Math.max(
-          0.2,
-          Math.min(
-            (viewport.width - 20) / (gridWidth * 14),
-            (viewport.height - 20) / (gridHeight * 18),
-            2,
-          ),
-        )
-      : preferences.mapZoom / 100;
-  const CELL_W = 14 * scale;
-  const CELL_H = 18 * scale;
-  const logicalWidth = gridWidth * CELL_W;
-  const logicalHeight = gridHeight * CELL_H;
+  // Auto-scale cells so the 76x42 map fills the viewport container with zero scrollbars
+  const CELL_W = Math.max(4, viewport.width / gridWidth);
+  const CELL_H = Math.max(6, viewport.height / gridHeight);
+  const scale = Math.min(CELL_W / 14, CELL_H / 18);
+  const logicalWidth = viewport.width;
+  const logicalHeight = viewport.height;
   const points = useMemo(
     () => getMapPoints(gameState, currentZ),
     [gameState, currentZ],
@@ -878,42 +902,107 @@ export default function ASCIIViewport() {
     }
   };
 
+  const isSecondaryToolActive = SECONDARY_FAB_TOOLS.some(
+    (t) => t.id === selectedTool,
+  );
+
   return (
-    <div className="map-viewport flex flex-col h-full w-full min-h-0 bg-[var(--ui-bg)] font-mono select-none overflow-y-auto text-[var(--ui-text)]">
-      <div className="map-toolbar" aria-label="Map controls">
+    <div
+      ref={scrollRef}
+      className="map-viewport relative flex-1 h-full w-full min-h-0 min-w-0 bg-[var(--ui-bg)] font-mono select-none overflow-hidden text-[var(--ui-text)]"
+    >
+      {/* Full-Container Auto-Scaled ASCII Canvas (Zero Scrollbars) */}
+      <canvas
+        ref={canvasRef}
+        data-testid="ascii-map-canvas"
+        width={Math.ceil(logicalWidth * viewport.dpr)}
+        height={Math.ceil(logicalHeight * viewport.dpr)}
+        aria-label={`Fortress map, cursor ${cursor.x}, ${cursor.y}, depth ${currentZ}. ${inspectMode ? "Inspection enabled. Tab cycles objects; Escape exits inspection." : "Shift and arrow keys select an order area."}`}
+        aria-describedby="map-keyboard-help"
+        tabIndex={0}
+        onKeyDown={handleMapKey}
+        onPointerDown={(e) => {
+          if (!panMode) e.currentTarget.setPointerCapture(e.pointerId);
+          handleMouseDown(e);
+        }}
+        onPointerMove={handleMouseMove}
+        onPointerUp={handleMouseUp}
+        onPointerCancel={() => {
+          setDragStart(null);
+          setDragCurrent(null);
+        }}
+        style={{
+          touchAction: "none",
+          width: "100%",
+          height: "100%",
+          display: "block",
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          const coord = clientToGrid(e.clientX, e.clientY);
+          if (coord) {
+            setInspectedCoord({ x: coord.x, y: coord.y, z: currentZ });
+            setInspectMode(true);
+          }
+        }}
+        onPointerLeave={() => {
+          if (dragStart) return;
+          setDragStart(null);
+          setDragCurrent(null);
+        }}
+        className={`block w-full h-full bg-[var(--ui-bg)] ${
+          inspectMode ? "cursor-pointer" : "cursor-crosshair"
+        }`}
+      />
+
+      {/* Screen-reader keyboard help */}
+      <p id="map-keyboard-help" className="sr-only">
+        Focus map: arrows inspect, Tab cycles objects in inspect mode, Shift and
+        arrows select, Enter confirms, Escape cancels.
+      </p>
+
+      {/* FLOATING TOP-LEFT HUD: Z-Level Strata Switcher & Quick Presets */}
+      <div
+        aria-label="Map depth and options"
+        className="pointer-events-auto absolute top-2.5 left-2.5 z-20 flex flex-wrap items-center gap-1 bg-[#0a0a0a]/90 backdrop-blur-sm border border-[#2a2a2a] px-2 py-1 shadow-lg text-xs"
+      >
         <span
-          className="ui-caption mr-2 text-[var(--ui-muted)]"
+          className="text-[#ff0099] font-bold mr-1 whitespace-nowrap"
           title={currentStratum.name}
         >
           Z-{currentZ} ·{" "}
-          {currentZ === 0 ? "Surface" : currentStratum.primaryRock}
+          <span className="text-[#d0d0d0] font-normal">
+            {currentZ === 0 ? "Surface" : currentStratum.primaryRock}
+          </span>
         </span>
         <button
           type="button"
-          className="ui-button"
           aria-label="Ascend Z-Level"
           disabled={currentZ === 0}
           onClick={() => {
             playTactileSfx("zlevel");
             setCurrentZ((z) => Math.max(0, z - 1));
           }}
+          className="px-1.5 py-0.5 border border-[#2a2a2a] bg-[#000000] text-[#00ffff] hover:border-[#00ffff] disabled:opacity-35"
+          title="Ascend Z-Level ([)"
         >
           ↑
         </button>
         <button
           type="button"
-          className="ui-button"
           aria-label="Descend Z-Level"
           disabled={currentZ >= gameState.world.depth - 1}
           onClick={() => {
             playTactileSfx("zlevel");
             setCurrentZ((z) => Math.min(gameState.world.depth - 1, z + 1));
           }}
+          className="px-1.5 py-0.5 border border-[#2a2a2a] bg-[#000000] text-[#00ffff] hover:border-[#00ffff] disabled:opacity-35"
+          title="Descend Z-Level (])"
         >
           ↓
         </button>
         <div
-          className="hidden sm:flex items-center gap-1"
+          className="hidden sm:flex items-center gap-0.5 ml-0.5"
           role="group"
           aria-label="Strata depth selector"
         >
@@ -927,7 +1016,11 @@ export default function ASCIIViewport() {
                 playTactileSfx("zlevel");
                 setCurrentZ(stratum.zLevel);
               }}
-              className="ui-button !px-1.5 !py-0.5 text-[11px] tabular-nums"
+              className={`px-1.5 py-0.5 text-[11px] tabular-nums border transition-colors ${
+                currentZ === stratum.zLevel
+                  ? "border-[#ff0099] bg-[#201018] text-[#ff0099] font-bold"
+                  : "border-[#222222] bg-[#000000] text-[#808080] hover:text-[#d0d0d0]"
+              }`}
             >
               Z{stratum.zLevel}
             </button>
@@ -935,118 +1028,97 @@ export default function ASCIIViewport() {
         </div>
         <button
           type="button"
-          className="ui-button"
-          aria-pressed={inspectMode}
-          onClick={() => setInspectMode((v) => !v)}
+          aria-pressed={preferences.labels}
+          onClick={() => updatePreferences({ labels: !preferences.labels })}
+          className={`px-1.5 py-0.5 text-[11px] border transition-colors ${
+            preferences.labels
+              ? "border-[#00ffff] bg-[#081c20] text-[#00ffff]"
+              : "border-[#222222] bg-[#000000] text-[#808080] hover:text-[#d0d0d0]"
+          }`}
+          title="Toggle floating entity & workshop tags on map"
         >
-          Inspect
-        </button>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="ui-button"
-            aria-label="Zoom map out"
-            onClick={() =>
-              updatePreferences({
-                mapZoom:
-                  [...MAP_ZOOMS].reverse().find((z) => z < scale * 100 - 1) ||
-                  MAP_ZOOMS[0],
-              })
-            }
-          >
-            −
-          </button>
-          <output className="ui-caption" aria-label="Current map zoom">
-            {Math.round(scale * 100)}%
-          </output>
-          <button
-            type="button"
-            className="ui-button"
-            aria-label="Zoom map in"
-            onClick={() =>
-              updatePreferences({
-                mapZoom: MAP_ZOOMS.find((z) => z > scale * 100 + 1) || 200,
-              })
-            }
-          >
-            +
-          </button>
-        </div>
-        <button
-          type="button"
-          className="ui-button"
-          onClick={() => updatePreferences({ mapZoom: "fit" })}
-        >
-          Fit
+          Tags {preferences.labels ? "ON" : "OFF"}
         </button>
         <button
           type="button"
-          className="ui-button"
           aria-expanded={mapOptions}
           aria-controls="map-options"
           onClick={() => setMapOptions((v) => !v)}
+          className={`px-1.5 py-0.5 text-[11px] border transition-colors ${
+            mapOptions
+              ? "border-[#ff0099] bg-[#201018] text-[#ff0099]"
+              : "border-[#222222] bg-[#000000] text-[#d0d0d0] hover:border-[#808080]"
+          }`}
         >
-          Options {mapOptions ? "▴" : "▾"}
+          Quick {mapOptions ? "^" : "v"}
         </button>
       </div>
+
+      {/* FLOATING TOP-LEFT DRAWER: Quick Automation Presets & Object Finder */}
       {mapOptions && (
         <section
           id="map-options"
           aria-label="Map options"
-          className="map-settings space-y-3"
+          className="pointer-events-auto absolute top-11 left-2.5 z-30 w-80 max-w-[calc(100vw-1.5rem)] bg-[#0c0c0c]/95 backdrop-blur-md border border-[#ff0099] p-2.5 shadow-2xl space-y-2.5 text-xs"
         >
-          <p className="ui-caption text-[var(--ui-muted)]">
-            {currentStratum.name} · {currentStratum.primaryRock}
-          </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center justify-between border-b border-[#202020] pb-1">
+            <span className="text-[#ff0099] font-bold">
+              [ QUICK FORTRESS MACROS ]
+            </span>
             <button
               type="button"
-              className="ui-button"
-              aria-pressed={preferences.labels}
-              onClick={() => updatePreferences({ labels: !preferences.labels })}
+              onClick={() => setMapOptions(false)}
+              className="text-[#808080] hover:text-[#ffffff] px-1"
             >
-              Labels {preferences.labels ? "on" : "off"}
-            </button>
-            <button
-              type="button"
-              className="ui-button"
-              aria-pressed={panMode}
-              onClick={() => setPanMode((v) => !v)}
-            >
-              {panMode ? "Pan mode" : "Draw mode"}
-            </button>
-            <button
-              type="button"
-              className="ui-button"
-              onClick={handleQuickExcavate}
-            >
-              Mine cliff
-            </button>
-            <button
-              type="button"
-              className="ui-button"
-              onClick={handleQuickChop}
-            >
-              Chop timber
-            </button>
-            <button
-              type="button"
-              className="ui-button"
-              onClick={handleQuickBuildForge}
-            >
-              Starter workshops
+              ×
             </button>
           </div>
-          <div className="flex flex-wrap items-center gap-2 ui-caption">
-            <span>Find</span>
+          <p className="text-[11px] text-[#808080]">
+            {currentStratum.name} · Primary Rock: {currentStratum.primaryRock}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              className="px-2 py-1 border border-[#2a2a2a] bg-[#000000] text-[#ff9900] hover:border-[#ff9900]"
+              onClick={() => {
+                handleQuickExcavate();
+                setMapOptions(false);
+              }}
+            >
+              [ ⛏ Mine Cliff ]
+            </button>
+            <button
+              type="button"
+              className="px-2 py-1 border border-[#2a2a2a] bg-[#000000] text-[#33ff00] hover:border-[#33ff00]"
+              onClick={() => {
+                handleQuickChop();
+                setMapOptions(false);
+              }}
+            >
+              [ × Chop Timber ]
+            </button>
+            <button
+              type="button"
+              className="px-2 py-1 border border-[#2a2a2a] bg-[#000000] text-[#00ffff] hover:border-[#00ffff]"
+              onClick={() => {
+                handleQuickBuildForge();
+                setMapOptions(false);
+              }}
+            >
+              [ ⚒ Starter Workshops ]
+            </button>
+          </div>
+          <div className="flex items-center gap-2 pt-1 border-t border-[#202020]">
+            <span className="text-[#808080] text-[11px] shrink-0">Locate:</span>
             <AsciiSelect
               ariaLabel="Find map object"
               value=""
-              className="min-w-0 max-w-full"
+              className="min-w-0 flex-1"
               onChange={(val) => {
                 const point = points.find((p) => p.id === val);
                 if (point) {
                   inspectPoint(point);
+                  setMapOptions(false);
                   canvasRef.current?.focus();
                 }
               }}
@@ -1059,122 +1131,66 @@ export default function ASCIIViewport() {
               ]}
             />
           </div>
-          <details>
-            <summary className="ui-caption">Landmarks &amp; map legend</summary>
-            <ul className="mt-2 space-y-2">
-              {gameState.alerts.slice(0, 6).map((alert) => (
-                <li
-                  key={alert.id}
-                  className="flex items-center justify-between gap-2"
-                >
-                  <span className="ui-caption">{alert.title}</span>
-                  <button
-                    type="button"
-                    className="ui-button"
-                    aria-label={`Jump to ${alert.title}`}
-                    onClick={() => jumpToLocation(alert.x, alert.y, alert.z)}
-                  >
-                    Go
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <p className="ui-caption mt-2">
-              ☺ Dwarf · g Raider · ☼ Relic · £ Smelter · ⚒ Forge · ♫ Tavern · Ψ
-              Temple · ^ Trap
-            </p>
-          </details>
+          <div className="text-[10px] text-[#808080] pt-1 border-t border-[#202020]">
+            ☺ Dwarf · g Raider · ☼ Relic · £ Smelter · ⚒ Forge · ♫ Tavern · Ψ
+            Temple · ^ Trap
+          </div>
         </section>
       )}
 
-      {/* Native-size canvas scrolls instead of shrinking glyphs to fit. */}
-      <div
-        ref={scrollRef}
-        className="relative flex-1 overflow-auto bg-[var(--ui-bg)] min-h-[180px] min-w-0"
-        onScroll={() => {
-          if (preferences.labels) setViewport((v) => ({ ...v }));
-        }}
-      >
-        <canvas
-          ref={canvasRef}
-          data-testid="ascii-map-canvas"
-          width={Math.ceil(logicalWidth * viewport.dpr)}
-          height={Math.ceil(logicalHeight * viewport.dpr)}
-          aria-label={`Fortress map, cursor ${cursor.x}, ${cursor.y}, depth ${currentZ}. ${inspectMode ? "Inspection enabled. Tab cycles objects; Escape exits inspection." : "Shift and arrow keys select an order area."}`}
-          aria-describedby="map-keyboard-help"
-          tabIndex={0}
-          onKeyDown={handleMapKey}
-          onPointerDown={(e) => {
-            if (!panMode) e.currentTarget.setPointerCapture(e.pointerId);
-            handleMouseDown(e);
-          }}
-          onPointerMove={handleMouseMove}
-          onPointerUp={handleMouseUp}
-          onPointerCancel={() => {
-            setDragStart(null);
-            setDragCurrent(null);
-          }}
-          style={{
-            touchAction: panMode ? "pan-x pan-y" : "none",
-            width: logicalWidth,
-            height: logicalHeight,
-            maxWidth: "none",
-            maxHeight: "none",
-            display: "block",
-          }}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            const coord = clientToGrid(e.clientX, e.clientY);
-            if (coord) {
-              setInspectedCoord({ x: coord.x, y: coord.y, z: currentZ });
-              setInspectMode(true);
-            }
-          }}
-          onPointerLeave={() => {
-            if (dragStart) return;
-            setDragStart(null);
-            setDragCurrent(null);
-          }}
-          className={`ring-1 ring-[var(--ui-border)] bg-[var(--ui-bg)] ${
-            panMode
-              ? "cursor-grab"
-              : inspectMode
-                ? "cursor-pointer"
-                : "cursor-crosshair"
-          }`}
-        />
+      {/* FLOATING TOP-RIGHT HUD: Active Tool & Hovered Tile Telemetry */}
+      <div className="pointer-events-none absolute top-2.5 right-2.5 z-20 hidden sm:flex items-center gap-2 bg-[#0a0a0a]/90 backdrop-blur-sm border border-[#2a2a2a] px-2.5 py-1 shadow-lg text-xs">
+        <span className="text-[#ff0099] font-bold whitespace-nowrap">
+          {inspectMode
+            ? "[ ? INSPECT MODE ]"
+            : `[ ${TOOL_GLYPHS[selectedTool]} ${TOOL_NAMES[selectedTool].toUpperCase()} ]`}
+        </span>
+        <span className="text-[#404040]">|</span>
+        <span className="text-[#d0d0d0] tabular-nums truncate max-w-[240px]">
+          {hoveredTile
+            ? `(${hoveredTile.x},${hoveredTile.y}) ${
+                hoveredTile.revealed
+                  ? hoveredTile.terrain.replaceAll("_", " ")
+                  : "UNEXPLORED"
+              }`
+            : orderStatus || "Drag tiles to designate"}
+        </span>
       </div>
 
+      {/* FLOATING ORDER PREVIEW & CONFIRMATION CARD (Above FAB Dock) */}
       {preview && selection && (
         <section
           aria-label="Order preview"
-          className="max-h-[32dvh] shrink-0 overflow-y-auto border-t-2 border-[var(--ui-info)] bg-[var(--ui-panel)] px-3 py-2 text-xs"
+          className="pointer-events-auto absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-[min(92vw,500px)] bg-[#0c0c0c]/95 backdrop-blur-md border-2 border-[#00ffff] p-3 shadow-2xl text-xs space-y-1.5"
         >
-          <strong>{getTool(selection.tool).label}</strong>
-          <p>
-            <span className="text-[var(--ui-success)]">
-              + {preview.accepted} eligible
-            </span>{" "}
-            ·{" "}
-            <span className="text-[var(--ui-danger)]">
-              × {preview.skipped} blocked
+          <div className="flex items-center justify-between gap-2">
+            <strong className="text-[#00ffff] text-sm">
+              {TOOL_GLYPHS[selection.tool]} {getTool(selection.tool).label}
+            </strong>
+            <span className="tabular-nums text-[11px]">
+              <span className="text-[#33ff00] font-bold">
+                +{preview.accepted} eligible
+              </span>{" "}
+              ·{" "}
+              <span className="text-[#ff0000]">
+                ×{preview.skipped} blocked
+              </span>
+              {preview.alreadyDesignated > 0
+                ? ` · ${preview.alreadyDesignated} queued`
+                : ""}
             </span>
-            {preview.alreadyDesignated > 0
-              ? ` · ${preview.alreadyDesignated} already queued`
-              : ""}
-          </p>
-          <p>
-            Queued completion cost: {formatCost(preview.cost)}. Materials
-            consumed when built.
+          </div>
+          <p className="text-[#d0d0d0] text-[11px]">
+            Cost: <span className="text-[#ff9900]">{formatCost(preview.cost)}</span>{" "}
+            <span className="text-[#808080]">(consumed when built)</span>
           </p>
           {Object.keys(preview.missing).length > 0 && (
-            <p className="text-[var(--ui-warning)]">
-              Short by {formatCost(preview.missing)}. Orders can be queued while
-              supplies are gathered.
+            <p className="text-[#ff9900] text-[11px]">
+              Short by {formatCost(preview.missing)} — order will wait for supplies.
             </p>
           )}
           {preview.skipped > 0 && (
-            <p>
+            <p className="text-[#808080] text-[11px] truncate">
               {[
                 ...new Set(
                   preview.tiles.filter((t) => !t.valid).map((t) => t.reason),
@@ -1183,60 +1199,47 @@ export default function ASCIIViewport() {
             </p>
           )}
           {pending && (
-            <div className="mt-2 flex flex-wrap gap-3">
+            <div className="pt-1.5 flex items-center justify-end gap-2 border-t border-[#202020]">
+              <button
+                type="button"
+                onClick={() => setPending(null)}
+                className="px-2.5 py-1 border border-[#2a2a2a] text-[#808080] hover:text-[#ffffff]"
+              >
+                [ Esc: Cancel ]
+              </button>
               <button
                 type="button"
                 disabled={preview.accepted === 0}
-                className="border border-[var(--ui-success)] px-3 py-1"
                 onClick={commitSelection}
+                className="px-3 py-1 border border-[#33ff00] bg-[#0a200a] text-[#33ff00] font-bold hover:bg-[#143814] disabled:opacity-40"
               >
-                Queue {preview.accepted}{" "}
-                {preview.accepted === 1 ? "tile" : "tiles"}
-              </button>
-              <button type="button" onClick={() => setPending(null)}>
-                Cancel
+                [ Enter: Queue {preview.accepted}{" "}
+                {preview.accepted === 1 ? "Tile" : "Tiles"} ]
               </button>
             </div>
           )}
         </section>
       )}
-      <p role="status" className="shrink-0 px-3 text-xs text-[var(--ui-info)]">
-        {orderStatus}
-      </p>
-      <details className="shrink-0 px-3 py-1 text-xs text-[var(--ui-muted)]">
-        <summary>Keyboard &amp; touch controls</summary>
-        <p id="map-keyboard-help">
-          Focus map: arrows inspect · Tab cycles objects in inspect mode ·
-          Shift+arrows select · Enter previews/confirms · Esc cancels · Pan mode
-          scrolls on touch
-        </p>
-      </details>
 
-      {/* Interactive Tile & Entity Inspector Panel (Shown when Inspect Mode is ON) */}
+      {/* FLOATING INSPECTOR CARD (Shown when Inspect Mode is ON) */}
       {inspectMode && !preview && activeInspect.tile && (
-        <div className="max-h-[35dvh] shrink-0 overflow-y-auto bg-[#0c0c0c] border-t-2 border-[var(--ui-accent)] px-3 py-2 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 mb-1.5 border-b border-[var(--ui-border)]">
+        <div className="pointer-events-auto absolute bottom-20 left-1/2 -translate-x-1/2 z-30 w-[min(94vw,640px)] bg-[#0c0c0c]/95 backdrop-blur-md border-2 border-[#ff0099] p-3 shadow-2xl text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 mb-2 border-b border-[#202020]">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[var(--ui-accent)] font-bold whitespace-nowrap">
-                [ INSPECTOR // ({activeInspect.coord.x},{activeInspect.coord.y}
-                ,Z-{activeInspect.coord.z}) ]
+              <span className="text-[#ff0099] font-bold whitespace-nowrap">
+                [ INSPECT ({activeInspect.coord.x},{activeInspect.coord.y},Z-
+                {activeInspect.coord.z}) ]
               </span>
-              <span className="text-[var(--ui-info)] font-bold whitespace-nowrap">
+              <span className="text-[#00ffff] font-bold whitespace-nowrap">
                 {activeInspect.tile.revealed
                   ? activeInspect.tile.terrain
                   : "UNEXPLORED ROCK"}
               </span>
               {activeInspect.tile.revealed &&
                 activeInspect.tile.resourceDrop && (
-                  <span className="text-[var(--ui-warning)] whitespace-nowrap">
-                    · YIELD: +{activeInspect.tile.resourceDrop.amount}{" "}
+                  <span className="text-[#ff9900] whitespace-nowrap">
+                    · +{activeInspect.tile.resourceDrop.amount}{" "}
                     {activeInspect.tile.resourceDrop.type}
-                  </span>
-                )}
-              {activeInspect.tile.revealed &&
-                activeInspect.tile.terrain === "CAVERN_RELIC" && (
-                  <span className="text-[var(--ui-success)] font-bold whitespace-nowrap">
-                    · ☼ ANCIENT RELIC (+300 WEALTH &amp; CLAN MIRTH)
                   </span>
                 )}
             </div>
@@ -1257,7 +1260,7 @@ export default function ASCIIViewport() {
                         activeInspect.coord.z,
                       );
                     }}
-                    className="px-1.5 py-0.5 border border-[var(--ui-success)] text-[var(--ui-success)] hover:bg-[var(--ui-border)] font-bold whitespace-nowrap shrink-0"
+                    className="px-1.5 py-0.5 border border-[#33ff00] text-[#33ff00] hover:bg-[#202020] font-bold"
                   >
                     [ ☼ RECLAIM RELIC ]
                   </button>
@@ -1275,9 +1278,9 @@ export default function ASCIIViewport() {
                     activeInspect.coord.z,
                   );
                 }}
-                className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-warning)] hover:bg-[var(--ui-border)] whitespace-nowrap shrink-0"
+                className="px-1.5 py-0.5 border border-[#2a2a2a] text-[#ff9900] hover:border-[#ff9900]"
               >
-                [ MINE TILE ]
+                [ ⛏ MINE ]
               </button>
               <button
                 type="button"
@@ -1291,52 +1294,39 @@ export default function ASCIIViewport() {
                     activeInspect.coord.z,
                   )
                 }
-                className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-danger)] hover:bg-[var(--ui-border)] whitespace-nowrap shrink-0"
+                className="px-1.5 py-0.5 border border-[#2a2a2a] text-[#ff0000] hover:border-[#ff0000]"
               >
-                [ SET TRAP ]
+                [ ^ TRAP ]
               </button>
               <button
                 type="button"
                 onClick={() => setInspectMode(false)}
-                className="px-1.5 py-0.5 border border-[var(--ui-border)] text-[var(--ui-muted)] hover:text-[var(--ui-bright)] whitespace-nowrap shrink-0"
+                className="px-1.5 py-0.5 border border-[#2a2a2a] text-[#808080] hover:text-[#ffffff]"
               >
-                Close
+                [ × Close ]
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {/* Dwarf at or near coordinate */}
             {activeInspect.dwarf ? (
-              <div className="p-1.5 bg-[var(--ui-bg)] border border-[var(--ui-border)] flex flex-wrap items-center justify-between gap-2">
+              <div className="p-2 bg-[#050505] border border-[#222222] flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="font-bold text-[var(--ui-bright)]">
+                  <div className="font-bold text-[#ffffff] truncate">
                     <span style={{ color: activeInspect.dwarf.color }}>
                       {activeInspect.dwarf.char}
                     </span>{" "}
                     {activeInspect.dwarf.name} ({activeInspect.dwarf.title})
                   </div>
-                  <div className="text-[11px] text-[var(--ui-muted)] tabular-nums">
-                    HP:{" "}
-                    <span className="text-[var(--ui-success)]">
+                  <div className="text-[11px] text-[#808080] tabular-nums">
+                    HP{" "}
+                    <span className="text-[#33ff00]">
                       {activeInspect.dwarf.hp}/{activeInspect.dwarf.maxHp}
                     </span>{" "}
-                    · State:{" "}
-                    <span className="text-[var(--ui-info)]">
+                    ·{" "}
+                    <span className="text-[#00ffff]">
                       {activeInspect.dwarf.state}
-                    </span>{" "}
-                    · Gear:{" "}
-                    <span className="text-[var(--ui-warning)]">
-                      {activeInspect.dwarf.weaponEquipped ? "⚔Axe " : ""}
-                      {activeInspect.dwarf.armorEquipped ? "🛡Mail" : ""}
-                      {!activeInspect.dwarf.weaponEquipped &&
-                      !activeInspect.dwarf.armorEquipped
-                        ? "Unarmed"
-                        : ""}
                     </span>
-                  </div>
-                  <div className="text-[10px] text-[var(--ui-muted)] italic truncate">
-                    &ldquo;{activeInspect.dwarf.thought}&rdquo;
                   </div>
                 </div>
                 <button
@@ -1344,66 +1334,206 @@ export default function ASCIIViewport() {
                   onClick={() =>
                     toggleDwarfLabor(activeInspect.dwarf!.id, "COMBAT")
                   }
-                  className={`px-2 py-1 border text-[10px] font-bold whitespace-nowrap shrink-0 ${
+                  className={`px-2 py-1 border text-[10px] font-bold shrink-0 ${
                     activeInspect.dwarf.labors.COMBAT
-                      ? "border-[var(--ui-danger)] text-[var(--ui-danger)] bg-[var(--ui-border)]"
-                      : "border-[var(--ui-border)] text-[var(--ui-muted)] hover:text-[var(--ui-bright)]"
+                      ? "border-[#ff0000] text-[#ff0000] bg-[#200808]"
+                      : "border-[#2a2a2a] text-[#808080] hover:text-[#ffffff]"
                   }`}
                 >
-                  {activeInspect.dwarf.labors.COMBAT
-                    ? "Militia on"
-                    : "Draft militia"}
+                  {activeInspect.dwarf.labors.COMBAT ? "Militia ON" : "Draft"}
                 </button>
               </div>
             ) : (
-              <div className="p-1.5 bg-[var(--ui-bg)] border border-[var(--ui-border)] text-[var(--ui-muted)] flex items-center">
-                {activeInspect.tile.revealed
-                  ? `No dwarf standing at (${activeInspect.coord.x},${activeInspect.coord.y},Z-${activeInspect.coord.z}). Select a visible pioneer to inspect.`
-                  : "Unexplored tile. Occupants are unknown."}
+              <div className="p-2 bg-[#050505] border border-[#222222] text-[#808080] flex items-center">
+                No dwarf at ({activeInspect.coord.x},{activeInspect.coord.y},Z-
+                {activeInspect.coord.z}).
               </div>
             )}
 
-            {/* Hostile at or near coordinate */}
             {activeInspect.hostile ? (
-              <div className="p-1.5 bg-[#150000] border border-[var(--ui-danger)] flex items-center justify-between gap-2">
+              <div className="p-2 bg-[#150000] border border-[#ff0000] flex items-center justify-between gap-2">
                 <div>
-                  <div className="font-bold text-[var(--ui-danger)]">
-                    [{activeInspect.hostile.char}] {activeInspect.hostile.name}{" "}
-                    ({activeInspect.hostile.kind})
+                  <div className="font-bold text-[#ff0000]">
+                    [{activeInspect.hostile.char}] {activeInspect.hostile.name}
                   </div>
-                  <div className="text-[11px] text-[var(--ui-text)] tabular-nums">
-                    HP:{" "}
-                    <strong className="text-[var(--ui-danger)]">
-                      {activeInspect.hostile.hp}/{activeInspect.hostile.maxHp}
-                    </strong>{" "}
-                    · ATK: <strong>{activeInspect.hostile.attack}</strong> · AI:{" "}
-                    {activeInspect.hostile.behavior}
+                  <div className="text-[11px] text-[#d0d0d0] tabular-nums">
+                    HP {activeInspect.hostile.hp}/{activeInspect.hostile.maxHp} ·
+                    ATK {activeInspect.hostile.attack}
                   </div>
                 </div>
-                <span className="text-[10px] text-[var(--ui-warning)] font-bold whitespace-nowrap shrink-0">
-                  [ ! HOSTILE THREAT ]
+                <span className="text-[10px] text-[#ff9900] font-bold">
+                  [ ! HOSTILE ]
                 </span>
               </div>
             ) : (
-              <div className="p-1.5 bg-[var(--ui-bg)] border border-[var(--ui-border)] text-[var(--ui-muted)] flex items-center">
-                {activeInspect.tile.revealed
-                  ? "No hostile visible on this tile."
-                  : "Explore this tile before assessing threats."}
+              <div className="p-2 bg-[#050505] border border-[#222222] text-[#808080] flex items-center">
+                No hostile threat on this tile.
               </div>
             )}
           </div>
         </div>
       )}
 
-      <div className="ui-caption flex shrink-0 items-center gap-3 overflow-hidden border-t border-[var(--ui-border)] px-3 py-1 text-[var(--ui-muted)]">
-        <span className="shrink-0 text-[var(--ui-accent)]">
-          {inspectMode ? "Inspect" : TOOL_NAMES[selectedTool]}
-        </span>
-        <span className="truncate">
-          {hoveredTile
-            ? `${hoveredTile.x},${hoveredTile.y} · ${hoveredTile.revealed ? hoveredTile.terrain.replaceAll("_", " ").toLowerCase() : "unexplored"}`
-            : "Drag to queue · I to inspect"}
-        </span>
+      {/* FLOATING POP-UP DRAWER: Workshops & Civic Structures */}
+      {showBuildDrawer && (
+        <div
+          aria-label="Workshops and civic structures"
+          className="pointer-events-auto absolute bottom-14 left-1/2 -translate-x-1/2 z-30 w-[min(94vw,620px)] bg-[#0c0c0c]/95 backdrop-blur-md border border-[#ff0099] p-2.5 shadow-2xl"
+        >
+          <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-[#222222] text-xs">
+            <span className="text-[#ff0099] font-bold">
+              [ ⚒ WORKSHOPS, HALLS &amp; RELICS ]
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowBuildDrawer(false)}
+              className="text-[#808080] hover:text-[#ffffff] px-1"
+            >
+              [ × Close ]
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+            {SECONDARY_FAB_TOOLS.map((item) => {
+              const active = !inspectMode && selectedTool === item.id;
+              const cost = getConstructionCost(item.id);
+              const costLabel = formatCost(cost);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    playTactileSfx("tool");
+                    setInspectMode(false);
+                    setSelectedTool(item.id);
+                    setShowBuildDrawer(false);
+                  }}
+                  className={`flex flex-col items-start justify-between p-1.5 border text-left transition-all ${
+                    active
+                      ? "border-[#ff0099] bg-[#24101c] text-[#ffffff] shadow-[0_0_10px_rgba(255,0,153,0.3)]"
+                      : "border-[#262626] bg-[#060606] hover:border-[#606060] text-[#d0d0d0]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full gap-1">
+                    <span className={`font-bold text-xs ${item.accent}`}>
+                      {TOOL_GLYPHS[item.id]} {item.shortLabel}
+                    </span>
+                    <kbd className="text-[10px] text-[#808080] bg-[#141414] px-1 border border-[#2a2a2a]">
+                      {item.hotkey}
+                    </kbd>
+                  </div>
+                  <span className="text-[10px] text-[#808080] truncate w-full mt-0.5">
+                    {costLabel}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING ACTION BUTTON (FAB) TOOL DOCK ON MAP DISPLAY */}
+      <div
+        role="toolbar"
+        aria-label="Floating map designation tools"
+        className="pointer-events-auto absolute bottom-2 left-1/2 -translate-x-1/2 z-20 max-w-[calc(100%-1rem)] flex items-center gap-1 bg-[#0a0a0a]/95 backdrop-blur-md border border-[#333333] px-1.5 py-1 shadow-[0_8px_30px_rgba(0,0,0,0.85)] overflow-x-auto no-scrollbar"
+      >
+        {PRIMARY_FAB_TOOLS.map((item) => {
+          const active = !inspectMode && selectedTool === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={active}
+              title={`${TOOL_NAMES[item.id]} (Hotkey: ${item.hotkey}) — ${
+                getTool(item.id).desc
+              }`}
+              onClick={() => {
+                playTactileSfx("tool");
+                setInspectMode(false);
+                setSelectedTool(item.id);
+                setShowBuildDrawer(false);
+              }}
+              className={`group relative flex items-center gap-1 px-1.5 py-0.5 border text-[11px] font-mono whitespace-nowrap transition-all shrink-0 ${
+                active
+                  ? "border-[#ff0099] bg-[#24101c] text-[#ffffff] font-bold shadow-[0_0_12px_rgba(255,0,153,0.35)] -translate-y-0.5"
+                  : "border-[#262626] bg-[#050505] text-[#d0d0d0] hover:border-[#606060] hover:bg-[#141414]"
+              }`}
+            >
+              <span className={item.accent}>{TOOL_GLYPHS[item.id]}</span>
+              <span>{item.shortLabel}</span>
+              <span className="text-[9px] text-[#707070] ml-0.5">
+                {item.hotkey}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* Divider */}
+        <span className="h-4 w-px bg-[#2a2a2a] mx-0.5 shrink-0" />
+
+        {/* Workshops & Civic Pop-up Trigger FAB */}
+        <button
+          type="button"
+          aria-expanded={showBuildDrawer}
+          onClick={() => setShowBuildDrawer((v) => !v)}
+          className={`flex items-center gap-1 px-2 py-0.5 border text-[11px] font-mono whitespace-nowrap transition-all shrink-0 ${
+            showBuildDrawer || isSecondaryToolActive
+              ? "border-[#00ffff] bg-[#082228] text-[#00ffff] font-bold shadow-[0_0_12px_rgba(0,255,255,0.3)] -translate-y-0.5"
+              : "border-[#262626] bg-[#050505] text-[#00ffff] hover:border-[#00ffff]"
+          }`}
+          title="Open Workshops, Living Quarters & Civic Buildings drawer"
+        >
+          <span>⚒</span>
+          <span>
+            {isSecondaryToolActive
+              ? TOOL_NAMES[selectedTool]
+              : "Workshops"}
+          </span>
+          <span className="text-[10px]">{showBuildDrawer ? "v" : "^"}</span>
+        </button>
+
+        {/* Inspect Mode FAB */}
+        <button
+          type="button"
+          aria-pressed={inspectMode}
+          onClick={() => {
+            playTactileSfx("tool");
+            setInspectMode((v) => !v);
+            setShowBuildDrawer(false);
+          }}
+          title="Inspect Tile, Dwarf, or Threat (Hotkey: I)"
+          className={`flex items-center gap-1 px-1.5 py-0.5 border text-[11px] font-mono whitespace-nowrap transition-all shrink-0 ${
+            inspectMode
+              ? "border-[#ff0099] bg-[#24101c] text-[#ff0099] font-bold -translate-y-0.5"
+              : "border-[#262626] bg-[#050505] text-[#d0d0d0] hover:border-[#606060]"
+          }`}
+        >
+          <span className="text-[#ff0099]">?</span>
+          <span>Inspect</span>
+          <span className="text-[9px] text-[#707070]">I</span>
+        </button>
+
+        {/* Clear Order / Cancel Tool FAB */}
+        <button
+          type="button"
+          aria-pressed={!inspectMode && selectedTool === "CANCEL"}
+          onClick={() => {
+            playTactileSfx("tool");
+            setInspectMode(false);
+            setSelectedTool("CANCEL");
+            setShowBuildDrawer(false);
+          }}
+          title="Clear queued designations (Hotkey: K)"
+          className={`flex items-center gap-1 px-1.5 py-0.5 border text-[11px] font-mono whitespace-nowrap transition-all shrink-0 ${
+            !inspectMode && selectedTool === "CANCEL"
+              ? "border-[#ff0000] bg-[#280808] text-[#ff0000] font-bold -translate-y-0.5"
+              : "border-[#262626] bg-[#050505] text-[#808080] hover:text-[#ff0000] hover:border-[#ff0000]"
+          }`}
+        >
+          <span>×</span>
+          <span>Clear</span>
+        </button>
       </div>
     </div>
   );

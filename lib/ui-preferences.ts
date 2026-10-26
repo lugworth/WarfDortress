@@ -17,9 +17,9 @@ export interface UIPreferences {
 export const DEFAULT_UI: UIPreferences = {
   theme: "terminal",
   fontSize: 14,
-  mapZoom: 100,
+  mapZoom: "fit",
   reducedMotion: false,
-  labels: true,
+  labels: false,
   favorites: ["MINE", "CHOP", "STAIRS", "BUILD_WALL", "BUILD_DOOR", "CANCEL"],
 };
 

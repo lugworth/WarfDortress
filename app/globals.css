@@ -2,14 +2,14 @@
 
 @font-face {
   font-family: "Fortress Mono";
-  src: url("/fonts/DejaVuSansMono.ttf") format("truetype");
+  src: local("DejaVu Sans Mono"), local("Liberation Mono"), local("Courier New");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: "Fortress Mono";
-  src: url("/fonts/DejaVuSansMono-Bold.ttf") format("truetype");
+  src: local("DejaVu Sans Mono Bold"), local("Liberation Mono Bold"), local("Courier New Bold");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
@@ -60,12 +60,24 @@
   font-size: clamp(5px, 1.3vw, 12px);
   line-height: 1;
 }
-.fortress-ui :is(.text-xs, .text-sm, .text-\[10px\], .text-\[11px\]) {
-  font-size: var(--ui-font-size, 14px);
-  line-height: 1.45;
+.fortress-ui .text-sm {
+  font-size: calc(var(--ui-font-size, 13px) * 1);
+  line-height: 1.35;
+}
+.fortress-ui .text-xs {
+  font-size: calc(var(--ui-font-size, 13px) * 0.92);
+  line-height: 1.35;
+}
+.fortress-ui .text-\[11px\] {
+  font-size: 11px;
+  line-height: 1.3;
+}
+.fortress-ui .text-\[10px\] {
+  font-size: 10px;
+  line-height: 1.25;
 }
 .fortress-ui button {
-  min-height: 32px;
+  min-height: 26px;
   white-space: nowrap;
   overflow-wrap: normal;
   word-break: normal;
