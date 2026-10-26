@@ -128,6 +128,8 @@ export default function ASCIIViewport() {
 
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [dockHeight, setDockHeight] = useState(62);
   const panOrigin = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ width: 960, height: 640, dpr: 1 });
@@ -266,6 +268,16 @@ export default function ASCIIViewport() {
     },
     [CELL_W, CELL_H],
   );
+
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    if (!toolbar) return;
+    const update = () => setDockHeight(toolbar.offsetHeight);
+    const observer = new ResizeObserver(update);
+    observer.observe(toolbar);
+    update();
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -1064,6 +1076,7 @@ export default function ASCIIViewport() {
           Map options {mapOptions ? '−' : '+'}
         </button>
       </div>
+      <div className="map-surface" style={{ '--tool-dock-height': `${dockHeight}px` } as React.CSSProperties}>
       <div className="map-stage" ref={scrollRef}>
       {/* Full-Container Auto-Scaled ASCII Canvas (Zero Scrollbars) */}
       <canvas
@@ -1634,12 +1647,9 @@ export default function ASCIIViewport() {
       )}
 
       </div>
-      <div className="map-status" role="status">
-        <span className="truncate">{orderStatus || (inspectMode ? 'Select a tile to inspect. Esc to close.' : 'Choose a tool · drag an area · Enter to queue')}</span>
-        {preferences.tooltips && hoverMeta && <span className="map-terrain-readout">{hoverMeta.terrainLabel} · {hoverMeta.x},{hoverMeta.y}</span>}
-      </div>
       {/* FLOATING ACTION BUTTON (FAB) TOOL DOCK ON MAP DISPLAY */}
       <div
+        ref={toolbarRef}
         role="toolbar"
         aria-label="Map designation tools"
         className="designation-toolbar"
@@ -1769,6 +1779,11 @@ export default function ASCIIViewport() {
           <span>×</span>
           <span>Clear</span>
         </button>
+      </div>
+      </div>
+      <div className="map-status" role="status">
+        <span className="truncate">{orderStatus || (inspectMode ? 'Select a tile to inspect. Esc to close.' : 'Choose a tool · drag an area · Enter to queue')}</span>
+        {preferences.tooltips && hoverMeta && <span className="map-terrain-readout">{hoverMeta.terrainLabel} · {hoverMeta.x},{hoverMeta.y}</span>}
       </div>
     </div>
   );

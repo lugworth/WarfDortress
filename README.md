@@ -23,7 +23,7 @@ Google sign-in and cloud archives use the project's Firebase configuration.
 - Space pauses or resumes. Selecting a speed preserves the current pause state.
 - `/` opens command search. `I` opens inspection. Escape cancels or closes.
 - `[` and `]` change depth. Arrow keys inspect; Shift+arrows select an area.
-- Mine, Chop, Gather, Stairs, and Stockpile stay in the fixed tool bar.
+- Mine, Chop, Gather, Stairs, and Stockpile stay in the floating tool bar.
   Build contains construction, workshop, and defense tools.
 - Map options contains labels, compact tooltips, panning, and quick orders.
   Display settings in Menu controls text size, map zoom, and accessibility.
