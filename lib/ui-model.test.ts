@@ -423,3 +423,290 @@ test("progression ranks, milestone rewards, strange mood artifacts, and scouting
   assert.equal(expClaim.nextState.activities.expeditions.history.length, 1);
 });
 
+test("automated Thoughts & Feelings log records key life events (plump helmet roast, terrifying beast) and aggregates clan anecdotes", async () => {
+  const { stepSimulationTick } = await import("./game-engine.ts");
+  const { collectClanAnecdotes } = await import("./thoughts.ts");
+
+  let state = createInitialGameState("Thoughts-test");
+  // Founding dwarves start with seeded embark anecdotes
+  assert.ok(state.dwarves.every((d) => Array.isArray(d.thoughtLog) && d.thoughtLog.length >= 2));
+
+  const initialAnecdotes = collectClanAnecdotes(state.dwarves);
+  assert.ok(
+    initialAnecdotes.some((a) => a.text.toLowerCase().includes("plump helmet roast")),
+  );
+  assert.ok(
+    initialAnecdotes.some((a) => a.text.toLowerCase().includes("terrifying beast")),
+  );
+
+  // Force dwarf-1 to be hungry so they eat a savoury Plump Helmet roast on the next tick
+  state.dwarves[0].hunger = 20;
+  state.resources.food = 10;
+
+  // Place a Giant Cave Spider near dwarf-2 on Z-3 (Fungal Caverns) so they see a terrifying beast
+  state.dwarves[2].quirk = "LONER";
+  state.dwarves[2].labors.COMBAT = false;
+  state.dwarves[2].z = 3;
+  state.hostiles.push({
+    id: "beast-test-1",
+    name: "Giant Cave Spider",
+    kind: "CAVE_SPIDER",
+    char: "S",
+    color: "#ff0000",
+    x: state.dwarves[2].x + 4,
+    y: state.dwarves[2].y,
+    z: 3,
+    hp: 60,
+    maxHp: 60,
+    attack: 8,
+    behavior: "CAVERN_GUARD",
+  });
+
+  state = stepSimulationTick(state);
+
+  const dwarf0Log = state.dwarves[0].thoughtLog || [];
+  assert.equal(dwarf0Log[0].text, "Ate a savoury Plump Helmet roast.");
+  assert.equal(dwarf0Log[0].category, "SUSTENANCE");
+  assert.equal(dwarf0Log[0].sentiment, "POSITIVE");
+
+  const dwarf2Log = state.dwarves[2].thoughtLog || [];
+  assert.ok(dwarf2Log[0].text.includes("Saw a terrifying beast (Giant Cave Spider)"));
+  assert.equal(dwarf2Log[0].category, "BEAST_ENCOUNTER");
+  assert.equal(dwarf2Log[0].sentiment, "TERRIFIED");
+
+  // Filter anecdotes by individual dwarf
+  const dwarf0Only = collectClanAnecdotes(state.dwarves, { dwarfId: state.dwarves[0].id });
+  assert.ok(dwarf0Only.length >= 3);
+  assert.ok(dwarf0Only.every((a) => a.dwarfId === state.dwarves[0].id));
+});
+
+test("seasonal weather system impacts ASCII surface tile visuals, dwarf movement speed, and mood/thoughts", async () => {
+  const {
+    getCurrentWeather,
+    getWeatherTileVisuals,
+    canDwarfStepThisTick,
+    applyWeatherExposureToDwarf,
+  } = await import("./weather.ts");
+
+  const state = createInitialGameState("Weather-test");
+  terrain(state, 0, 5, 5, "GRASS", true);
+  terrain(state, 0, 6, 5, "TREE", true);
+  terrain(state, 0, 7, 5, "WATER", true);
+  terrain(state, 0, 8, 5, "ROCK_FLOOR", true);
+  terrain(state, 2, 5, 5, "ROCK_FLOOR", true);
+
+  // 1. Winter Snow transforms Z-0 grass, trees, and water into snow/ice glyphs
+  state.season = "Timber (Winter)";
+  state.ticks = 10;
+  const winterWeather = getCurrentWeather(state);
+  assert.equal(winterWeather.id, "WINTER_SNOW");
+  assert.equal(winterWeather.glyph, "❄");
+
+  const grassWinterVis = getWeatherTileVisuals(state, state.grid[0][5][5]);
+  assert.ok(["*", "·"].includes(grassWinterVis.char), "Winter grass should render snow glyph");
+  const treeWinterVis = getWeatherTileVisuals(state, state.grid[0][5][6]);
+  assert.equal(treeWinterVis.char, "▲", "Winter tree should render snow-laden conifer");
+  const waterWinterVis = getWeatherTileVisuals(state, state.grid[0][5][7]);
+  assert.equal(waterWinterVis.char, "≡", "Winter surface water should freeze into ice");
+
+  const hoverWinterGrass = getTileHoverMetadata(state, state.grid[0][5][5]);
+  assert.equal(hoverWinterGrass.temperatureStatus, "COLD");
+  assert.match(hoverWinterGrass.liquidLevel, /Winter Snowpack/);
+  assert.match(hoverWinterGrass.walkableLabel, /50% Speed/);
+
+  // 2. Autumn Rain transforms Z-0 grass/trees and reports rain-slicked mud
+  state.season = "Sands (Autumn)";
+  const autumnWeather = getCurrentWeather(state);
+  assert.equal(autumnWeather.id, "AUTUMN_RAIN");
+  const hoverAutumnGrass = getTileHoverMetadata(state, state.grid[0][5][5]);
+  assert.match(hoverAutumnGrass.liquidLevel, /Rain-Slicked Mud/);
+
+  // 3. Movement speed: outdoor unpaved Z-0 slows on odd ticks in snow/rain, while underground (Z>0) and paved floors move every tick
+  const dwarf = { ...state.dwarves[0], quirk: "SCHOLAR" as const, z: 0, x: 5, y: 5 };
+  assert.equal(
+    canDwarfStepThisTick(dwarf, state, state.grid[0][5][5], 1),
+    false,
+    "Unpaved Z-0 tile in rain/snow should pause movement on odd ticks",
+  );
+  assert.equal(
+    canDwarfStepThisTick(dwarf, state, state.grid[0][5][5], 2),
+    true,
+    "Unpaved Z-0 tile in rain/snow should allow movement on even ticks",
+  );
+  assert.equal(
+    canDwarfStepThisTick(dwarf, state, state.grid[0][5][8], 1),
+    true,
+    "Paved ROCK_FLOOR on Z-0 should preserve 100% movement speed",
+  );
+  assert.equal(
+    canDwarfStepThisTick({ ...dwarf, z: 2 }, state, state.grid[2][5][5], 1),
+    true,
+    "Subterranean Z-2 tile should preserve 100% movement speed regardless of surface weather",
+  );
+
+  // 4. Mood & Thought impact: exposed outdoor dwarf loses morale in snow; sheltered dwarf gains morale
+  const startMorale = dwarf.happiness;
+  applyWeatherExposureToDwarf(dwarf, winterWeather, {
+    tick: 20,
+    year: 251,
+    season: "Timber (Winter)",
+    isSheltered: false,
+  });
+  assert.ok(dwarf.happiness < startMorale, "Outdoor winter snow exposure should reduce happiness");
+  assert.ok(dwarf.thought.includes("winter snow"));
+
+  const shelteredDwarf = { ...state.dwarves[1], z: 2, happiness: 80 };
+  applyWeatherExposureToDwarf(shelteredDwarf, winterWeather, {
+    tick: 20,
+    year: 251,
+    season: "Timber (Winter)",
+    isSheltered: true,
+  });
+  assert.ok(shelteredDwarf.happiness > 80, "Sheltered underground dwarf should gain cozy morale during surface storm");
+});
+
+test("building unlock progression gates advanced workshops until stone/metal thresholds are met and persists unlocks", async () => {
+  const {
+    isBuildingUnlocked,
+    getBuildingUnlockStatus,
+    syncBuildingUnlocks,
+  } = await import("./progression.ts");
+
+  let state = createInitialGameState("Unlock-progression-test");
+  // Embark starts with 25 Stone, 20 Wood, 4 Iron Ore, 2 Steel Bars
+  assert.equal(isBuildingUnlocked(state, "BUILD_WALL"), true);
+  assert.equal(isBuildingUnlocked(state, "BUILD_BED"), true);
+  assert.equal(isBuildingUnlocked(state, "BUILD_MASON"), false);
+  assert.equal(isBuildingUnlocked(state, "BUILD_SMELTER"), false);
+  assert.equal(isBuildingUnlocked(state, "BUILD_FORGE"), false);
+
+  // Collect 28 Stone -> Unlocks Mason's Workshop and Stone Deadfall Trap
+  state.resources.stone = 28;
+  assert.equal(isBuildingUnlocked(state, "BUILD_MASON"), true);
+  assert.equal(isBuildingUnlocked(state, "BUILD_TRAP"), true);
+
+  // Collect 32 Stone & 6 Iron Ore -> Unlocks Smeltery Furnace
+  state.resources.stone = 32;
+  state.resources.ironOre = 6;
+  assert.equal(isBuildingUnlocked(state, "BUILD_SMELTER"), true);
+  assert.equal(isBuildingUnlocked(state, "BUILD_FORGE"), false);
+
+  // Collect 36 Stone & 4 Steel Bars -> Unlocks Metalsmith's Forge!
+  state.resources.stone = 36;
+  state.resources.steelBars = 4;
+  assert.equal(isBuildingUnlocked(state, "BUILD_FORGE"), true);
+
+  // Sync unlocks into state.activities.unlockedBuildings and verify persistence even after spending stone
+  const synced = syncBuildingUnlocks(state);
+  assert.ok(synced.newlyUnlocked.some((u) => u.tool === "BUILD_FORGE"));
+  state = synced.nextState;
+  state.resources.stone = 5;
+  state.resources.steelBars = 0;
+  assert.equal(
+    isBuildingUnlocked(state, "BUILD_FORGE"),
+    true,
+    "Once unlocked, Metalsmith's Forge remains permanently unlocked after spending resources",
+  );
+  assert.equal(getBuildingUnlockStatus(state, "BUILD_FORGE")?.progressPercent, 100);
+});
+
+test("tooltip toggle preference, configured migrant jobs, resource economy balance, and building/stockpile tile actuators work deterministically", async () => {
+  const { parseUIPreferences, DEFAULT_UI } = await import("./ui-preferences.ts");
+  const { createConfiguredMigrantDwarf } = await import("./world-gen.ts");
+  const {
+    getResourceEconomyBalance,
+    getBuildingTileFunctionInfo,
+    activateBuildingTileFunction,
+  } = await import("./game-engine.ts");
+  const { TerrainType } = await import("./types.ts").catch(() => ({ TerrainType: null }));
+  void TerrainType;
+
+  // 1. Tooltip toggle preference defaults to true and parses false cleanly
+  assert.equal(DEFAULT_UI.tooltips, true);
+  assert.equal(parseUIPreferences(JSON.stringify({ tooltips: false })).tooltips, false);
+  assert.equal(parseUIPreferences(JSON.stringify({ tooltips: true })).tooltips, true);
+
+  // 2. Migrants arrive with specialized configured jobs tailored to least-covered clan labors
+  let state = createInitialGameState("Migrant-And-Actuators-Test");
+  const migrant = createConfiguredMigrantDwarf({
+    existingDwarves: state.dwarves,
+    worldWidth: state.world.width,
+    worldHeight: state.world.height,
+    dwarvenName: state.world.dwarvenName,
+    ticks: state.ticks,
+    originLabel: "Trade Caravan Charter",
+  });
+  const activeLaborCount = Object.values(migrant.labors).filter(Boolean).length;
+  assert.ok(
+    activeLaborCount >= 2 && activeLaborCount <= 4,
+    `Migrant should have specialized configured jobs (2-4 active labors), got ${activeLaborCount}`,
+  );
+  assert.equal(migrant.labors.HAULING, true, "Migrant should have HAULING enabled alongside specialty");
+  assert.equal(migrant.labors.FARMING, true, "First migrant should cover least-staffed FARMING labor");
+  assert.equal(migrant.skills.FARMING, 3, "First migrant should have level 3 FARMING skill");
+
+  // 3. Resource economy balance & Stockpile capacity
+  const econBefore = getResourceEconomyBalance(state);
+  assert.ok(econBefore.maxSafeFoodStorage >= 24);
+  assert.ok(econBefore.foodPerSeason > 0);
+  assert.ok(econBefore.alePerSeason > 0);
+
+  // 4. Stockpile tile and all building tiles expose passive functions & interactive actuators
+  const cx = Math.floor(state.world.width / 2);
+  const cy = Math.floor(state.world.height / 2);
+  const buildingTerrains = [
+    "STOCKPILE_TILE",
+    "CONSTRUCTED_WALL",
+    "DOOR",
+    "BED",
+    "FARM_PLOT",
+    "WORKSHOP_MASON",
+    "WORKSHOP_CARPENTER",
+    "WORKSHOP_STILL",
+    "WORKSHOP_SMELTER",
+    "WORKSHOP_FORGE",
+    "TAVERN_HALL",
+    "TEMPLE_ALTAR",
+    "TRADE_DEPOT",
+    "TRAP_STONE",
+  ] as const;
+
+  // Ensure stockpile & resources are ample so every actuator can fire
+  state.resources = {
+    ...state.resources,
+    stone: 60,
+    wood: 60,
+    ironOre: 30,
+    goldOre: 20,
+    steelBars: 20,
+    food: 60,
+    ale: 60,
+    furniture: 20,
+    weapons: 10,
+    armor: 10,
+    wealth: 1000,
+  };
+
+  for (let i = 0; i < buildingTerrains.length; i++) {
+    const tType = buildingTerrains[i];
+    const tx = cx - 6 + i;
+    const ty = cy;
+    terrain(state, 0, tx, ty, tType, true);
+    const tile = state.grid[0][ty][tx];
+
+    const info = getBuildingTileFunctionInfo(state, tile);
+    assert.ok(info, `${tType} should have a defined building function info`);
+    assert.ok(info.passiveFunction.length > 10, `${tType} should describe its passive function`);
+    assert.ok(info.actionLabel.length > 3, `${tType} should expose an actuator action label`);
+    assert.equal(info.canActivate, true, `${tType} actuator should be activatable when supplied`);
+
+    const hover = getTileHoverMetadata(state, tile);
+    assert.equal(hover.buildingFunction, info.passiveFunction);
+    assert.equal(hover.buildingActionLabel, info.actionLabel);
+
+    const actRes = activateBuildingTileFunction(state, tx, ty, 0);
+    assert.equal(actRes.triggered, true, `${tType} actuator should execute successfully`);
+    assert.ok(actRes.message.length > 5);
+    state = actRes.nextState;
+  }
+});

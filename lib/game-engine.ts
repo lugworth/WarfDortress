@@ -17,6 +17,7 @@ import type {
   WorkOrder,
 } from './types.ts';
 import {
+  createConfiguredMigrantDwarf,
   createInitialCavernHostiles,
   createInitialDwarves,
   generateDeterministicWorldMeta,
@@ -25,7 +26,19 @@ import {
 } from './world-gen.ts';
 import { createInitialGuildState } from './guild.ts';
 import { createExpeditionState } from './expeditions.ts';
-import { triggerStrangeMood } from './progression.ts';
+import { syncBuildingUnlocks, triggerStrangeMood } from './progression.ts';
+import {
+  appendDwarfThought,
+  evaluateAmbientDwarfThoughts,
+  withDwarfThought,
+} from './thoughts.ts';
+import {
+  applyWeatherExposureToDwarf,
+  canDwarfStepThisTick,
+  getCurrentWeather,
+  isShelteredOrPavedTile,
+} from './weather.ts';
+
 
 export function getSeasonModifiers(season: GameState['season']): {
   cropMultiplier: number;
@@ -37,30 +50,30 @@ export function getSeasonModifiers(season: GameState['season']): {
     case 'Granite (Spring)':
       return {
         cropMultiplier: 1.25,
-        needDecayInterval: 9,
+        needDecayInterval: 4,
         raidChance: 0.15,
-        summary: '+25% Spring Harvest · Mild Weather',
+        summary: '+25% Spring Harvest · Balanced Appetite',
       };
     case 'Slate (Summer)':
       return {
-        cropMultiplier: 1.25,
-        needDecayInterval: 8,
+        cropMultiplier: 1.2,
+        needDecayInterval: 4,
         raidChance: 0.35,
-        summary: '+25% Summer Growth · Clear Skies',
+        summary: '+20% Summer Growth · Warm Thirst',
       };
     case 'Sands (Autumn)':
       return {
-        cropMultiplier: 1.5,
-        needDecayInterval: 8,
+        cropMultiplier: 1.4,
+        needDecayInterval: 4,
         raidChance: 0.5,
-        summary: '+50% Autumn Harvest · Caravan Season',
+        summary: '+40% Autumn Harvest · Caravan Season',
       };
     case 'Timber (Winter)':
       return {
-        cropMultiplier: 0.75,
-        needDecayInterval: 6,
+        cropMultiplier: 0.7,
+        needDecayInterval: 3,
         raidChance: 0.75,
-        summary: 'Winter Frost (-25% Crops · Faster Hunger)',
+        summary: 'Winter Frost (-30% Crops · +33% Hunger/Thirst)',
       };
   }
 }
@@ -285,42 +298,21 @@ export function executeTradeBarter(
     thought: 'Pleased by brisk bartering at the Trade Depot.',
   }));
 
+  let migrantJoinedNote = '';
   if (recruitMigrant) {
-    const cx = Math.floor(state.world.width / 2);
-    const cy = Math.floor(state.world.height / 2);
-    const idx = dwarves.length + 1;
-    dwarves.push({
-      id: `dwarf-${idx}`,
-      name: `Thikut Caravan-${idx}`,
-      title: 'Recruited Caravan Specialist',
-      char: '☺',
-      color: '#00ffff',
-      x: cx,
-      y: cy,
-      z: 0,
-      hp: 100,
-      maxHp: 100,
-      hunger: 95,
-      thirst: 95,
-      energy: 95,
-      happiness: 90,
-      state: 'IDLE',
-      labors: {
-        MINING: true,
-        WOODCUTTING: true,
-        MASONRY: true,
-        CARPENTRY: true,
-        FARMING: true,
-        SMITHING: true,
-        COMBAT: true,
-        HAULING: true,
-      },
-      thought: `Joined ${state.world.dwarvenName} via Trade Depot charter!`,
-      weaponEquipped: resources.weapons > 0,
-      armorEquipped: resources.armor > 0,
-      kills: 0,
-      skills: { MINING: 2, SMITHING: 2, COMBAT: 2, HAULING: 2 },
+    const newMigrant = createConfiguredMigrantDwarf({
+      existingDwarves: dwarves,
+      worldWidth: state.world.width,
+      worldHeight: state.world.height,
+      dwarvenName: state.world.dwarvenName,
+      ticks: state.ticks,
+      indexOffset: 1,
+      originLabel: 'Trade Depot Charter',
+      weaponsAvailable: resources.weapons,
+      armorAvailable: resources.armor,
     });
+    dwarves.push(newMigrant);
+    migrantJoinedNote = `, +1 Migrant (${newMigrant.name} — ${newMigrant.title})`;
   }
 
   const entry: ChronicleEntry = {
@@ -328,7 +320,7 @@ export function executeTradeBarter(
     tick: state.ticks,
     season: state.season,
     year: state.year,
-    text: `Completed Trade Depot barter exchange (+45 Wealth${recruitMigrant ? ', +1 Migrant Pioneer' : ''}).`,
+    text: `Completed Trade Depot barter exchange (+45 Wealth${migrantJoinedNote}).`,
     type: 'CRAFT',
   };
 
@@ -633,41 +625,21 @@ export function resolveNarrativeEvent(
   }));
 
   if (choice.spawnMigrants && choice.spawnMigrants > 0) {
-    const cx = Math.floor(state.world.width / 2);
-    const cy = Math.floor(state.world.height / 2);
-    const migrantIndex = dwarves.length + 1;
-    dwarves.push({
-      id: `dwarf-${migrantIndex}`,
-      name: `Bomrek Migrant-${migrantIndex}`,
-      title: 'Arrived Artisan & Miner',
-      char: '☺',
-      color: '#34d399',
-      x: cx,
-      y: cy,
-      z: 0,
-      hp: 100,
-      maxHp: 100,
-      hunger: 95,
-      thirst: 95,
-      energy: 95,
-      happiness: 90,
-      state: 'IDLE',
-      labors: {
-        MINING: true,
-        WOODCUTTING: true,
-        MASONRY: true,
-        CARPENTRY: true,
-        FARMING: true,
-        SMITHING: true,
-        COMBAT: true,
-        HAULING: true,
-      },
-      thought: `Proud to join the thriving halls of ${state.world.dwarvenName}!`,
-      weaponEquipped: resources.weapons > 0,
-      armorEquipped: resources.armor > 0,
-      kills: 0,
-      skills: { MINING: 2, MASONRY: 2, SMITHING: 1, HAULING: 2 },
-    });
+    for (let i = 0; i < choice.spawnMigrants; i++) {
+      dwarves.push(
+        createConfiguredMigrantDwarf({
+          existingDwarves: dwarves,
+          worldWidth: state.world.width,
+          worldHeight: state.world.height,
+          dwarvenName: state.world.dwarvenName,
+          ticks: state.ticks,
+          indexOffset: i + 1,
+          originLabel: active.title,
+          weaponsAvailable: resources.weapons,
+          armorAvailable: resources.armor,
+        })
+      );
+    }
   }
 
   const updatedCivilizations = choice.stanceChange
@@ -807,26 +779,26 @@ export function createInitialGameState(seed = 'Khazad-251'): GameState {
     alerts: initialAlerts,
     militiaDoctrine: 'DEFENSIVE' as MilitiaDoctrine,
     resources: {
-      stone: 25,
-      wood: 20,
-      ironOre: 4,
+      stone: 20,
+      wood: 15,
+      ironOre: 3,
       goldOre: 0,
-      steelBars: 2,
-      food: 60,
-      ale: 45,
-      furniture: 4,
+      steelBars: 1,
+      food: 34,
+      ale: 28,
+      furniture: 3,
       weapons: 2,
       armor: 1,
       relics: 0,
-      wealth: 520,
+      wealth: 460,
     },
     workOrders: [
       {
         id: 'order-1',
-        title: 'Brew Dwarven Ale (+5 Ale)',
+        title: 'Brew Dwarven Ale (+4 Ale)',
         workshop: 'WORKSHOP_STILL',
         cost: { food: 2 },
-        produce: { ale: 5, wealth: 25 },
+        produce: { ale: 4, wealth: 25 },
         remaining: 3,
         autoRepeat: true,
       },
@@ -1105,10 +1077,19 @@ export function stepSimulationTick(state: GameState): GameState {
     'Sands (Autumn)',
     'Timber (Winter)',
   ];
-  const seasonIdx = Math.floor((nextTicks / 120) % 4);
-  const nextSeason = seasons[seasonIdx];
+  const currentSeasonIdx = Math.max(0, seasons.indexOf(state.season));
+  const nextSeason =
+    nextTicks > 0 && nextTicks % 120 === 0
+      ? seasons[(currentSeasonIdx + 1) % 4]
+      : state.season;
   const nextYear = 251 + Math.floor(nextTicks / 480);
   const seasonMods = getSeasonModifiers(nextSeason);
+  const activeWeather = getCurrentWeather({
+    season: nextSeason,
+    ticks: nextTicks,
+    weatherOverride: state.weatherOverride,
+  });
+
 
   const grid: Tile[][][] = state.grid.map((level) =>
     level.map((row) => row.map((tile) => ({ ...tile })))
@@ -1163,11 +1144,16 @@ export function stepSimulationTick(state: GameState): GameState {
     if (alerts.length > 15) alerts.pop();
   };
 
-  // Count fortress structures for passive buffs and workshop processing
+  // Count fortress structures for passive buffs, storage capacity, and workshop processing
   let farmCount = 0;
   let bedCount = 0;
   let tavernCount = 0;
   let templeCount = 0;
+  let stockpileCount = 0;
+  let wallCount = 0;
+  let doorCount = 0;
+  let depotCount = 0;
+  let trapCount = 0;
   const builtWorkshops = new Set<TileTerrain>();
 
   for (let z = 0; z < state.world.depth; z++) {
@@ -1178,6 +1164,11 @@ export function stepSimulationTick(state: GameState): GameState {
         else if (t === 'BED') bedCount++;
         else if (t === 'TAVERN_HALL') tavernCount++;
         else if (t === 'TEMPLE_ALTAR') templeCount++;
+        else if (t === 'STOCKPILE_TILE') stockpileCount++;
+        else if (t === 'CONSTRUCTED_WALL') wallCount++;
+        else if (t === 'DOOR') doorCount++;
+        else if (t === 'TRADE_DEPOT') depotCount++;
+        else if (t === 'TRAP_STONE') trapCount++;
         else if (
           t === 'WORKSHOP_MASON' ||
           t === 'WORKSHOP_CARPENTER' ||
@@ -1191,14 +1182,110 @@ export function stepSimulationTick(state: GameState): GameState {
     }
   }
 
-  // Passive farm production every 25 ticks scaled by seasonal multiplier
-  if (nextTicks % 25 === 0 && farmCount > 0) {
-    const harvested = Math.max(1, Math.round(farmCount * 2 * seasonMods.cropMultiplier));
+  const activeFarmers = state.dwarves.filter((d) => d.labors.FARMING).length;
+  const activeMasons = state.dwarves.filter((d) => d.labors.MASONRY).length;
+  const activeCarpenters = state.dwarves.filter((d) => d.labors.CARPENTRY).length;
+
+  // STOCKPILE_TILE Function: Safe storage capacity + Hauling Logistics Bonus
+  const maxSafeFood = 24 + stockpileCount * 8;
+  if (nextTicks > 0 && nextTicks % 120 === 0 && resources.food > maxSafeFood) {
+    const spoiled = Math.min(4, Math.max(1, Math.ceil((resources.food - maxSafeFood) * 0.25)));
+    resources.food = Math.max(0, resources.food - spoiled);
+    addLog(
+      `[STOCKPILE] ${spoiled} unstored Plump Helmets spoiled at season's turn (Safe cap: ${maxSafeFood}). Zone more Stockpiles [P]!`,
+      'ALERT'
+    );
+  }
+  if (nextTicks % 30 === 0 && stockpileCount >= 6) {
+    resources.wealth += 15;
+    resources.food += 1;
+    addLog(
+      `[STOCKPILE] Well-organized Stockpile Vault (${stockpileCount} tiles) preserved +1 Food & added +15 Wealth.`,
+      'WORK'
+    );
+  }
+
+  // CONSTRUCTED_WALL Function: Bastion Fortification Dividend & Raid Deterrence
+  if (nextTicks % 40 === 0 && wallCount >= 4) {
+    const bastionBonus = Math.min(25, wallCount * 3);
+    resources.wealth += bastionBonus;
+  }
+
+  // FARM_PLOT Function: Passive crop growth every 24 ticks scaled by season & active farmers
+  if (nextTicks % 24 === 0 && farmCount > 0) {
+    const farmerBonus = activeFarmers > 0 ? Math.min(2, activeFarmers) : 0;
+    const baseHarvest =
+      activeFarmers > 0
+        ? (farmCount * 1.5 + farmerBonus) * seasonMods.cropMultiplier
+        : farmCount * 0.65 * seasonMods.cropMultiplier;
+    const harvested = Math.max(1, Math.round(baseHarvest));
     resources.food += harvested;
     resources.wealth += harvested * 3;
     addLog(
-      `Harvested ${harvested} Plump Helmets from ${farmCount} farm plots (${nextSeason}).`,
+      `Harvested ${harvested} Plump Helmets from ${farmCount} farm plots (${nextSeason}${
+        activeFarmers === 0 ? ' — assign FARMING labor for higher yield!' : ''
+      }).`,
       'WORK'
+    );
+  }
+
+  // WORKSHOP_CARPENTER Function: Passive Joinery (Casks & Beds from surplus timber)
+  if (
+    nextTicks % 28 === 0 &&
+    builtWorkshops.has('WORKSHOP_CARPENTER') &&
+    activeCarpenters > 0 &&
+    resources.wood >= 6
+  ) {
+    resources.wood -= 1;
+    resources.furniture += 1;
+    resources.ale += 1;
+    resources.wealth += 25;
+    addLog(
+      `[CARPENTER] Joined seasoned timber into a sturdy bedframe & ale cask (+1 Furniture, +1 Ale, +25 Wealth).`,
+      'CRAFT'
+    );
+  }
+
+  // WORKSHOP_MASON Function: Passive Stonecraft (Dressed stone blocks & coffers)
+  if (
+    nextTicks % 28 === 0 &&
+    builtWorkshops.has('WORKSHOP_MASON') &&
+    activeMasons > 0 &&
+    resources.stone >= 7
+  ) {
+    resources.stone -= 1;
+    resources.furniture += 1;
+    resources.wealth += 25;
+    addLog(
+      `[MASON] Carved dressed stone blocks and a coffer at the Mason's Workshop (+1 Furniture, +25 Wealth).`,
+      'CRAFT'
+    );
+  }
+
+  // WORKSHOP_STILL Function: Passive Fermentation when ale runs low
+  if (
+    nextTicks % 24 === 0 &&
+    builtWorkshops.has('WORKSHOP_STILL') &&
+    resources.food >= 6 &&
+    resources.ale < 28
+  ) {
+    resources.food -= 1;
+    resources.ale += 2;
+    resources.wealth += 15;
+    addLog(
+      `[STILL] Fermented a reserve cask of Plump Helmet Ale (+2 Ale, +15 Wealth).`,
+      'CRAFT'
+    );
+  }
+
+  // TRADE_DEPOT Function: Seasonal Merchant Tolls & Charter Dividends
+  if (nextTicks % 30 === 0 && depotCount > 0) {
+    resources.wealth += 20 * depotCount;
+    resources.food += 1;
+    resources.ale += 1;
+    addLog(
+      `[TRADE DEPOT] Collected merchant caravan tolls (+${20 * depotCount} Wealth, +1 Food, +1 Ale).`,
+      'CRAFT'
     );
   }
 
@@ -1257,14 +1344,16 @@ export function stepSimulationTick(state: GameState): GameState {
     addLog(`[COMBAT] Outrider of ${goblinCiv} spotted approaching (${sx}, ${sy}, Z-0)!`, 'COMBAT');
   }
 
-  // Step Hostile Entities (movement & stone trap checks)
+  // Step Hostile Entities (movement, DOOR choke-point slowdown, & TRAP_STONE checks)
   const centerX = Math.floor(state.world.width / 2);
   const centerY = Math.floor(state.world.height / 2);
 
   hostiles = hostiles.filter((h) => {
     if (h.hp <= 0) return false;
-    // Move every 2 ticks
-    if (nextTicks % 2 === 0) {
+    // Move every 2 ticks (or every 4 ticks when slowed by a constructed Portal Door +)
+    const onTile = grid[h.z]?.[h.y]?.[h.x];
+    const slowedByDoor = onTile?.terrain === 'DOOR' && nextTicks % 4 !== 0;
+    if (nextTicks % 2 === 0 && !slowedByDoor) {
       let targetX = centerX;
       let targetY = centerY;
 
@@ -1309,14 +1398,14 @@ export function stepSimulationTick(state: GameState): GameState {
     // Check if hostile stepped onto a constructed Stone Deadfall Trap (^)
     const currentTile = grid[h.z]?.[h.y]?.[h.x];
     if (currentTile && currentTile.terrain === 'TRAP_STONE') {
-      h.hp -= 40;
+      h.hp -= 45;
       setTileTerrain(currentTile, 'ROCK_FLOOR');
       if (h.hp <= 0) {
         resources.wealth += 50;
         addLog(`Stone deadfall trap crushed ${h.name} at (${h.x}, ${h.y}, Z-${h.z})!`, 'COMBAT');
         return false;
       } else {
-        addLog(`Stone trap injured ${h.name} (-40 HP) at (${h.x}, ${h.y}, Z-${h.z})!`, 'COMBAT');
+        addLog(`Stone trap injured ${h.name} (-45 HP) at (${h.x}, ${h.y}, Z-${h.z})!`, 'COMBAT');
       }
     }
 
@@ -1335,6 +1424,7 @@ export function stepSimulationTick(state: GameState): GameState {
       ...dwarfRaw,
       labors: { ...dwarfRaw.labors },
       skills: { ...dwarfRaw.skills },
+      thoughtLog: Array.isArray(dwarfRaw.thoughtLog) ? [...dwarfRaw.thoughtLog] : [],
       currentTask: dwarfRaw.currentTask ? { ...dwarfRaw.currentTask } : undefined,
     };
 
@@ -1342,21 +1432,73 @@ export function stepSimulationTick(state: GameState): GameState {
     if (!dwarf.weaponEquipped && resources.weapons > 0 && dwarf.labors.COMBAT) {
       resources.weapons -= 1;
       dwarf.weaponEquipped = true;
-      dwarf.happiness = Math.min(100, dwarf.happiness + 5);
-      dwarf.thought = 'Equipped a newly forged steel battleaxe from the armory!';
+      appendDwarfThought(dwarf, {
+        tick: nextTicks,
+        year: nextYear,
+        season: nextSeason,
+        text: 'Equipped a newly forged steel battleaxe from the armory!',
+        category: 'COMBAT',
+        sentiment: 'POSITIVE',
+        moraleDelta: 5,
+      });
     }
     if (!dwarf.armorEquipped && resources.armor > 0 && dwarf.labors.COMBAT) {
       resources.armor -= 1;
       dwarf.armorEquipped = true;
-      dwarf.happiness = Math.min(100, dwarf.happiness + 5);
-      dwarf.thought = 'Donned forged dwarven mail armor!';
+      appendDwarfThought(dwarf, {
+        tick: nextTicks,
+        year: nextYear,
+        season: nextSeason,
+        text: 'Donned forged dwarven mail armor!',
+        category: 'COMBAT',
+        sentiment: 'POSITIVE',
+        moraleDelta: 5,
+      });
     }
 
-    // Seasonal needs decay
+    // Evaluate ambient sightings (e.g. "saw a terrifying beast"), shortages, and quirk reflections
+    evaluateAmbientDwarfThoughts(dwarf, {
+      tick: nextTicks,
+      year: nextYear,
+      season: nextSeason,
+      hostiles,
+      resources,
+      tavernCount,
+      templeCount,
+    });
+
+    // Evaluate seasonal weather mood & thought impact every 10 ticks
+    const currentDwarfTile = grid[dwarf.z]?.[dwarf.y]?.[dwarf.x];
+    if (nextTicks > 0 && nextTicks % 10 === 0) {
+      applyWeatherExposureToDwarf(dwarf, activeWeather, {
+        tick: nextTicks,
+        year: nextYear,
+        season: nextSeason,
+        isSheltered: isShelteredOrPavedTile(currentDwarfTile),
+      });
+    }
+
+    // Seasonal needs decay + active exertion appetite
     if (nextTicks % seasonMods.needDecayInterval === 0) {
-      dwarf.hunger = Math.max(10, dwarf.hunger - 1);
-      dwarf.thirst = Math.max(10, dwarf.thirst - 1);
-      dwarf.energy = Math.max(15, dwarf.energy - 1);
+      dwarf.hunger = Math.max(8, dwarf.hunger - 1);
+      dwarf.thirst = Math.max(8, dwarf.thirst - 1);
+      dwarf.energy = Math.max(12, dwarf.energy - 1);
+    }
+    if ((dwarf.state === 'WORKING' || dwarf.state === 'FIGHTING') && nextTicks % 8 === 0) {
+      dwarf.hunger = Math.max(8, dwarf.hunger - 1);
+      dwarf.thirst = Math.max(8, dwarf.thirst - 1);
+    }
+
+    // Passive civic hall aura functions: TAVERN_HALL, TEMPLE_ALTAR, and BED comfort
+    if (nextTicks % 30 === 0 && tavernCount > 0) {
+      dwarf.happiness = Math.min(100, dwarf.happiness + 2);
+    }
+    if (nextTicks % 32 === 0 && templeCount > 0) {
+      dwarf.happiness = Math.min(100, dwarf.happiness + 2);
+      dwarf.hp = Math.min(dwarf.maxHp, dwarf.hp + 4);
+    }
+    if (nextTicks % 35 === 0 && bedCount >= Math.ceil(state.dwarves.length / 2)) {
+      dwarf.happiness = Math.min(100, dwarf.happiness + 1);
     }
 
     // 1. Check Militia Combat Intercept against Hostiles on the same Z-level
@@ -1385,17 +1527,25 @@ export function stepSimulationTick(state: GameState): GameState {
           dwarf.state = 'FIGHTING';
           const dmg = (dwarf.weaponEquipped ? 18 : 10) + ((dwarf.skills.COMBAT || 1) * 2);
           targetHostile.hp -= dmg;
+          const wallShield = wallCount >= 4 ? 0.85 : 1;
           const incomingDmg = Math.max(
             1,
-            Math.round(targetHostile.attack * (dwarf.armorEquipped ? 0.5 : 1))
+            Math.round(targetHostile.attack * (dwarf.armorEquipped ? 0.5 : 1) * wallShield)
           );
           dwarf.hp = Math.max(20, dwarf.hp - incomingDmg);
 
           if (targetHostile.hp <= 0) {
             dwarf.kills = (dwarf.kills || 0) + 1;
             dwarf.skills.COMBAT = (dwarf.skills.COMBAT || 1) + 1;
-            dwarf.happiness = Math.min(100, dwarf.happiness + 8);
-            dwarf.thought = `Vanquished ${targetHostile.name} in defense of the clan!`;
+            appendDwarfThought(dwarf, {
+              tick: nextTicks,
+              year: nextYear,
+              season: nextSeason,
+              text: `Vanquished ${targetHostile.name} in defense of the clan!`,
+              category: 'COMBAT',
+              sentiment: 'EUPHORIC',
+              moraleDelta: 8,
+            });
             resources.wealth += 65;
             resources.ironOre += 1;
             addLog(
@@ -1403,70 +1553,144 @@ export function stepSimulationTick(state: GameState): GameState {
               'COMBAT'
             );
           } else {
-            dwarf.thought = `Trading blows with ${targetHostile.name}!`;
+            appendDwarfThought(dwarf, {
+              tick: nextTicks,
+              year: nextYear,
+              season: nextSeason,
+              text: `Trading blows with ${targetHostile.name}!`,
+              category: 'COMBAT',
+              sentiment: 'NEGATIVE',
+              moraleDelta: 0,
+            });
           }
           return dwarf;
         } else {
           dwarf.state = 'MOVING';
-          dwarf.x = Math.max(
-            0,
-            Math.min(state.world.width - 1, dwarf.x + Math.sign(targetHostile.x - dwarf.x))
-          );
-          dwarf.y = Math.max(
-            0,
-            Math.min(state.world.height - 1, dwarf.y + Math.sign(targetHostile.y - dwarf.y))
-          );
+          if (
+            canDwarfStepThisTick(
+              dwarf,
+              { season: nextSeason, ticks: nextTicks, weatherOverride: state.weatherOverride },
+              currentDwarfTile,
+              nextTicks
+            )
+          ) {
+            dwarf.x = Math.max(
+              0,
+              Math.min(state.world.width - 1, dwarf.x + Math.sign(targetHostile.x - dwarf.x))
+            );
+            dwarf.y = Math.max(
+              0,
+              Math.min(state.world.height - 1, dwarf.y + Math.sign(targetHostile.y - dwarf.y))
+            );
+          }
           return dwarf;
         }
       }
     }
 
+
     // 2. Thirst & Tavern Buff
-    if (dwarf.thirst < 32 && resources.ale > 0) {
+    if (dwarf.thirst < 36 && resources.ale > 0) {
       resources.ale = Math.max(0, resources.ale - 1);
-      dwarf.thirst = Math.min(100, dwarf.thirst + 58);
+      dwarf.thirst = Math.min(100, dwarf.thirst + 48);
       const tavernBonus = tavernCount > 0 ? 12 : 6;
-      dwarf.happiness = Math.min(100, dwarf.happiness + tavernBonus);
       if (tavernCount > 0) {
         dwarf.energy = Math.min(100, dwarf.energy + 10);
       }
       dwarf.state = 'DRINKING';
-      dwarf.thought =
-        tavernCount > 0
-          ? 'Shared a roaring mug of ale and song in the Hearth Tavern!'
-          : 'Quaffed a mug of rich Dwarven Ale. Praise the miners!';
+      appendDwarfThought(dwarf, {
+        tick: nextTicks,
+        year: nextYear,
+        season: nextSeason,
+        text:
+          tavernCount > 0
+            ? 'Shared a roaring mug of ale and song in the Hearth Tavern!'
+            : 'Quaffed a mug of rich Dwarven Ale. Praise the miners!',
+        category: 'SUSTENANCE',
+        sentiment: tavernCount > 0 ? 'EUPHORIC' : 'POSITIVE',
+        moraleDelta: tavernBonus,
+      });
       return dwarf;
+    } else if (dwarf.thirst < 22 && resources.ale === 0 && nextTicks % 12 === 0) {
+      appendDwarfThought(dwarf, {
+        tick: nextTicks,
+        year: nextYear,
+        season: nextSeason,
+        text: "Parched for Dwarven Ale — build a Brewer's Still or barter with a caravan!",
+        category: 'SUSTENANCE',
+        sentiment: 'NEGATIVE',
+        moraleDelta: -2,
+      });
     }
 
     // 3. Hunger
-    if (dwarf.hunger < 32 && resources.food > 0) {
+    if (dwarf.hunger < 36 && resources.food > 0) {
       resources.food = Math.max(0, resources.food - 1);
-      dwarf.hunger = Math.min(100, dwarf.hunger + 58);
-      dwarf.happiness = Math.min(100, dwarf.happiness + 5);
+      dwarf.hunger = Math.min(100, dwarf.hunger + 48);
       dwarf.state = 'EATING';
-      dwarf.thought = 'Ate a savoury Plump Helmet roast.';
+      appendDwarfThought(dwarf, {
+        tick: nextTicks,
+        year: nextYear,
+        season: nextSeason,
+        text: 'Ate a savoury Plump Helmet roast.',
+        category: 'SUSTENANCE',
+        sentiment: 'POSITIVE',
+        moraleDelta: 5,
+      });
       return dwarf;
+    } else if (dwarf.hunger < 22 && resources.food === 0 && nextTicks % 12 === 0) {
+      appendDwarfThought(dwarf, {
+        tick: nextTicks,
+        year: nextYear,
+        season: nextSeason,
+        text: 'Hungry — our Plump Helmet larder is empty! Furrow Farm Plots or gather shrubs.',
+        category: 'SUSTENANCE',
+        sentiment: 'NEGATIVE',
+        moraleDelta: -2,
+      });
     }
 
     // 4. Energy & Dormitory Bed Rest
     if (dwarf.energy < 28) {
       dwarf.state = 'SLEEPING';
-      dwarf.energy = Math.min(100, dwarf.energy + (bedCount > 0 ? 50 : 28));
-      dwarf.hp = Math.min(dwarf.maxHp, dwarf.hp + 10);
+      dwarf.energy = Math.min(100, dwarf.energy + (bedCount > 0 ? 52 : 28));
+      dwarf.hp = Math.min(dwarf.maxHp, dwarf.hp + (bedCount > 0 ? 12 : 8));
       if (bedCount > 0) {
-        dwarf.happiness = Math.min(100, dwarf.happiness + 6);
-        dwarf.thought = 'Rested soundly in a sturdy dwarven dormitory bed.';
+        appendDwarfThought(dwarf, {
+          tick: nextTicks,
+          year: nextYear,
+          season: nextSeason,
+          text: 'Rested soundly in a sturdy dwarven dormitory bed.',
+          category: 'FELLOWSHIP',
+          sentiment: 'POSITIVE',
+          moraleDelta: 6,
+        });
       } else {
-        dwarf.thought = 'Caught a brief nap on the stone floor.';
+        appendDwarfThought(dwarf, {
+          tick: nextTicks,
+          year: nextYear,
+          season: nextSeason,
+          text: 'Caught a brief nap on the cold stone floor.',
+          category: 'SUSTENANCE',
+          sentiment: 'NEGATIVE',
+          moraleDelta: -2,
+        });
       }
       return dwarf;
     }
 
     // 5. Temple Meditation when Morale dips
-    if (dwarf.happiness < 70 && templeCount > 0 && nextTicks % 6 === 0) {
+    if (dwarf.happiness < 72 && templeCount > 0 && nextTicks % 6 === 0) {
       dwarf.state = 'PRAYING';
-      dwarf.happiness = Math.min(100, dwarf.happiness + 12);
-      dwarf.thought = 'Received ancestral blessing at the Runed Temple Altar.';
+      appendDwarfThought(dwarf, {
+        tick: nextTicks,
+        year: nextYear,
+        season: nextSeason,
+        text: 'Received ancestral blessing at the Runed Temple Altar.',
+        category: 'OMEN',
+        sentiment: 'POSITIVE',
+        moraleDelta: 12,
+      });
       return dwarf;
     }
 
@@ -1556,7 +1780,14 @@ export function stepSimulationTick(state: GameState): GameState {
         if (dwarf.x === stairPos.x && dwarf.y === stairPos.y) {
           dwarf.z += task.z > dwarf.z ? 1 : -1;
           revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 3);
-        } else {
+        } else if (
+          canDwarfStepThisTick(
+            dwarf,
+            { season: nextSeason, ticks: nextTicks, weatherOverride: state.weatherOverride },
+            currentDwarfTile,
+            nextTicks
+          )
+        ) {
           dwarf.x += Math.sign(stairPos.x - dwarf.x);
           dwarf.y += Math.sign(stairPos.y - dwarf.y);
         }
@@ -1567,13 +1798,23 @@ export function stepSimulationTick(state: GameState): GameState {
     const dist = Math.max(Math.abs(task.x - dwarf.x), Math.abs(task.y - dwarf.y));
     if (dist > 1) {
       dwarf.state = 'MOVING';
-      const stepX = Math.sign(task.x - dwarf.x);
-      const stepY = Math.sign(task.y - dwarf.y);
-      dwarf.x = Math.max(0, Math.min(state.world.width - 1, dwarf.x + stepX));
-      dwarf.y = Math.max(0, Math.min(state.world.height - 1, dwarf.y + stepY));
-      revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 2);
+      if (
+        canDwarfStepThisTick(
+          dwarf,
+          { season: nextSeason, ticks: nextTicks, weatherOverride: state.weatherOverride },
+          currentDwarfTile,
+          nextTicks
+        )
+      ) {
+        const stepX = Math.sign(task.x - dwarf.x);
+        const stepY = Math.sign(task.y - dwarf.y);
+        dwarf.x = Math.max(0, Math.min(state.world.width - 1, dwarf.x + stepX));
+        dwarf.y = Math.max(0, Math.min(state.world.height - 1, dwarf.y + stepY));
+        revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 2);
+      }
       return dwarf;
     }
+
 
     dwarf.state = 'WORKING';
     task.progress += 1;
@@ -1617,7 +1858,24 @@ export function stepSimulationTick(state: GameState): GameState {
             }
             setTileTerrain(targetTile, 'ROCK_FLOOR');
             revealAround(grid, task.z, task.x, task.y, 3);
-            dwarf.thought = 'Satisfied by the ring of steel against living rock.';
+            appendDwarfThought(dwarf, {
+              tick: nextTicks,
+              year: nextYear,
+              season: nextSeason,
+              text:
+                prevTerrain === 'GOLD_VEIN' || prevTerrain === 'MITHRIL_VEIN'
+                  ? `Unearthed gleaming ${prevTerrain === 'MITHRIL_VEIN' ? 'Star-Mithril' : 'Native Gold'} at Z-${task.z}!`
+                  : prevTerrain === 'IRON_VEIN' || prevTerrain === 'COPPER_VEIN'
+                    ? `Struck a rich metallic vein of ore at Z-${task.z}!`
+                    : 'Satisfied by the ring of steel against living rock.',
+              category: 'CRAFT_DELVE',
+              sentiment:
+                prevTerrain === 'GOLD_VEIN' || prevTerrain === 'MITHRIL_VEIN'
+                  ? 'EUPHORIC'
+                  : 'POSITIVE',
+              moraleDelta:
+                prevTerrain === 'GOLD_VEIN' || prevTerrain === 'MITHRIL_VEIN' ? 6 : 2,
+            });
             break;
           }
           case 'RECLAIM_RELIC': {
@@ -1625,8 +1883,15 @@ export function stepSimulationTick(state: GameState): GameState {
             resources.wealth += 300;
             setTileTerrain(targetTile, 'ROCK_FLOOR');
             revealAround(grid, task.z, task.x, task.y, 4);
-            dwarf.happiness = Math.min(100, dwarf.happiness + 15);
-            dwarf.thought = 'Recovered an Ancient Dwarven Relic from the deep caverns!';
+            appendDwarfThought(dwarf, {
+              tick: nextTicks,
+              year: nextYear,
+              season: nextSeason,
+              text: 'Recovered an Ancient Dwarven Relic from the deep caverns!',
+              category: 'CRAFT_DELVE',
+              sentiment: 'EUPHORIC',
+              moraleDelta: 15,
+            });
             addAlert('CAVERN RELIC RECLAIMED', 'DISCOVERY', task.x, task.y, task.z);
             addLog(
               `[RELIC] ${dwarf.name} reclaimed an Ancient Vault Relic at (${task.x}, ${task.y}, Z-${task.z}) (+1 Relic, +300 Wealth)!`,
@@ -1644,6 +1909,15 @@ export function stepSimulationTick(state: GameState): GameState {
               setTileTerrain(belowTile, 'STAIRS_UP_DOWN');
               revealAround(grid, task.z + 1, task.x, task.y, 3);
             }
+            appendDwarfThought(dwarf, {
+              tick: nextTicks,
+              year: nextYear,
+              season: nextSeason,
+              text: `Carved a deep stairwell descending to Z-${task.z + 1}.`,
+              category: 'CRAFT_DELVE',
+              sentiment: 'POSITIVE',
+              moraleDelta: 3,
+            });
             addLog(`${dwarf.name} carved a stairwell connecting Depth Z-${task.z} and Z-${task.z + 1}.`, 'WORK');
             break;
           }
@@ -1651,7 +1925,15 @@ export function stepSimulationTick(state: GameState): GameState {
             resources.wood += 4;
             resources.wealth += 12;
             setTileTerrain(targetTile, 'GRASS');
-            dwarf.thought = 'Felled a towering timber trunk for the fortress.';
+            appendDwarfThought(dwarf, {
+              tick: nextTicks,
+              year: nextYear,
+              season: nextSeason,
+              text: 'Felled a towering timber trunk for the fortress.',
+              category: 'CRAFT_DELVE',
+              sentiment: 'POSITIVE',
+              moraleDelta: 2,
+            });
             addLog(`${dwarf.name} felled timber (+4 Wood).`, 'WORK');
             break;
           }
@@ -1659,6 +1941,15 @@ export function stepSimulationTick(state: GameState): GameState {
             resources.food += 4;
             resources.wealth += 12;
             setTileTerrain(targetTile, 'GRASS');
+            appendDwarfThought(dwarf, {
+              tick: nextTicks,
+              year: nextYear,
+              season: nextSeason,
+              text: 'Gathered crisp surface tubers and plump wild mushrooms.',
+              category: 'SUSTENANCE',
+              sentiment: 'POSITIVE',
+              moraleDelta: 2,
+            });
             addLog(`${dwarf.name} gathered wild surface berries and tubers (+4 Food).`, 'WORK');
             break;
           }
@@ -1686,7 +1977,15 @@ export function stepSimulationTick(state: GameState): GameState {
             setTileTerrain(targetTile, 'BED');
             resources.furniture += 1;
             resources.wealth += 35;
-            dwarf.thought = 'Built a fine wooden bed for the clan.';
+            appendDwarfThought(dwarf, {
+              tick: nextTicks,
+              year: nextYear,
+              season: nextSeason,
+              text: 'Built a fine wooden bed for the clan dormitory.',
+              category: 'CRAFT_DELVE',
+              sentiment: 'POSITIVE',
+              moraleDelta: 3,
+            });
             break;
           }
           case 'BUILD_MASON': {
@@ -1769,16 +2068,46 @@ export function stepSimulationTick(state: GameState): GameState {
     nextActivities.strangeMood = null;
     nextDwarves = nextDwarves.map((d) =>
       d.id === expiredMood.dwarfId
-        ? {
-            ...d,
-            happiness: Math.max(10, d.happiness - 35),
-            thought: `Melancholic after failing to obtain materials for ${expiredMood.artifactName}!`,
-          }
+        ? withDwarfThought(d, {
+            tick: nextTicks,
+            year: nextYear,
+            season: nextSeason,
+            text: `Melancholic after failing to obtain materials for ${expiredMood.artifactName}!`,
+            category: 'OMEN',
+            sentiment: 'TERRIFIED',
+            moraleDelta: -35,
+          })
         : d
     );
     addLog(
       `[STRANGE MOOD FAILED] ${expiredMood.dwarfName} fell into melancholy after lacking materials for "${expiredMood.artifactName}".`,
       'ALERT'
+    );
+  }
+
+  // Seasonal Migrant Wave at season turn when provisions are healthy
+  if (
+    nextTicks > 0 &&
+    nextTicks % 120 === 0 &&
+    resources.food >= 28 &&
+    resources.ale >= 22 &&
+    nextDwarves.length < 14
+  ) {
+    const seasonalMigrant = createConfiguredMigrantDwarf({
+      existingDwarves: nextDwarves,
+      worldWidth: state.world.width,
+      worldHeight: state.world.height,
+      dwarvenName: state.world.dwarvenName,
+      ticks: nextTicks,
+      indexOffset: 1,
+      originLabel: `${nextSeason} Migrant Wave`,
+      weaponsAvailable: resources.weapons,
+      armorAvailable: resources.armor,
+    });
+    nextDwarves.push(seasonalMigrant);
+    addLog(
+      `[MIGRANT WAVE] ${seasonalMigrant.name} (${seasonalMigrant.title}) joined ${state.world.dwarvenName} with pre-configured jobs!`,
+      'LORE'
     );
   }
 
@@ -1812,6 +2141,9 @@ export function stepSimulationTick(state: GameState): GameState {
     season: nextSeason,
   };
 
+  // Sync architectural tech tree building unlocks
+  nextState = syncBuildingUnlocks(nextState).nextState;
+
   // Periodically spark a Strange Mood if none is active and wealth >= 600
   if (
     !nextState.activities?.strangeMood &&
@@ -1824,3 +2156,497 @@ export function stepSimulationTick(state: GameState): GameState {
 
   return nextState;
 }
+
+export interface ResourceEconomyBalance {
+  foodPerSeason: number;
+  alePerSeason: number;
+  farmProductionPerSeason: number;
+  stillProductionPerSeason: number;
+  netFoodPerSeason: number;
+  netAlePerSeason: number;
+  foodRunwaySeasons: number;
+  aleRunwaySeasons: number;
+  stockpileTiles: number;
+  maxSafeFoodStorage: number;
+  farmCount: number;
+  bedCount: number;
+  wallCount: number;
+  doorCount: number;
+  trapCount: number;
+  tavernCount: number;
+  templeCount: number;
+  depotCount: number;
+  status: 'CRITICAL' | 'TIGHT' | 'STABLE' | 'SURPLUS';
+}
+
+export function getResourceEconomyBalance(state: GameState): ResourceEconomyBalance {
+  const seasonMods = getSeasonModifiers(state.season);
+  let stockpileTiles = 0;
+  let farmCount = 0;
+  let bedCount = 0;
+  let wallCount = 0;
+  let doorCount = 0;
+  let trapCount = 0;
+  let tavernCount = 0;
+  let templeCount = 0;
+  let depotCount = 0;
+  let stillCount = 0;
+
+  for (let z = 0; z < state.world.depth; z++) {
+    const level = state.grid[z] || [];
+    for (let y = 0; y < level.length; y++) {
+      const row = level[y] || [];
+      for (let x = 0; x < row.length; x++) {
+        const t = row[x].terrain;
+        if (t === 'STOCKPILE_TILE') stockpileTiles++;
+        else if (t === 'FARM_PLOT') farmCount++;
+        else if (t === 'BED') bedCount++;
+        else if (t === 'CONSTRUCTED_WALL') wallCount++;
+        else if (t === 'DOOR') doorCount++;
+        else if (t === 'TRAP_STONE') trapCount++;
+        else if (t === 'TAVERN_HALL') tavernCount++;
+        else if (t === 'TEMPLE_ALTAR') templeCount++;
+        else if (t === 'TRADE_DEPOT') depotCount++;
+        else if (t === 'WORKSHOP_STILL') stillCount++;
+      }
+    }
+  }
+
+  const pop = Math.max(1, state.dwarves.length);
+  // Each season is 120 ticks; each meal/drink restores 48 points
+  const decayPerSeason = 120 / seasonMods.needDecayInterval + 6;
+  const mealsPerDwarfPerSeason = decayPerSeason / 48;
+  const foodPerSeason = Math.max(4, Math.round(pop * mealsPerDwarfPerSeason * 3.2));
+  const alePerSeason = Math.max(4, Math.round(pop * mealsPerDwarfPerSeason * 3.2));
+
+  const activeFarmers = state.dwarves.filter((d) => d.labors.FARMING).length;
+  const harvestsPerSeason = 5; // 120 / 24
+  const perHarvest =
+    farmCount > 0
+      ? Math.max(
+          1,
+          Math.round(
+            (activeFarmers > 0
+              ? farmCount * 1.5 + Math.min(2, activeFarmers)
+              : farmCount * 0.65) * seasonMods.cropMultiplier
+          )
+        )
+      : 0;
+  const farmProductionPerSeason = perHarvest * harvestsPerSeason + (depotCount > 0 ? 4 : 0);
+
+  const hasBrewOrder = state.workOrders.some(
+    (o) => o.workshop === 'WORKSHOP_STILL' && (o.remaining > 0 || o.autoRepeat)
+  );
+  const stillProductionPerSeason =
+    stillCount > 0 ? (hasBrewOrder ? 16 : 10) + (depotCount > 0 ? 4 : 0) : depotCount > 0 ? 4 : 0;
+
+  const netFoodPerSeason = farmProductionPerSeason - foodPerSeason;
+  const netAlePerSeason = stillProductionPerSeason - alePerSeason;
+  const foodRunwaySeasons = Number((state.resources.food / Math.max(1, foodPerSeason)).toFixed(1));
+  const aleRunwaySeasons = Number((state.resources.ale / Math.max(1, alePerSeason)).toFixed(1));
+  const maxSafeFoodStorage = 24 + stockpileTiles * 8;
+
+  let status: ResourceEconomyBalance['status'] = 'STABLE';
+  if (foodRunwaySeasons < 0.8 || aleRunwaySeasons < 0.8) {
+    status = 'CRITICAL';
+  } else if (foodRunwaySeasons < 1.6 || aleRunwaySeasons < 1.5) {
+    status = 'TIGHT';
+  } else if (netFoodPerSeason >= 0 && netAlePerSeason >= 0 && foodRunwaySeasons >= 2.2) {
+    status = 'SURPLUS';
+  }
+
+  return {
+    foodPerSeason,
+    alePerSeason,
+    farmProductionPerSeason,
+    stillProductionPerSeason,
+    netFoodPerSeason,
+    netAlePerSeason,
+    foodRunwaySeasons,
+    aleRunwaySeasons,
+    stockpileTiles,
+    maxSafeFoodStorage,
+    farmCount,
+    bedCount,
+    wallCount,
+    doorCount,
+    trapCount,
+    tavernCount,
+    templeCount,
+    depotCount,
+    status,
+  };
+}
+
+export interface BuildingTileFunctionInfo {
+  terrain: TileTerrain;
+  title: string;
+  glyph: string;
+  passiveFunction: string;
+  actionLabel: string;
+  actionDescription: string;
+  cost: Partial<FortressResources>;
+  canActivate: boolean;
+}
+
+export function getBuildingTileFunctionInfo(
+  state: GameState,
+  tile: Tile
+): BuildingTileFunctionInfo | null {
+  if (!tile.revealed) return null;
+  const econ = getResourceEconomyBalance(state);
+  const res = state.resources;
+
+  switch (tile.terrain) {
+    case 'STOCKPILE_TILE':
+      return {
+        terrain: 'STOCKPILE_TILE',
+        title: 'Vault Stockpile Tile',
+        glyph: '≡',
+        passiveFunction: `+8 Safe Provision Cap (Total: ${econ.maxSafeFoodStorage} Food across ${econ.stockpileTiles} tiles) · Prevents seasonal spoilage & grants hauling bonus at 6+ tiles.`,
+        actionLabel: 'Consolidate & Audit Stockpile',
+        actionDescription: 'Haulers sweep loose tunnel stone, timber, and mushrooms into sorted bins (+3 Stone, +2 Wood, +2 Food, +15 Wealth).',
+        cost: {},
+        canActivate: true,
+      };
+    case 'CONSTRUCTED_WALL':
+      return {
+        terrain: 'CONSTRUCTED_WALL',
+        title: 'Bastion Stone Wall',
+        glyph: '#',
+        passiveFunction: `Blocks raiders, insulates indoor warmth (+8°F), and reduces militia combat damage by 15% when 4+ walls stand (${econ.wallCount} built).`,
+        actionLabel: 'Buttress & Engrave Wall (1 Stone)',
+        actionDescription: 'Carve ancestral reliefs into the stone bastion (+30 Wealth, +2 Clan Morale).',
+        cost: { stone: 1 },
+        canActivate: res.stone >= 1,
+      };
+    case 'DOOR':
+      return {
+        terrain: 'DOOR',
+        title: 'Fortified Portal Door',
+        glyph: '+',
+        passiveFunction: `Seals room warmth while allowing dwarves 100% speed and slowing hostile raiders by 50% at choke points (${econ.doorCount} built).`,
+        actionLabel: 'Reinforce Portal Choke-Ward',
+        actionDescription: 'Drop iron crossbars and alert guards (+20 Wealth, +5 HP to all dwarves).',
+        cost: {},
+        canActivate: true,
+      };
+    case 'BED':
+      return {
+        terrain: 'BED',
+        title: 'Dwarven Dormitory Bed',
+        glyph: '⌂',
+        passiveFunction: `Restores +52 Energy & +12 HP on sleep and grants +6 Morale (${econ.bedCount}/${state.dwarves.length} clan beds).`,
+        actionLabel: 'Sound Dormitory Rest Call',
+        actionDescription: 'Rotate weary dwarves through the dormitory (+20 Energy, +10 HP, +3 Morale across clan).',
+        cost: {},
+        canActivate: true,
+      };
+    case 'FARM_PLOT':
+      return {
+        terrain: 'FARM_PLOT',
+        title: 'Plump Helmet Farm Plot',
+        glyph: '≈',
+        passiveFunction: `Passively harvests Plump Helmets every 24 ticks (~${econ.farmProductionPerSeason} Food/season across ${econ.farmCount} plots).`,
+        actionLabel: 'Fertilize & Rush Harvest',
+        actionDescription: 'Tend mushroom spores for an immediate harvest (+4 Food, +15 Wealth).',
+        cost: {},
+        canActivate: true,
+      };
+    case 'WORKSHOP_MASON':
+      return {
+        terrain: 'WORKSHOP_MASON',
+        title: "Mason's Workshop",
+        glyph: 'M',
+        passiveFunction: 'Dresses stone blocks and fulfills Stone Furniture work orders every 12–28 ticks.',
+        actionLabel: 'Carve Stone Coffer & Throne (2 Stone)',
+        actionDescription: 'Chisel a masterwork stone coffer and table (+2 Furniture, +40 Wealth).',
+        cost: { stone: 2 },
+        canActivate: res.stone >= 2,
+      };
+    case 'WORKSHOP_CARPENTER':
+      return {
+        terrain: 'WORKSHOP_CARPENTER',
+        title: "Carpenter's Joinery",
+        glyph: 'C',
+        passiveFunction: 'Joins seasoned timber into beds, shields, and ale casks (+1 Furniture & +1 Ale every 28 ticks).',
+        actionLabel: 'Join Timber Bed & Casks (2 Wood)',
+        actionDescription: 'Craft wooden furniture and coopered ale casks (+1 Furniture, +2 Ale, +35 Wealth).',
+        cost: { wood: 2 },
+        canActivate: res.wood >= 2,
+      };
+    case 'WORKSHOP_STILL':
+      return {
+        terrain: 'WORKSHOP_STILL',
+        title: "Brewer's Still",
+        glyph: 'S',
+        passiveFunction: `Ferments Plump Helmets into Dwarven Ale (~${econ.stillProductionPerSeason} Ale/season) to sustain clan thirst & mirth.`,
+        actionLabel: 'Distill Plump Helmet Ale (2 Food)',
+        actionDescription: 'Ferment a fresh batch of rich Dwarven Ale (+5 Ale, +25 Wealth).',
+        cost: { food: 2 },
+        canActivate: res.food >= 2,
+      };
+    case 'WORKSHOP_SMELTER':
+      return {
+        terrain: 'WORKSHOP_SMELTER',
+        title: 'Smeltery Blast Furnace',
+        glyph: '£',
+        passiveFunction: 'Smelts Iron & Copper Ore with timber charcoal into tempered Steel Bars and radiates hearth warmth.',
+        actionLabel: 'Smelt Steel Ingots (2 Iron, 1 Wood)',
+        actionDescription: 'Run a high-heat blast furnace smelt (+2 Steel Bars, +45 Wealth).',
+        cost: { ironOre: 2, wood: 1 },
+        canActivate: res.ironOre >= 2 && res.wood >= 1,
+      };
+    case 'WORKSHOP_FORGE':
+      return {
+        terrain: 'WORKSHOP_FORGE',
+        title: "Metalsmith's Forge",
+        glyph: '⚒',
+        passiveFunction: 'Hammers Steel Bars into Runed Battleaxes and Plate Mail automatically equipped by militia dwarves.',
+        actionLabel: 'Forge Battleaxe & Mail (1 Steel)',
+        actionDescription: 'Hammer a runed axe and steel mail suit (+1 Weapon, +1 Armor, +75 Wealth).',
+        cost: { steelBars: 1 },
+        canActivate: res.steelBars >= 1,
+      };
+    case 'TAVERN_HALL':
+      return {
+        terrain: 'TAVERN_HALL',
+        title: 'Hearth Tavern Hall',
+        glyph: '♫',
+        passiveFunction: 'Doubles morale gain from drinking Ale (+12), restores +10 Energy, and radiates +2 Song Morale every 30 ticks.',
+        actionLabel: 'Host Hearth Feast & Round (2 Ale)',
+        actionDescription: 'Pour tankards for the whole clan (+8 Morale & +25 Thirst to all dwarves, +30 Wealth).',
+        cost: { ale: 2 },
+        canActivate: res.ale >= 2,
+      };
+    case 'TEMPLE_ALTAR':
+      return {
+        terrain: 'TEMPLE_ALTAR',
+        title: 'Ancestral Temple Altar',
+        glyph: 'Ψ',
+        passiveFunction: 'Grants +12 Morale to praying dwarves and radiates +2 Serenity & +4 HP across the fortress every 32 ticks.',
+        actionLabel: 'Invoke Ancestral Blessing',
+        actionDescription: 'Chant the Litany of the First Anvil (+6 Morale & +12 HP to all dwarves, +25 Wealth).',
+        cost: {},
+        canActivate: true,
+      };
+    case 'TRADE_DEPOT':
+      return {
+        terrain: 'TRADE_DEPOT',
+        title: 'Seasonal Trade Depot',
+        glyph: '¤',
+        passiveFunction: 'Collects merchant tolls every 30 ticks (+20 Wealth, +1 Food, +1 Ale) and unlocks Caravan Barter.',
+        actionLabel: 'Barter Stone for Provisions (3 Stone)',
+        actionDescription: 'Exchange dressed stone with passing factors (+4 Food, +4 Ale, +40 Wealth).',
+        cost: { stone: 3 },
+        canActivate: res.stone >= 3,
+      };
+    case 'TRAP_STONE':
+      return {
+        terrain: 'TRAP_STONE',
+        title: 'Stone Deadfall Trap',
+        glyph: '^',
+        passiveFunction: 'Crushes any hostile goblin or cavern beast stepping on this tile for 45 damage (+50 Wealth on kill).',
+        actionLabel: 'Weight & Hone Trigger (1 Stone)',
+        actionDescription: 'Add serrated granite counterweights to the deadfall (+25 Wealth & fortifies tile).',
+        cost: { stone: 1 },
+        canActivate: res.stone >= 1,
+      };
+    default:
+      return null;
+  }
+}
+
+export function activateBuildingTileFunction(
+  state: GameState,
+  x: number,
+  y: number,
+  z: number
+): { nextState: GameState; triggered: boolean; message: string } {
+  const tile = state.grid[z]?.[y]?.[x];
+  if (!tile) {
+    return { nextState: state, triggered: false, message: 'Invalid tile coordinates.' };
+  }
+  const fnInfo = getBuildingTileFunctionInfo(state, tile);
+  if (!fnInfo) {
+    return { nextState: state, triggered: false, message: 'No active building function on this tile.' };
+  }
+  if (!fnInfo.canActivate || !hasResources(state.resources, fnInfo.cost)) {
+    return {
+      nextState: state,
+      triggered: false,
+      message: `Insufficient resources to activate ${fnInfo.title}.`,
+    };
+  }
+
+  const resources: FortressResources = { ...state.resources };
+  for (const [k, v] of Object.entries(fnInfo.cost)) {
+    const key = k as keyof FortressResources;
+    resources[key] = Math.max(0, (resources[key] || 0) - (v || 0));
+  }
+
+  let dwarves: DwarfEntity[] = state.dwarves.map((d) => ({
+    ...d,
+    thoughtLog: Array.isArray(d.thoughtLog) ? [...d.thoughtLog] : [],
+  }));
+
+  let outcomeMessage = '';
+
+  switch (tile.terrain) {
+    case 'STOCKPILE_TILE': {
+      resources.stone += 3;
+      resources.wood += 2;
+      resources.food += 2;
+      resources.wealth += 15;
+      outcomeMessage = `[STOCKPILE] Consolidated loose tunnel stores at (${x},${y},Z-${z}) (+3 Stone, +2 Wood, +2 Food, +15 Wealth)!`;
+      break;
+    }
+    case 'CONSTRUCTED_WALL': {
+      resources.wealth += 30;
+      dwarves = dwarves.map((d) => ({
+        ...d,
+        happiness: Math.min(100, d.happiness + 2),
+      }));
+      outcomeMessage = `[BASTION] Buttressed & engraved Stone Wall at (${x},${y},Z-${z}) (+30 Wealth, +2 Clan Morale)!`;
+      break;
+    }
+    case 'DOOR': {
+      resources.wealth += 20;
+      dwarves = dwarves.map((d) => ({
+        ...d,
+        hp: Math.min(d.maxHp, d.hp + 5),
+      }));
+      outcomeMessage = `[PORTAL] Reinforced Portal Door choke-ward at (${x},${y},Z-${z}) (+20 Wealth, +5 HP to clan)!`;
+      break;
+    }
+    case 'BED': {
+      dwarves = dwarves.map((d) => ({
+        ...d,
+        energy: Math.min(100, d.energy + 20),
+        hp: Math.min(d.maxHp, d.hp + 10),
+        happiness: Math.min(100, d.happiness + 3),
+      }));
+      outcomeMessage = `[DORMITORY] Sounded rest rotation at (${x},${y},Z-${z}) (+20 Energy, +10 HP, +3 Morale across clan)!`;
+      break;
+    }
+    case 'FARM_PLOT': {
+      resources.food += 4;
+      resources.wealth += 15;
+      outcomeMessage = `[FARM] Tended & harvested Plump Helmet plot at (${x},${y},Z-${z}) (+4 Food, +15 Wealth)!`;
+      break;
+    }
+    case 'WORKSHOP_MASON': {
+      resources.furniture += 2;
+      resources.wealth += 40;
+      outcomeMessage = `[MASON] Carved stone coffer & throne at (${x},${y},Z-${z}) (+2 Furniture, +40 Wealth)!`;
+      break;
+    }
+    case 'WORKSHOP_CARPENTER': {
+      resources.furniture += 1;
+      resources.ale += 2;
+      resources.wealth += 35;
+      outcomeMessage = `[CARPENTER] Joined timber bedframe & coopered casks at (${x},${y},Z-${z}) (+1 Furniture, +2 Ale, +35 Wealth)!`;
+      break;
+    }
+    case 'WORKSHOP_STILL': {
+      resources.ale += 5;
+      resources.wealth += 25;
+      outcomeMessage = `[STILL] Distilled a fresh batch of Dwarven Ale at (${x},${y},Z-${z}) (+5 Ale, +25 Wealth)!`;
+      break;
+    }
+    case 'WORKSHOP_SMELTER': {
+      resources.steelBars += 2;
+      resources.wealth += 45;
+      outcomeMessage = `[SMELTER] Smelted 2 Steel Bars in the blast furnace at (${x},${y},Z-${z}) (+2 Steel Bars, +45 Wealth)!`;
+      break;
+    }
+    case 'WORKSHOP_FORGE': {
+      resources.weapons += 1;
+      resources.armor += 1;
+      resources.wealth += 75;
+      outcomeMessage = `[FORGE] Hammered Runed Battleaxe & Steel Mail at (${x},${y},Z-${z}) (+1 Weapon, +1 Armor, +75 Wealth)!`;
+      break;
+    }
+    case 'TAVERN_HALL': {
+      resources.wealth += 30;
+      dwarves = dwarves.map((d) =>
+        withDwarfThought(
+          {
+            ...d,
+            thirst: Math.min(100, d.thirst + 25),
+          },
+          {
+            tick: state.ticks,
+            year: state.year,
+            season: state.season,
+            text: 'Celebrated a roaring Hearth Feast in the Tavern Hall!',
+            category: 'FELLOWSHIP',
+            sentiment: 'EUPHORIC',
+            moraleDelta: 8,
+          }
+        )
+      );
+      outcomeMessage = `[TAVERN] Hosted Hearth Feast at (${x},${y},Z-${z}) (+8 Morale & +25 Thirst to all dwarves, +30 Wealth)!`;
+      break;
+    }
+    case 'TEMPLE_ALTAR': {
+      resources.wealth += 25;
+      dwarves = dwarves.map((d) =>
+        withDwarfThought(
+          {
+            ...d,
+            hp: Math.min(d.maxHp, d.hp + 12),
+          },
+          {
+            tick: state.ticks,
+            year: state.year,
+            season: state.season,
+            text: 'Blessed by the Ancestral Litany at the Temple Altar!',
+            category: 'OMEN',
+            sentiment: 'POSITIVE',
+            moraleDelta: 6,
+          }
+        )
+      );
+      outcomeMessage = `[TEMPLE] Invoked Ancestral Blessing at (${x},${y},Z-${z}) (+6 Morale & +12 HP to all dwarves, +25 Wealth)!`;
+      break;
+    }
+    case 'TRADE_DEPOT': {
+      resources.food += 4;
+      resources.ale += 4;
+      resources.wealth += 40;
+      outcomeMessage = `[TRADE DEPOT] Bartered stone with caravan factors at (${x},${y},Z-${z}) (+4 Food, +4 Ale, +40 Wealth)!`;
+      break;
+    }
+    case 'TRAP_STONE': {
+      resources.wealth += 25;
+      outcomeMessage = `[TRAP] Weighted & honed Stone Deadfall Trap at (${x},${y},Z-${z}) (+25 Wealth)!`;
+      break;
+    }
+  }
+
+  const entry: ChronicleEntry = {
+    id: `chron-bldg-fn-${state.ticks}-${Math.random().toString(36).slice(2, 6)}`,
+    tick: state.ticks,
+    season: state.season,
+    year: state.year,
+    text: outcomeMessage,
+    type: 'CRAFT',
+  };
+
+  let nextState: GameState = {
+    ...state,
+    resources,
+    dwarves,
+    chronicle: [entry, ...state.chronicle.slice(0, 59)],
+  };
+  nextState = syncBuildingUnlocks(nextState).nextState;
+
+  return {
+    nextState,
+    triggered: true,
+    message: outcomeMessage,
+  };
+}
+
+

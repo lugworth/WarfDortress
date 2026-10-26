@@ -2,6 +2,8 @@ import type {
   Biome,
   Civilization,
   DwarfEntity,
+  DwarfLabor,
+  DwarfQuirk,
   GeologicalStratum,
   HistoricalEvent,
   HostileEntity,
@@ -9,6 +11,7 @@ import type {
   TileTerrain,
   WorldData,
 } from './types.ts';
+import { createInitialThoughtLog } from './thoughts.ts';
 
 export type SurfaceArchetype =
   | 'TWIN_RIVERS_CONFLUENCE'
@@ -1056,13 +1059,14 @@ export function createInitialDwarves(centerX: number, centerY: number): DwarfEnt
     z: 0,
     hp: 100,
     maxHp: 100,
-    hunger: 88 - idx * 3,
-    thirst: 85 - idx * 2,
-    energy: 92 - idx * 2,
+    hunger: 72 - idx * 4,
+    thirst: 68 - idx * 4,
+    energy: 86 - idx * 3,
     happiness: 85,
     state: 'IDLE',
     labors: r.labors,
     thought: r.thought,
+    thoughtLog: createInitialThoughtLog(`dwarf-${idx + 1}`, r.thought, idx),
     weaponEquipped: r.weaponEquipped || false,
     armorEquipped: r.armorEquipped || false,
     kills: 0,
@@ -1079,3 +1083,250 @@ export function createInitialDwarves(centerX: number, centerY: number): DwarfEnt
     },
   }));
 }
+
+export interface MigrantVocationProfile {
+  profession: string;
+  primaryLabor: DwarfLabor;
+  secondaryLabor: DwarfLabor;
+  labors: Record<DwarfLabor, boolean>;
+  skills: Partial<Record<DwarfLabor, number>>;
+  quirk: DwarfQuirk;
+  color: string;
+}
+
+export const MIGRANT_VOCATIONS: readonly MigrantVocationProfile[] = [
+  {
+    profession: 'Planter & Brewmaster',
+    primaryLabor: 'FARMING',
+    secondaryLabor: 'WOODCUTTING',
+    labors: {
+      MINING: false,
+      WOODCUTTING: true,
+      MASONRY: false,
+      CARPENTRY: false,
+      FARMING: true,
+      SMITHING: false,
+      COMBAT: false,
+      HAULING: true,
+    },
+    skills: { FARMING: 3, WOODCUTTING: 2, HAULING: 2 },
+    quirk: 'DRUNKARD',
+    color: '#33ff00',
+  },
+  {
+    profession: 'Forester & Master Joiner',
+    primaryLabor: 'CARPENTRY',
+    secondaryLabor: 'WOODCUTTING',
+    labors: {
+      MINING: false,
+      WOODCUTTING: true,
+      MASONRY: false,
+      CARPENTRY: true,
+      FARMING: false,
+      SMITHING: false,
+      COMBAT: false,
+      HAULING: true,
+    },
+    skills: { CARPENTRY: 3, WOODCUTTING: 3, HAULING: 2 },
+    quirk: 'LONER',
+    color: '#e0e0e0',
+  },
+  {
+    profession: 'Blacksmith & Furnace Operator',
+    primaryLabor: 'SMITHING',
+    secondaryLabor: 'MINING',
+    labors: {
+      MINING: true,
+      WOODCUTTING: false,
+      MASONRY: false,
+      CARPENTRY: false,
+      FARMING: false,
+      SMITHING: true,
+      COMBAT: false,
+      HAULING: true,
+    },
+    skills: { SMITHING: 3, MINING: 2, HAULING: 2 },
+    quirk: 'IRON_BORN',
+    color: '#ff9900',
+  },
+  {
+    profession: 'Master Mason & Architect',
+    primaryLabor: 'MASONRY',
+    secondaryLabor: 'MINING',
+    labors: {
+      MINING: true,
+      WOODCUTTING: false,
+      MASONRY: true,
+      CARPENTRY: false,
+      FARMING: false,
+      SMITHING: false,
+      COMBAT: false,
+      HAULING: true,
+    },
+    skills: { MASONRY: 3, MINING: 2, HAULING: 2 },
+    quirk: 'SCHOLAR',
+    color: '#00ffff',
+  },
+  {
+    profession: 'Veteran Axedwarf & Warden',
+    primaryLabor: 'COMBAT',
+    secondaryLabor: 'SMITHING',
+    labors: {
+      MINING: false,
+      WOODCUTTING: false,
+      MASONRY: false,
+      CARPENTRY: false,
+      FARMING: false,
+      SMITHING: true,
+      COMBAT: true,
+      HAULING: true,
+    },
+    skills: { COMBAT: 3, SMITHING: 2, HAULING: 1 },
+    quirk: 'HOTHEAD',
+    color: '#ff0099',
+  },
+  {
+    profession: 'Deep Delver & Prospector',
+    primaryLabor: 'MINING',
+    secondaryLabor: 'MASONRY',
+    labors: {
+      MINING: true,
+      WOODCUTTING: false,
+      MASONRY: true,
+      CARPENTRY: false,
+      FARMING: false,
+      SMITHING: false,
+      COMBAT: false,
+      HAULING: true,
+    },
+    skills: { MINING: 3, MASONRY: 2, HAULING: 2 },
+    quirk: 'DEEP_MINER',
+    color: '#cc00ff',
+  },
+];
+
+const MIGRANT_GIVEN_NAMES = [
+  'Thorek',
+  'Bari',
+  'Nori',
+  'Dori',
+  'Balin',
+  'Bomrek',
+  'Thikut',
+  'Morul',
+  'Vabok',
+  'Kivish',
+  'Rigoth',
+  'astesh',
+];
+
+const MIGRANT_CLAN_SURNAMES = [
+  'Deepdelver',
+  'Goldhand',
+  'Shieldbreaker',
+  'Barrelstave',
+  'Runeweaver',
+  'Anvilcrest',
+  'Caskborn',
+  'Stonehewer',
+  'Timbercleave',
+  'Hearthguard',
+];
+
+export interface CreateMigrantOptions {
+  existingDwarves: DwarfEntity[];
+  worldWidth: number;
+  worldHeight: number;
+  dwarvenName: string;
+  ticks: number;
+  indexOffset?: number;
+  originLabel?: string;
+  weaponsAvailable?: number;
+  armorAvailable?: number;
+}
+
+export function createConfiguredMigrantDwarf(options: CreateMigrantOptions): DwarfEntity {
+  const {
+    existingDwarves,
+    worldWidth,
+    worldHeight,
+    dwarvenName,
+    ticks,
+    indexOffset = 1,
+    originLabel = 'Migrant Wave',
+    weaponsAvailable = 0,
+    armorAvailable = 0,
+  } = options;
+
+  const rosterIndex = existingDwarves.length + indexOffset;
+
+  // Count how many existing dwarves currently cover each specialty labor
+  const laborCoverage = (labor: DwarfLabor) =>
+    existingDwarves.filter((d) => d.labors[labor]).length;
+
+  // Rank vocations so the least-covered specialty in the fortress is prioritized
+  const rankedVocations = [...MIGRANT_VOCATIONS].map((voc, vIdx) => ({
+    voc,
+    primaryCount: laborCoverage(voc.primaryLabor),
+    secondaryCount: laborCoverage(voc.secondaryLabor),
+    tieBreaker: (vIdx + rosterIndex) % MIGRANT_VOCATIONS.length,
+  }));
+
+  rankedVocations.sort((a, b) => {
+    if (a.primaryCount !== b.primaryCount) return a.primaryCount - b.primaryCount;
+    if (a.secondaryCount !== b.secondaryCount) return a.secondaryCount - b.secondaryCount;
+    return a.tieBreaker - b.tieBreaker;
+  });
+
+  const chosen = rankedVocations[0].voc;
+  const given = MIGRANT_GIVEN_NAMES[(rosterIndex + ticks) % MIGRANT_GIVEN_NAMES.length];
+  const surname = MIGRANT_CLAN_SURNAMES[(rosterIndex * 3 + ticks) % MIGRANT_CLAN_SURNAMES.length];
+  const name = `${given} ${surname}`;
+
+  const cx = Math.floor(worldWidth / 2);
+  const cy = Math.floor(worldHeight / 2);
+  const id = `dwarf-migrant-${ticks}-${rosterIndex}`;
+
+  const activeJobsList = (Object.entries(chosen.labors) as [DwarfLabor, boolean][])
+    .filter(([k, active]) => active && k !== 'HAULING')
+    .map(([k]) => k)
+    .join(' + ');
+
+  const arrivalThought = `Joined ${dwarvenName} via ${originLabel} — configured for ${chosen.profession} (${activeJobsList}).`;
+
+  return {
+    id,
+    name,
+    title: chosen.profession,
+    char: '☺',
+    color: chosen.color,
+    x: cx + ((indexOffset % 3) - 1),
+    y: cy + (indexOffset % 2 === 0 ? 1 : -1),
+    z: 0,
+    hp: 100,
+    maxHp: 100,
+    hunger: 76,
+    thirst: 74,
+    energy: 88,
+    happiness: 90,
+    quirk: chosen.quirk,
+    weaponEquipped: chosen.labors.COMBAT || weaponsAvailable > 0,
+    armorEquipped: chosen.labors.COMBAT && armorAvailable > 0,
+    kills: 0,
+    labors: { ...chosen.labors },
+    skills: {
+      MINING: chosen.skills.MINING ?? 0,
+      WOODCUTTING: chosen.skills.WOODCUTTING ?? 0,
+      MASONRY: chosen.skills.MASONRY ?? 0,
+      CARPENTRY: chosen.skills.CARPENTRY ?? 0,
+      FARMING: chosen.skills.FARMING ?? 0,
+      SMITHING: chosen.skills.SMITHING ?? 0,
+      COMBAT: chosen.skills.COMBAT ?? 0,
+      HAULING: chosen.skills.HAULING ?? 1,
+    },
+    state: 'IDLE',
+    thought: arrivalThought,
+    thoughtLog: createInitialThoughtLog(id, arrivalThought, rosterIndex),
+  };
+}
+

@@ -10,7 +10,11 @@ import React, {
 import { useGame } from "./GameProvider";
 import { DesignationType, DwarfEntity, HostileEntity } from "@/lib/types";
 import { ISOTOPE } from "@/lib/colors";
-import { canDesignateTile, getConstructionCost } from "@/lib/game-engine";
+import {
+  canDesignateTile,
+  getBuildingTileFunctionInfo,
+  getConstructionCost,
+} from "@/lib/game-engine";
 import { TOOL_KEYS } from "@/lib/game-rules";
 import {
   asciiBar,
@@ -24,6 +28,12 @@ import { TOOL_NAMES } from "@/lib/ui-labels";
 import { useUI } from "./UIProvider";
 import AsciiSelect from "./AsciiSelect";
 import { playTactileSfx } from "@/lib/audio";
+import { getCurrentWeather, getWeatherTileVisuals } from "@/lib/weather";
+import {
+  getBuildingUnlockStatus,
+  getBuildingUnlockStatuses,
+} from "@/lib/progression";
+
 
 const PRIMARY_FAB_TOOLS: Array<{
   id: DesignationType;
@@ -107,7 +117,10 @@ export default function ASCIIViewport() {
     toggleDwarfLabor,
     togglePause,
     jumpToLocation,
+    cycleSeasonWeather,
+    activateBuildingFunction,
   } = useGame();
+
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -360,20 +373,29 @@ export default function ASCIIViewport() {
       } else if (e.key.toLowerCase() === "i" || e.key === "?") {
         setInspectMode((v) => !v);
       } else if (TOOL_KEYS[e.key.toLowerCase()]) {
-        setSelectedTool(TOOL_KEYS[e.key.toLowerCase()]);
+        const candidateTool = TOOL_KEYS[e.key.toLowerCase()];
+        const unlockInfo = getBuildingUnlockStatus(gameState, candidateTool);
+        if (unlockInfo && !unlockInfo.unlocked) {
+          setOrderStatus(
+            `Locked Blueprint: ${unlockInfo.title} requires ${unlockInfo.requirementLabel} (${unlockInfo.progressText}).`,
+          );
+          return;
+        }
+        setSelectedTool(candidateTool);
         setInspectMode(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
-    gameState.world.depth,
+    gameState,
     setCurrentZ,
     setInspectMode,
     setSelectedTool,
     togglePause,
     jumpToLocation,
   ]);
+
 
   // Draw the ASCII Grid, Designations, Selection Box, Hostiles, and Dwarves
   useEffect(() => {
@@ -407,8 +429,14 @@ export default function ASCIIViewport() {
           continue;
         }
 
+        const weatherVis =
+          currentZ === 0 ? getWeatherTileVisuals(gameState, tile) : null;
+        const effectiveBg = weatherVis ? weatherVis.bg : tile.bg;
+        const effectiveFg = weatherVis ? weatherVis.fg : tile.fg;
+        const effectiveChar = weatherVis ? weatherVis.char : tile.char;
+
         // Tile background
-        ctx.fillStyle = tile.bg === "#000000" ? palette.bg : tile.bg;
+        ctx.fillStyle = effectiveBg === "#000000" ? palette.bg : effectiveBg;
         ctx.fillRect(px, py, CELL_W, CELL_H);
 
         // If designated, tint background and draw designation marker
@@ -424,7 +452,7 @@ export default function ASCIIViewport() {
               ? palette.accent
               : des?.color || palette.accent;
           ctx.fillText(
-            des?.char || tile.char,
+            des?.char || effectiveChar,
             px + CELL_W / 2,
             py + CELL_H / 2,
           );
@@ -441,12 +469,26 @@ export default function ASCIIViewport() {
               ? landmark
                 ? palette.info
                 : palette.terrain
-              : tile.fg;
-          ctx.fillText(tile.char, px + CELL_W / 2, py + CELL_H / 2);
+              : effectiveFg;
+          ctx.fillText(effectiveChar, px + CELL_W / 2, py + CELL_H / 2);
+
+          // Draw seasonal weather precipitation particles (snowflakes / rain streaks) on Z-0
+          if (weatherVis?.particleChar && weatherVis?.particleFg) {
+            ctx.save();
+            ctx.globalAlpha = 0.65;
+            ctx.fillStyle = weatherVis.particleFg;
+            ctx.fillText(
+              weatherVis.particleChar,
+              px + CELL_W * 0.72,
+              py + CELL_H * 0.3,
+            );
+            ctx.restore();
+          }
           ctx.globalAlpha = 1;
         }
       }
     }
+
 
     // 2. Render Drag-Selection Box
     if (selection && preview && selection.z === currentZ) {
@@ -690,7 +732,9 @@ export default function ASCIIViewport() {
     fontReady,
     selectedTool,
     stampFlash,
+    gameState,
   ]);
+
 
   const handleMouseDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (panMode || e.button === 1) return;
@@ -921,6 +965,22 @@ export default function ASCIIViewport() {
   const isSecondaryToolActive = SECONDARY_FAB_TOOLS.some(
     (t) => t.id === selectedTool,
   );
+  const currentWeather = useMemo(
+    () => getCurrentWeather(gameState),
+    [gameState],
+  );
+  const buildingUnlocks = useMemo(
+    () => getBuildingUnlockStatuses(gameState),
+    [gameState],
+  );
+  const unlockedTierBuildingsCount = useMemo(
+    () => buildingUnlocks.filter((b) => b.tier > 0 && b.unlocked).length,
+    [buildingUnlocks],
+  );
+  const totalTierBuildingsCount = useMemo(
+    () => buildingUnlocks.filter((b) => b.tier > 0).length,
+    [buildingUnlocks],
+  );
 
   const hoverMeta = useMemo(
     () =>
@@ -929,6 +989,7 @@ export default function ASCIIViewport() {
         : null,
     [gameState, hoveredTile, currentZ],
   );
+
 
   return (
     <div
@@ -993,7 +1054,7 @@ export default function ASCIIViewport() {
       >
         <span
           className="text-[#ff0099] font-bold mr-1 whitespace-nowrap"
-          title={currentStratum.name}
+          title={preferences.tooltips ? currentStratum.name : undefined}
         >
           Z-{currentZ} ·{" "}
           <span className="text-[#d0d0d0] font-normal">
@@ -1009,7 +1070,7 @@ export default function ASCIIViewport() {
             setCurrentZ((z) => Math.max(0, z - 1));
           }}
           className="px-1.5 py-0.5 border border-[#2a2a2a] bg-[#000000] text-[#00ffff] hover:border-[#00ffff] disabled:opacity-35"
-          title="Ascend Z-Level ([)"
+          title={preferences.tooltips ? "Ascend Z-Level ([)" : undefined}
         >
           ↑
         </button>
@@ -1022,7 +1083,7 @@ export default function ASCIIViewport() {
             setCurrentZ((z) => Math.min(gameState.world.depth - 1, z + 1));
           }}
           className="px-1.5 py-0.5 border border-[#2a2a2a] bg-[#000000] text-[#00ffff] hover:border-[#00ffff] disabled:opacity-35"
-          title="Descend Z-Level (])"
+          title={preferences.tooltips ? "Descend Z-Level (])" : undefined}
         >
           ↓
         </button>
@@ -1036,7 +1097,11 @@ export default function ASCIIViewport() {
               key={stratum.zLevel}
               type="button"
               aria-pressed={currentZ === stratum.zLevel}
-              title={`Z-${stratum.zLevel}: ${stratum.name} (${stratum.primaryRock})`}
+              title={
+                preferences.tooltips
+                  ? `Z-${stratum.zLevel}: ${stratum.name} (${stratum.primaryRock})`
+                  : undefined
+              }
               onClick={() => {
                 playTactileSfx("zlevel");
                 setCurrentZ(stratum.zLevel);
@@ -1053,6 +1118,27 @@ export default function ASCIIViewport() {
         </div>
         <button
           type="button"
+          data-testid="viewport-weather-badge"
+          onClick={() => {
+            playTactileSfx("tool");
+            cycleSeasonWeather();
+          }}
+          style={{ color: currentWeather.color }}
+          className="px-1.5 py-0.5 text-[11px] border border-[#2a2a2a] bg-[#000000] hover:border-[#00ffff] transition-colors whitespace-nowrap font-bold"
+          title={
+            preferences.tooltips
+              ? `${gameState.season} — ${currentWeather.label} (${currentWeather.summary}). Click to cycle season & weather.`
+              : undefined
+          }
+        >
+          {currentWeather.glyph} {currentWeather.shortLabel}{" "}
+          {currentWeather.surfaceTempF}°F
+          {currentZ === 0 && currentWeather.surfaceSpeedPct < 100
+            ? ` · ${currentWeather.surfaceSpeedPct}% SPD`
+            : ""}
+        </button>
+        <button
+          type="button"
           aria-pressed={preferences.labels}
           onClick={() => updatePreferences({ labels: !preferences.labels })}
           className={`px-1.5 py-0.5 text-[11px] border transition-colors ${
@@ -1060,9 +1146,27 @@ export default function ASCIIViewport() {
               ? "border-[#00ffff] bg-[#081c20] text-[#00ffff]"
               : "border-[#222222] bg-[#000000] text-[#808080] hover:text-[#d0d0d0]"
           }`}
-          title="Toggle floating entity & workshop tags on map"
+          title={
+            preferences.tooltips
+              ? "Toggle floating entity & workshop tags on map"
+              : undefined
+          }
         >
           Tags {preferences.labels ? "ON" : "OFF"}
+        </button>
+        <button
+          type="button"
+          data-testid="toggle-tooltips-btn"
+          aria-pressed={preferences.tooltips}
+          onClick={() => updatePreferences({ tooltips: !preferences.tooltips })}
+          className={`px-1.5 py-0.5 text-[11px] border transition-colors ${
+            preferences.tooltips
+              ? "border-[#33ff00] bg-[#081c0c] text-[#33ff00]"
+              : "border-[#222222] bg-[#000000] text-[#808080] hover:text-[#d0d0d0]"
+          }`}
+          title="Toggle hover tile inspector & UI tooltips"
+        >
+          Tips {preferences.tooltips ? "ON" : "OFF"}
         </button>
         <button
           type="button"
@@ -1078,6 +1182,7 @@ export default function ASCIIViewport() {
           Quick {mapOptions ? "^" : "v"}
         </button>
       </div>
+
 
       {/* FLOATING TOP-LEFT DRAWER: Quick Automation Presets & Object Finder */}
       {mapOptions && (
@@ -1183,7 +1288,7 @@ export default function ASCIIViewport() {
       </div>
 
       {/* HOVER-BASED TILE INSPECTOR OVERLAY (Material, Occupancy, Temperature, Liquid Level) */}
-      {hoverMeta && !dragStart && (
+      {preferences.tooltips && hoverMeta && !dragStart && (
         <aside
           data-testid="hover-tile-inspector"
           aria-label="Hover tile inspector"
@@ -1305,6 +1410,22 @@ export default function ASCIIViewport() {
                   <span className="text-[#ff0099] font-bold">
                     [ORDER: {hoverMeta.designationLabel}]
                   </span>
+                )}
+              </div>
+            )}
+
+            {hoverMeta.buildingFunction && (
+              <div
+                data-testid="hover-building-function"
+                className="pt-1 border-t border-[#1e1e1e] space-y-0.5"
+              >
+                <div className="text-[#00ffff] font-bold leading-snug">
+                  FN: {hoverMeta.buildingFunction}
+                </div>
+                {hoverMeta.buildingActionLabel && (
+                  <div className="text-[#33ff00] text-[9px] font-bold">
+                    ACTUATOR: [{hoverMeta.buildingActionLabel}] (Inspect to run)
+                  </div>
                 )}
               </div>
             )}
@@ -1526,19 +1647,67 @@ export default function ASCIIViewport() {
               </div>
             )}
           </div>
+
+          {(() => {
+            const buildingFn = activeInspect.tile.revealed
+              ? getBuildingTileFunctionInfo(gameState, activeInspect.tile)
+              : null;
+            if (!buildingFn) return null;
+            return (
+              <div
+                data-testid="inspect-building-function"
+                className="mt-2 p-2 bg-[#051014] border border-[#00ffff]/70 flex flex-wrap items-center justify-between gap-2"
+              >
+                <div className="space-y-0.5 min-w-0 flex-1">
+                  <div className="text-[11px] font-bold text-[#00ffff]">
+                    [ TILE FUNCTION ] {buildingFn.passiveFunction}
+                  </div>
+                  <div className="text-[10px] text-[#d0d0d0]">
+                    {buildingFn.actionDescription} · Cost:{" "}
+                    <span className="text-[#ff9900] font-bold">
+                      {formatCost(buildingFn.cost)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="activate-building-fn-btn"
+                  disabled={!buildingFn.canActivate}
+                  onClick={() => {
+                    playTactileSfx("stamp");
+                    const res = activateBuildingFunction(
+                      activeInspect.coord.x,
+                      activeInspect.coord.y,
+                      activeInspect.coord.z,
+                    );
+                    setOrderStatus(res.message);
+                  }}
+                  className="px-2.5 py-1 border border-[#33ff00] bg-[#0a220a] text-[#33ff00] hover:bg-[#143814] disabled:opacity-40 disabled:border-[#444444] disabled:text-[#808080] font-bold text-[11px] shrink-0"
+                >
+                  [ {buildingFn.actionLabel} ]
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )}
 
-      {/* FLOATING POP-UP DRAWER: Workshops & Civic Structures */}
+      {/* FLOATING POP-UP DRAWER: Workshops & Civic Structures (With Building Unlock Progression) */}
       {showBuildDrawer && (
         <div
+          data-testid="workshops-build-drawer"
           aria-label="Workshops and civic structures"
-          className="pointer-events-auto absolute bottom-14 left-1/2 -translate-x-1/2 z-30 w-[min(94vw,620px)] bg-[#0c0c0c]/95 backdrop-blur-md border border-[#ff0099] p-2.5 shadow-2xl"
+          className="pointer-events-auto absolute bottom-14 left-1/2 -translate-x-1/2 z-30 w-[min(94vw,660px)] bg-[#0c0c0c]/95 backdrop-blur-md border border-[#ff0099] p-2.5 shadow-2xl space-y-2"
         >
-          <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-[#222222] text-xs">
-            <span className="text-[#ff0099] font-bold">
-              [ ⚒ WORKSHOPS, HALLS &amp; RELICS ]
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-[#222222] text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-[#ff0099] font-bold">
+                [ ⚒ ARCHITECTURAL BLUEPRINTS &amp; WORKSHOPS ]
+              </span>
+              <span className="text-[10px] text-[#00ffff] tabular-nums">
+                UNLOCKED: {unlockedTierBuildingsCount}/{totalTierBuildingsCount}
+              </span>
+            </div>
             <button
               type="button"
               onClick={() => setShowBuildDrawer(false)}
@@ -1547,40 +1716,72 @@ export default function ASCIIViewport() {
               [ × Close ]
             </button>
           </div>
+          <p className="text-[10px] text-[#808080]">
+            Gather Stone, Wood, Iron Ore, and Steel Bars to unlock higher-tier workshops and civic halls.
+          </p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
             {SECONDARY_FAB_TOOLS.map((item) => {
               const active = !inspectMode && selectedTool === item.id;
               const cost = getConstructionCost(item.id);
               const costLabel = formatCost(cost);
+              const unlockInfo = getBuildingUnlockStatus(gameState, item.id);
+              const isLocked = Boolean(unlockInfo && !unlockInfo.unlocked);
               return (
                 <button
                   key={item.id}
                   type="button"
+                  data-testid={`build-tool-${item.id}`}
                   aria-pressed={active}
+                  title={
+                    preferences.tooltips
+                      ? isLocked && unlockInfo
+                        ? `LOCKED: ${unlockInfo.title} — ${unlockInfo.requirementLabel} (${unlockInfo.progressText})`
+                        : `${TOOL_NAMES[item.id]} (${costLabel}) — Hotkey ${item.hotkey}`
+                      : undefined
+                  }
                   onClick={() => {
+                    if (isLocked && unlockInfo) {
+                      setOrderStatus(
+                        `Locked Blueprint: ${unlockInfo.title} requires ${unlockInfo.requirementLabel} (${unlockInfo.progressText}).`,
+                      );
+                      return;
+                    }
                     playTactileSfx("tool");
                     setInspectMode(false);
                     setSelectedTool(item.id);
                     setShowBuildDrawer(false);
                   }}
                   className={`flex flex-col items-start justify-between p-1.5 border text-left transition-all ${
-                    active
-                      ? "border-[#ff0099] bg-[#24101c] text-[#ffffff] shadow-[0_0_10px_rgba(255,0,153,0.3)]"
-                      : "border-[#262626] bg-[#060606] hover:border-[#606060] text-[#d0d0d0]"
+                    isLocked
+                      ? "border-[#222222] bg-[#040404] text-[#666666] opacity-75 hover:border-[#ff9900]"
+                      : active
+                        ? "border-[#ff0099] bg-[#24101c] text-[#ffffff] shadow-[0_0_10px_rgba(255,0,153,0.3)]"
+                        : "border-[#262626] bg-[#060606] hover:border-[#606060] text-[#d0d0d0]"
                   }`}
                 >
                   <div className="flex items-center justify-between w-full gap-1">
-                    <span className={`font-bold text-xs ${item.accent}`}>
-                      {TOOL_GLYPHS[item.id]} {item.shortLabel}
+                    <span
+                      className={`font-bold text-xs truncate ${
+                        isLocked ? "text-[#707070]" : item.accent
+                      }`}
+                    >
+                      {isLocked ? "🔒" : TOOL_GLYPHS[item.id]} {item.shortLabel}
                     </span>
-                    <kbd className="text-[10px] text-[#808080] bg-[#141414] px-1 border border-[#2a2a2a]">
-                      {item.hotkey}
+                    <kbd className="text-[10px] text-[#808080] bg-[#141414] px-1 border border-[#2a2a2a] shrink-0">
+                      {isLocked ? `T${unlockInfo?.tier ?? 1}` : item.hotkey}
                     </kbd>
                   </div>
-                  <span className="text-[10px] text-[#808080] truncate w-full mt-0.5">
-                    {costLabel}
-                  </span>
+                  {isLocked && unlockInfo ? (
+                    <span className="text-[9px] text-[#ff9900] truncate w-full mt-0.5 tabular-nums">
+                      Req: {unlockInfo.progressText}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-[#33ff00] truncate w-full mt-0.5">
+                      + {costLabel}
+                    </span>
+                  )}
                 </button>
+
               );
             })}
           </div>
@@ -1595,27 +1796,45 @@ export default function ASCIIViewport() {
       >
         {PRIMARY_FAB_TOOLS.map((item) => {
           const active = !inspectMode && selectedTool === item.id;
+          const unlockInfo = getBuildingUnlockStatus(gameState, item.id);
+          const isLocked = Boolean(unlockInfo && !unlockInfo.unlocked);
           return (
             <button
               key={item.id}
               type="button"
               aria-pressed={active}
-              title={`${TOOL_NAMES[item.id]} (Hotkey: ${item.hotkey}) — ${
-                getTool(item.id).desc
-              }`}
+              title={
+                preferences.tooltips
+                  ? isLocked && unlockInfo
+                    ? `LOCKED: ${unlockInfo.title} — ${unlockInfo.requirementLabel} (${unlockInfo.progressText})`
+                    : `${TOOL_NAMES[item.id]} (Hotkey: ${item.hotkey}) — ${
+                        getTool(item.id).desc
+                      }`
+                  : undefined
+              }
               onClick={() => {
+                if (isLocked && unlockInfo) {
+                  setOrderStatus(
+                    `Locked Blueprint: ${unlockInfo.title} requires ${unlockInfo.requirementLabel} (${unlockInfo.progressText}).`,
+                  );
+                  return;
+                }
                 playTactileSfx("tool");
                 setInspectMode(false);
                 setSelectedTool(item.id);
                 setShowBuildDrawer(false);
               }}
               className={`group relative flex items-center gap-1 px-1.5 py-0.5 border text-[11px] font-mono whitespace-nowrap transition-all shrink-0 ${
-                active
-                  ? "border-[#ff0099] bg-[#24101c] text-[#ffffff] font-bold shadow-[0_0_12px_rgba(255,0,153,0.35)] -translate-y-0.5"
-                  : "border-[#262626] bg-[#050505] text-[#d0d0d0] hover:border-[#606060] hover:bg-[#141414]"
+                isLocked
+                  ? "border-[#222222] bg-[#040404] text-[#666666] hover:border-[#ff9900]"
+                  : active
+                    ? "border-[#ff0099] bg-[#24101c] text-[#ffffff] font-bold shadow-[0_0_12px_rgba(255,0,153,0.35)] -translate-y-0.5"
+                    : "border-[#262626] bg-[#050505] text-[#d0d0d0] hover:border-[#606060] hover:bg-[#141414]"
               }`}
             >
-              <span className={item.accent}>{TOOL_GLYPHS[item.id]}</span>
+              <span className={isLocked ? "text-[#707070]" : item.accent}>
+                {isLocked ? "🔒" : TOOL_GLYPHS[item.id]}
+              </span>
               <span>{item.shortLabel}</span>
               <span className="text-[9px] text-[#707070] ml-0.5">
                 {item.hotkey}
@@ -1637,16 +1856,21 @@ export default function ASCIIViewport() {
               ? "border-[#00ffff] bg-[#082228] text-[#00ffff] font-bold shadow-[0_0_12px_rgba(0,255,255,0.3)] -translate-y-0.5"
               : "border-[#262626] bg-[#050505] text-[#00ffff] hover:border-[#00ffff]"
           }`}
-          title="Open Workshops, Living Quarters & Civic Buildings drawer"
+          title={
+            preferences.tooltips
+              ? "Open Architectural Blueprints, Workshops & Civic Buildings drawer"
+              : undefined
+          }
         >
           <span>⚒</span>
           <span>
             {isSecondaryToolActive
               ? TOOL_NAMES[selectedTool]
-              : "Workshops"}
+              : `Workshops (${unlockedTierBuildingsCount}/${totalTierBuildingsCount})`}
           </span>
           <span className="text-[10px]">{showBuildDrawer ? "v" : "^"}</span>
         </button>
+
 
         {/* Inspect Mode FAB */}
         <button
@@ -1657,7 +1881,11 @@ export default function ASCIIViewport() {
             setInspectMode((v) => !v);
             setShowBuildDrawer(false);
           }}
-          title="Inspect Tile, Dwarf, or Threat (Hotkey: I)"
+          title={
+            preferences.tooltips
+              ? "Inspect Tile, Dwarf, or Threat (Hotkey: I)"
+              : undefined
+          }
           className={`flex items-center gap-1 px-1.5 py-0.5 border text-[11px] font-mono whitespace-nowrap transition-all shrink-0 ${
             inspectMode
               ? "border-[#ff0099] bg-[#24101c] text-[#ff0099] font-bold -translate-y-0.5"
@@ -1679,7 +1907,11 @@ export default function ASCIIViewport() {
             setSelectedTool("CANCEL");
             setShowBuildDrawer(false);
           }}
-          title="Clear queued designations (Hotkey: K)"
+          title={
+            preferences.tooltips
+              ? "Clear queued designations (Hotkey: K)"
+              : undefined
+          }
           className={`flex items-center gap-1 px-1.5 py-0.5 border text-[11px] font-mono whitespace-nowrap transition-all shrink-0 ${
             !inspectMode && selectedTool === "CANCEL"
               ? "border-[#ff0000] bg-[#280808] text-[#ff0000] font-bold -translate-y-0.5"

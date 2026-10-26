@@ -1,13 +1,30 @@
 import type {
   ChronicleEntry,
+  DesignationType,
   DwarfEntity,
   DwarfQuirk,
   FortressResources,
   GameState,
   Relic,
   StrangeMoodState,
+  TileTerrain,
 } from "./types.ts";
 import { RELIC_TEMPLATES } from "./guild.ts";
+import { withDwarfThought } from "./thoughts.ts";
+import { createConfiguredMigrantDwarf } from "./world-gen.ts";
+
+export interface BuildingUnlockStatus {
+  tool: DesignationType;
+  title: string;
+  glyph: string;
+  tier: 0 | 1 | 2 | 3 | 4;
+  tierLabel: string;
+  unlocked: boolean;
+  requirementLabel: string;
+  progressPercent: number;
+  progressText: string;
+  cost: Partial<FortressResources>;
+}
 
 export interface FortressRankInfo {
   tier: number;
@@ -95,8 +112,23 @@ export interface FortressProgressionSummary {
   workshopCount: number;
   equippedMilitiaCount: number;
   milestones: MilestoneStatus[];
+  buildingUnlocks: BuildingUnlockStatus[];
   strangeMood: StrangeMoodState | null;
   canFulfillMood: boolean;
+}
+
+function getBuiltTerrainSet(state: GameState): Set<TileTerrain> {
+  const built = new Set<TileTerrain>();
+  for (let z = 0; z < state.grid.length; z++) {
+    const level = state.grid[z] || [];
+    for (let y = 0; y < level.length; y++) {
+      const row = level[y] || [];
+      for (let x = 0; x < row.length; x++) {
+        built.add(row[x].terrain);
+      }
+    }
+  }
+  return built;
 }
 
 function countConstructedWorkshops(state: GameState): number {
@@ -121,7 +153,335 @@ function countConstructedWorkshops(state: GameState): number {
   return count;
 }
 
+export function getBuildingUnlockStatuses(
+  state: GameState,
+): BuildingUnlockStatus[] {
+  const res = state.resources;
+  const unlockedSet = new Set<DesignationType>(
+    state.activities?.unlockedBuildings || [],
+  );
+  const builtTerrains = getBuiltTerrainSet(state);
+  const workshopCount = countConstructedWorkshops(state);
+
+  const hasMason = builtTerrains.has("WORKSHOP_MASON");
+  const hasCarpenter = builtTerrains.has("WORKSHOP_CARPENTER");
+  const hasStill = builtTerrains.has("WORKSHOP_STILL");
+  const hasSmelter = builtTerrains.has("WORKSHOP_SMELTER");
+  const hasForge = builtTerrains.has("WORKSHOP_FORGE");
+  const hasTavern = builtTerrains.has("TAVERN_HALL");
+  const hasDepot = builtTerrains.has("TRADE_DEPOT");
+  const hasTemple = builtTerrains.has("TEMPLE_ALTAR");
+  const hasTrap = builtTerrains.has("TRAP_STONE");
+
+  const pct = (cur: number, target: number) =>
+    Math.max(0, Math.min(100, Math.round((cur / Math.max(1, target)) * 100)));
+
+  const list: BuildingUnlockStatus[] = [
+    // Tier 0: Foundations (Always Unlocked)
+    {
+      tool: "BUILD_WALL",
+      title: "Stone Wall",
+      glyph: "#",
+      tier: 0,
+      tierLabel: "Tier 0 · Pioneer Shelter",
+      unlocked: true,
+      requirementLabel: "Embark Foundation (Always Unlocked)",
+      progressPercent: 100,
+      progressText: "Unlocked",
+      cost: { stone: 2 },
+    },
+    {
+      tool: "BUILD_DOOR",
+      title: "Portal Door",
+      glyph: "+",
+      tier: 0,
+      tierLabel: "Tier 0 · Pioneer Shelter",
+      unlocked: true,
+      requirementLabel: "Embark Foundation (Always Unlocked)",
+      progressPercent: 100,
+      progressText: "Unlocked",
+      cost: { stone: 1 },
+    },
+    {
+      tool: "BUILD_BED",
+      title: "Dormitory Bed",
+      glyph: "⌂",
+      tier: 0,
+      tierLabel: "Tier 0 · Pioneer Shelter",
+      unlocked: true,
+      requirementLabel: "Embark Foundation (Always Unlocked)",
+      progressPercent: 100,
+      progressText: "Unlocked",
+      cost: { wood: 2 },
+    },
+    {
+      tool: "BUILD_FARM",
+      title: "Plump Helmet Farm",
+      glyph: "≈",
+      tier: 0,
+      tierLabel: "Tier 0 · Pioneer Shelter",
+      unlocked: true,
+      requirementLabel: "Embark Foundation (Always Unlocked)",
+      progressPercent: 100,
+      progressText: "Unlocked",
+      cost: { food: 1 },
+    },
+
+    // Tier 1: Stonecraft & Timber Joinery
+    {
+      tool: "BUILD_MASON",
+      title: "Mason's Workshop",
+      glyph: "M",
+      tier: 1,
+      tierLabel: "Tier 1 · Stonecraft & Joinery",
+      unlocked:
+        unlockedSet.has("BUILD_MASON") || hasMason || res.stone >= 28,
+      requirementLabel: "Collect 28 Stone (Mine 1 rock tile)",
+      progressPercent:
+        unlockedSet.has("BUILD_MASON") || hasMason
+          ? 100
+          : pct(res.stone, 28),
+      progressText: `${Math.min(28, res.stone)}/28 Stone`,
+      cost: { stone: 4 },
+    },
+    {
+      tool: "BUILD_CARPENTER",
+      title: "Carpenter's Workshop",
+      glyph: "C",
+      tier: 1,
+      tierLabel: "Tier 1 · Stonecraft & Joinery",
+      unlocked:
+        unlockedSet.has("BUILD_CARPENTER") || hasCarpenter || res.wood >= 24,
+      requirementLabel: "Collect 24 Wood (Chop 1 surface tree)",
+      progressPercent:
+        unlockedSet.has("BUILD_CARPENTER") || hasCarpenter
+          ? 100
+          : pct(res.wood, 24),
+      progressText: `${Math.min(24, res.wood)}/24 Wood`,
+      cost: { wood: 4 },
+    },
+    {
+      tool: "BUILD_TRAP",
+      title: "Stone Deadfall Trap",
+      glyph: "^",
+      tier: 1,
+      tierLabel: "Tier 1 · Stonecraft & Joinery",
+      unlocked:
+        unlockedSet.has("BUILD_TRAP") ||
+        hasTrap ||
+        hasMason ||
+        res.stone >= 28,
+      requirementLabel: "Collect 28 Stone or build Mason's Workshop",
+      progressPercent:
+        unlockedSet.has("BUILD_TRAP") || hasTrap || hasMason
+          ? 100
+          : pct(res.stone, 28),
+      progressText: hasMason
+        ? "Mason Built"
+        : `${Math.min(28, res.stone)}/28 Stone`,
+      cost: { stone: 2 },
+    },
+
+    // Tier 2: Brewing & Hearth Fellowship
+    {
+      tool: "BUILD_STILL",
+      title: "Brewer's Still",
+      glyph: "S",
+      tier: 2,
+      tierLabel: "Tier 2 · Hearth & Brewing",
+      unlocked:
+        unlockedSet.has("BUILD_STILL") ||
+        hasStill ||
+        hasMason ||
+        hasCarpenter ||
+        (res.stone >= 30 && res.wood >= 22),
+      requirementLabel:
+        "Collect 30 Stone & 22 Wood (or build Mason/Carpenter)",
+      progressPercent:
+        unlockedSet.has("BUILD_STILL") || hasStill || hasMason || hasCarpenter
+          ? 100
+          : Math.round((pct(res.stone, 30) + pct(res.wood, 22)) / 2),
+      progressText: `${Math.min(30, res.stone)}/30 STN · ${Math.min(22, res.wood)}/22 WOD`,
+      cost: { stone: 3, wood: 2 },
+    },
+    {
+      tool: "BUILD_TAVERN",
+      title: "Hearth Tavern Hall",
+      glyph: "♫",
+      tier: 2,
+      tierLabel: "Tier 2 · Hearth & Brewing",
+      unlocked:
+        unlockedSet.has("BUILD_TAVERN") ||
+        hasTavern ||
+        hasStill ||
+        (res.stone >= 32 && res.ale >= 48),
+      requirementLabel:
+        "Build Brewer's Still or collect 32 Stone & 48 Ale",
+      progressPercent:
+        unlockedSet.has("BUILD_TAVERN") || hasTavern || hasStill
+          ? 100
+          : Math.round((pct(res.stone, 32) + pct(res.ale, 48)) / 2),
+      progressText: hasStill
+        ? "Still Built"
+        : `${Math.min(32, res.stone)}/32 STN · ${Math.min(48, res.ale)}/48 ALE`,
+      cost: { stone: 3, wood: 3 },
+    },
+
+    // Tier 3: Metallurgy & The Deep Anvil
+    {
+      tool: "BUILD_SMELTER",
+      title: "Smeltery Furnace",
+      glyph: "£",
+      tier: 3,
+      tierLabel: "Tier 3 · Metallurgy & Anvil",
+      unlocked:
+        unlockedSet.has("BUILD_SMELTER") ||
+        hasSmelter ||
+        (res.stone >= 32 && res.ironOre >= 6),
+      requirementLabel: "Collect 32 Stone & 6 Iron Ore",
+      progressPercent:
+        unlockedSet.has("BUILD_SMELTER") || hasSmelter
+          ? 100
+          : Math.round((pct(res.stone, 32) + pct(res.ironOre, 6)) / 2),
+      progressText: `${Math.min(32, res.stone)}/32 STN · ${Math.min(6, res.ironOre)}/6 IRN`,
+      cost: { stone: 4 },
+    },
+    {
+      tool: "BUILD_FORGE",
+      title: "Metalsmith's Forge",
+      glyph: "⚒",
+      tier: 3,
+      tierLabel: "Tier 3 · Metallurgy & Anvil",
+      unlocked:
+        unlockedSet.has("BUILD_FORGE") ||
+        hasForge ||
+        (res.stone >= 36 && (hasSmelter || res.steelBars >= 4)),
+      requirementLabel:
+        "Collect 36 Stone & (build Smeltery or 4 Steel Bars)",
+      progressPercent:
+        unlockedSet.has("BUILD_FORGE") || hasForge
+          ? 100
+          : Math.round(
+              (pct(res.stone, 36) + (hasSmelter ? 100 : pct(res.steelBars, 4))) /
+                2,
+            ),
+      progressText: `${Math.min(36, res.stone)}/36 STN · ${hasSmelter ? "Smeltery[+]" : `${Math.min(4, res.steelBars)}/4 STL`}`,
+      cost: { stone: 4, ironOre: 1 },
+    },
+
+
+    // Tier 4: Sovereign Trade & Sanctum
+    {
+      tool: "BUILD_DEPOT",
+      title: "Seasonal Trade Depot",
+      glyph: "¤",
+      tier: 4,
+      tierLabel: "Tier 4 · Sovereign Halls",
+      unlocked:
+        unlockedSet.has("BUILD_DEPOT") ||
+        hasDepot ||
+        workshopCount >= 2 ||
+        (res.stone >= 38 && res.wealth >= 600),
+      requirementLabel:
+        "Collect 38 Stone & 600 Wealth (or build 2 Workshops)",
+      progressPercent:
+        unlockedSet.has("BUILD_DEPOT") || hasDepot || workshopCount >= 2
+          ? 100
+          : Math.max(
+              pct(workshopCount, 2),
+              Math.round((pct(res.stone, 38) + pct(res.wealth, 600)) / 2),
+            ),
+      progressText: `${Math.min(38, res.stone)}/38 STN · ${Math.min(600, res.wealth)}/600 WLTH`,
+      cost: { stone: 4, wood: 4 },
+    },
+    {
+      tool: "BUILD_TEMPLE",
+      title: "Ancestral Temple Altar",
+      glyph: "Ψ",
+      tier: 4,
+      tierLabel: "Tier 4 · Sovereign Halls",
+      unlocked:
+        unlockedSet.has("BUILD_TEMPLE") ||
+        hasTemple ||
+        workshopCount >= 3 ||
+        (res.stone >= 44 && res.wealth >= 720),
+      requirementLabel:
+        "Collect 44 Stone & 720 Wealth (or build 3 Workshops)",
+      progressPercent:
+        unlockedSet.has("BUILD_TEMPLE") || hasTemple || workshopCount >= 3
+          ? 100
+          : Math.max(
+              pct(workshopCount, 3),
+              Math.round((pct(res.stone, 44) + pct(res.wealth, 720)) / 2),
+            ),
+      progressText: `${Math.min(44, res.stone)}/44 STN · ${Math.min(720, res.wealth)}/720 WLTH`,
+      cost: { stone: 5 },
+    },
+  ];
+
+  return list;
+}
+
+export function getBuildingUnlockStatus(
+  state: GameState,
+  tool: DesignationType,
+): BuildingUnlockStatus | null {
+  return getBuildingUnlockStatuses(state).find((b) => b.tool === tool) || null;
+}
+
+export function isBuildingUnlocked(
+  state: GameState,
+  tool: DesignationType,
+): boolean {
+  const status = getBuildingUnlockStatus(state, tool);
+  return status ? status.unlocked : true;
+}
+
+export function syncBuildingUnlocks(state: GameState): {
+  nextState: GameState;
+  newlyUnlocked: BuildingUnlockStatus[];
+} {
+  const existing = new Set<DesignationType>(
+    state.activities?.unlockedBuildings || [],
+  );
+  const statuses = getBuildingUnlockStatuses(state);
+  const newlyUnlocked: BuildingUnlockStatus[] = [];
+
+  for (const st of statuses) {
+    if (st.tier > 0 && st.unlocked && !existing.has(st.tool)) {
+      existing.add(st.tool);
+      newlyUnlocked.push(st);
+    }
+  }
+
+  if (newlyUnlocked.length === 0) {
+    return { nextState: state, newlyUnlocked: [] };
+  }
+
+  const newEntries: ChronicleEntry[] = newlyUnlocked.map((u) => ({
+    id: `chron-unlock-${u.tool}-${state.ticks}`,
+    tick: state.ticks,
+    season: state.season,
+    year: state.year,
+    text: `[BLUEPRINT UNLOCKED] ${u.glyph} ${u.title} (${u.tierLabel}) is now available for construction!`,
+    type: "CRAFT",
+  }));
+
+  return {
+    nextState: {
+      ...state,
+      activities: {
+        ...state.activities,
+        unlockedBuildings: [...existing],
+      },
+      chronicle: [...newEntries, ...state.chronicle].slice(0, 60),
+    },
+    newlyUnlocked,
+  };
+}
+
 function getDeepestRevealedZ(state: GameState): number {
+
   let deepest = 0;
   for (let z = 1; z < state.grid.length; z++) {
     const level = state.grid[z] || [];
@@ -301,66 +661,12 @@ export function getFortressProgression(
     workshopCount,
     equippedMilitiaCount,
     milestones,
+    buildingUnlocks: getBuildingUnlockStatuses(state),
     strangeMood,
     canFulfillMood,
   };
 }
 
-const MIGRANT_NAMES = [
-  { name: "Thorek Deepdelver", title: "Journeyman Miner & Mason", quirk: "DEEP_MINER" as DwarfQuirk, color: "#00ffff" },
-  { name: "Bari Goldhand", title: "Master Jeweler & Smith", quirk: "IRON_BORN" as DwarfQuirk, color: "#ff9900" },
-  { name: "Nori Shieldbreaker", title: "Veteran Axedwarf", quirk: "HOTHEAD" as DwarfQuirk, color: "#ff0099" },
-  { name: "Dori Barrelstave", title: "Brewmaster & Herbalist", quirk: "DRUNKARD" as DwarfQuirk, color: "#33ff00" },
-  { name: "Balin Runeweaver", title: "Lorekeeper & Chronicler", quirk: "SCHOLAR" as DwarfQuirk, color: "#cc00ff" },
-];
-
-function createMigrantDwarf(state: GameState, indexOffset: number): DwarfEntity {
-  const template =
-    MIGRANT_NAMES[(state.dwarves.length + indexOffset) % MIGRANT_NAMES.length];
-  const cx = Math.floor(state.world.width / 2);
-  const cy = Math.floor(state.world.height / 2);
-  return {
-    id: `dwarf-migrant-${state.ticks}-${state.dwarves.length + indexOffset}`,
-    name: template.name,
-    title: template.title,
-    char: "☺",
-    color: template.color,
-    x: cx + ((indexOffset % 3) - 1),
-    y: cy + ((indexOffset % 2) === 0 ? 1 : -1),
-    z: 0,
-    hp: 100,
-    maxHp: 100,
-    hunger: 95,
-    thirst: 95,
-    energy: 95,
-    happiness: 95,
-    quirk: template.quirk,
-    weaponEquipped: indexOffset % 2 === 0,
-    armorEquipped: false,
-    labors: {
-      MINING: true,
-      WOODCUTTING: true,
-      MASONRY: true,
-      CARPENTRY: true,
-      FARMING: true,
-      SMITHING: true,
-      COMBAT: true,
-      HAULING: true,
-    },
-    skills: {
-      MINING: 2,
-      WOODCUTTING: 2,
-      MASONRY: 2,
-      CARPENTRY: 2,
-      FARMING: 2,
-      SMITHING: 2,
-      COMBAT: 2,
-      HAULING: 2,
-    },
-    state: "IDLE",
-    thought: "Arrived with the migrant wave to seek glory in the fortress!",
-  };
-}
 
 export function claimMilestoneReward(
   state: GameState,
@@ -383,7 +689,19 @@ export function claimMilestoneReward(
   const nextDwarves = [...state.dwarves];
   const migrantCount = milestone.reward.migrants || 0;
   for (let i = 0; i < migrantCount; i++) {
-    nextDwarves.push(createMigrantDwarf(state, i + 1));
+    nextDwarves.push(
+      createConfiguredMigrantDwarf({
+        existingDwarves: nextDwarves,
+        worldWidth: state.world.width,
+        worldHeight: state.world.height,
+        dwarvenName: state.world.dwarvenName,
+        ticks: state.ticks,
+        indexOffset: i + 1,
+        originLabel: `Milestone (${milestone.title})`,
+        weaponsAvailable: nextResources.weapons,
+        armorAvailable: nextResources.armor,
+      }),
+    );
   }
 
   const nextRelics: Relic[] = [...(state.guild?.relics || [])];
@@ -490,10 +808,15 @@ export function triggerStrangeMood(state: GameState): {
 
   const nextDwarves = state.dwarves.map((d) =>
     d.id === dwarf.id
-      ? {
-          ...d,
-          thought: `Seized by a ${blueprint.moodKind.toLowerCase()} mood! Demands materials to forge "${blueprint.artifactName}"!`,
-        }
+      ? withDwarfThought(d, {
+          tick: state.ticks,
+          year: state.year,
+          season: state.season,
+          text: `Seized by a ${blueprint.moodKind.toLowerCase()} mood! Demands materials to forge "${blueprint.artifactName}"!`,
+          category: "OMEN",
+          sentiment: "EUPHORIC",
+          moraleDelta: 4,
+        })
       : d,
   );
 
@@ -559,18 +882,33 @@ export function fulfillStrangeMood(state: GameState): {
 
   const nextDwarves = state.dwarves.map((d) =>
     d.id === mood.dwarfId
-      ? {
-          ...d,
-          title: `Legendary Artisan (${d.title.split(" ")[0]})`,
-          maxHp: d.maxHp + 25,
-          hp: d.maxHp + 25,
-          happiness: 100,
-          thought: `Created the legendary artifact ${mood.artifactName}!`,
-        }
-      : {
-          ...d,
-          happiness: Math.min(100, d.happiness + 10),
-        },
+      ? withDwarfThought(
+          {
+            ...d,
+            title: `Legendary Artisan (${d.title.split(" ")[0]})`,
+            maxHp: d.maxHp + 25,
+            hp: d.maxHp + 25,
+            happiness: 100,
+          },
+          {
+            tick: state.ticks,
+            year: state.year,
+            season: state.season,
+            text: `Created the legendary artifact ${mood.artifactName}!`,
+            category: "CRAFT_DELVE",
+            sentiment: "EUPHORIC",
+            moraleDelta: 15,
+          },
+        )
+      : withDwarfThought(d, {
+          tick: state.ticks,
+          year: state.year,
+          season: state.season,
+          text: `Marveled at the newly forged masterwork "${mood.artifactName}"!`,
+          category: "FELLOWSHIP",
+          sentiment: "POSITIVE",
+          moraleDelta: 10,
+        }),
   );
 
   const entry: ChronicleEntry = {

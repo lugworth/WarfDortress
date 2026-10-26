@@ -11,6 +11,7 @@ export interface UIPreferences {
   mapZoom: number | "fit";
   reducedMotion: boolean;
   labels: boolean;
+  tooltips: boolean;
   favorites: DesignationType[];
 }
 
@@ -20,6 +21,7 @@ export const DEFAULT_UI: UIPreferences = {
   mapZoom: "fit",
   reducedMotion: false,
   labels: false,
+  tooltips: true,
   favorites: ["MINE", "CHOP", "STAIRS", "BUILD_WALL", "BUILD_DOOR", "CANCEL"],
 };
 
@@ -37,6 +39,7 @@ export function parseUIPreferences(raw: string | null): UIPreferences {
         : DEFAULT_UI.mapZoom,
       reducedMotion: Boolean(parsed.reducedMotion),
       labels: typeof parsed.labels === "boolean" ? parsed.labels : DEFAULT_UI.labels,
+      tooltips: typeof parsed.tooltips === "boolean" ? parsed.tooltips : DEFAULT_UI.tooltips,
       favorites: Array.isArray(parsed.favorites) ? parsed.favorites : DEFAULT_UI.favorites,
     };
   } catch {

@@ -10,12 +10,14 @@ import NarrativeEventModal from '@/components/NarrativeEventModal';
 import { TradeDepotModal } from '@/components/TradeDepotModal';
 import GuildHallModal from '@/components/GuildHallModal';
 import { getFortressProgression } from '@/lib/progression';
+import { getCurrentWeather } from '@/lib/weather';
 import {
   generateDeterministicWorldMeta,
   generateRandomWorldSeed,
   getSurfaceArchetype,
 } from '@/lib/world-gen';
 import { ISOTOPE } from '@/lib/colors';
+
 
 function AsciiCrest() {
   return (
@@ -50,7 +52,9 @@ function FortressShell() {
     handleSignOut,
     loadCloudSave,
     jumpToLocation,
+    cycleSeasonWeather,
   } = useGame();
+
 
   const [customSeedInput, setSeedInput] = useState<string | null>(null);
   const seedInput = customSeedInput ?? gameState.world.seed ?? 'Khazad-251';
@@ -64,6 +68,8 @@ function FortressShell() {
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(false); // default closed so map is HUGE!
   const progression = getFortressProgression(gameState);
+  const currentWeather = getCurrentWeather(gameState);
+
 
   const previewWorld = generateDeterministicWorldMeta(seedInput || 'Khazad-251');
   const previewArchetype = getSurfaceArchetype(seedInput || 'Khazad-251');
@@ -342,13 +348,25 @@ function FortressShell() {
             className="hidden sm:inline-block px-1.5 py-0.5 bg-[#1a1016] border border-[#ff0099]/60 text-[#ff9900] text-[10px] font-bold whitespace-nowrap"
             title={`${progression.currentRank.perk} (Score: ${progression.score})`}
           >
-            ★ {progression.currentRank.title}
+            * {progression.currentRank.title}
           </span>
+
           <span className="text-[#404040]">|</span>
           <span className="text-[#00ffff] tabular-nums whitespace-nowrap">
             Y{gameState.year}·{gameState.season}·T{gameState.ticks}
           </span>
+          <button
+            type="button"
+            data-testid="hud-weather-button"
+            onClick={cycleSeasonWeather}
+            style={{ color: currentWeather.color }}
+            title={`${currentWeather.label}: ${currentWeather.summary} (Click to cycle Season & Weather)`}
+            className="px-1.5 py-0.5 bg-[#080e14] border border-[#283845] hover:border-[#00ffff] text-[10px] font-bold whitespace-nowrap transition-colors"
+          >
+            {currentWeather.glyph} {currentWeather.shortLabel} {currentWeather.surfaceTempF}°F
+          </button>
         </div>
+
 
         {/* Center: Live Resource Counters */}
         <div className="flex flex-wrap items-center gap-2 md:gap-2.5 tabular-nums text-xs">
@@ -424,8 +442,9 @@ function FortressShell() {
             title="Open Royal Guild Hall: Commissions, Named Relics & Clan Stories"
             className="px-1.5 py-0.5 border border-[#262626] text-[#ff9900] hover:bg-[#202020] hover:text-[#ffffff] transition-colors whitespace-nowrap shrink-0"
           >
-            [ ♛ GUILD ]
+            [ ☼ GUILD ]
           </button>
+
 
           {/* Trade Depot Barter Modal Button */}
           <button

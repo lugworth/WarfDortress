@@ -6,7 +6,17 @@ import type {
   Tile,
   TileTerrain,
 } from "./types.ts";
-import { canDesignateTile, getConstructionCost } from "./game-engine.ts";
+import {
+  canDesignateTile,
+  getBuildingTileFunctionInfo,
+  getConstructionCost,
+} from "./game-engine.ts";
+import {
+  getCurrentWeather,
+  getWeatherTileVisuals,
+  isShelteredOrPavedTile,
+} from "./weather.ts";
+
 
 export interface PreviewTile {
   x: number;
@@ -337,6 +347,8 @@ export interface TileHoverMetadata {
   walkableLabel: string;
   yieldLabel: string | null;
   designationLabel: string | null;
+  buildingFunction: string | null;
+  buildingActionLabel: string | null;
 }
 
 const MATERIAL_BY_TERRAIN: Record<TileTerrain, string> = {
@@ -403,6 +415,8 @@ export function getTileHoverMetadata(
       walkableLabel: "Unexplored",
       yieldLabel: null,
       designationLabel: tile.designation ? tile.designation.replaceAll("_", " ") : null,
+      buildingFunction: null,
+      buildingActionLabel: null,
     };
   }
 
@@ -464,6 +478,9 @@ export function getTileHoverMetadata(
     }
   }
 
+  const weather = getCurrentWeather(state);
+  const weatherVis = getWeatherTileVisuals(state, tile);
+
   // Liquid Level (0/7 to 7/7 scale)
   let liquidDepth = 0;
   let liquidLevel = "0/7 Dry";
@@ -472,7 +489,11 @@ export function getTileHoverMetadata(
     liquidLevel = "7/7 Magma (Full Flow)";
   } else if (tile.terrain === "WATER") {
     liquidDepth = 7;
-    liquidLevel = "7/7 Water (Channel)";
+    liquidLevel =
+      tile.z === 0 &&
+      (weather.precipitation === "SNOW" || weather.precipitation === "BLIZZARD")
+        ? "7/7 Frozen River Ice"
+        : "7/7 Water (Channel)";
   } else if (tile.terrain === "FARM_PLOT") {
     liquidDepth = 2;
     liquidLevel = "2/7 Irrigated Loam";
@@ -485,6 +506,21 @@ export function getTileHoverMetadata(
   ) {
     liquidDepth = 1;
     liquidLevel = "1/7 Damp Riverbank";
+  } else if (
+    tile.z === 0 &&
+    !isShelteredOrPavedTile(tile) &&
+    tile.walkable
+  ) {
+    if (weather.precipitation === "BLIZZARD") {
+      liquidDepth = 3;
+      liquidLevel = "3/7 Deep Snowdrift";
+    } else if (weather.precipitation === "SNOW") {
+      liquidDepth = 2;
+      liquidLevel = "2/7 Winter Snowpack";
+    } else if (weather.precipitation === "RAIN") {
+      liquidDepth = 2;
+      liquidLevel = "2/7 Rain-Slicked Mud";
+    }
   }
 
   // Temperature calculation
@@ -508,34 +544,22 @@ export function getTileHoverMetadata(
     temperatureStatus = "WARM";
     tempNote = "Furnace Draft";
   } else if (tile.z === 0) {
-    const seasonLower = state.season.toLowerCase();
-    if (seasonLower.includes("winter") || seasonLower.includes("obsidian")) {
-      tempF = 28;
+    tempF = weather.surfaceTempF;
+    if (tempF <= 48) {
       temperatureStatus = "COLD";
-      tempNote = "Winter Frost";
-    } else if (
-      seasonLower.includes("summer") ||
-      seasonLower.includes("hematite")
-    ) {
-      tempF = 74;
-      temperatureStatus = "TEMPERATE";
-      tempNote = "Summer Air";
-    } else if (
-      seasonLower.includes("autumn") ||
-      seasonLower.includes("malachite")
-    ) {
-      tempF = 46;
-      temperatureStatus = "COLD";
-      tempNote = "Autumn Chill";
+    } else if (tempF >= 80) {
+      temperatureStatus = "WARM";
     } else {
-      tempF = 58;
       temperatureStatus = "TEMPERATE";
-      tempNote = "Spring Breeze";
     }
+    tempNote = weather.label;
     if (tile.terrain === "WATER") {
       tempF -= 6;
       if (tempF <= 45) temperatureStatus = "COLD";
-      tempNote = "River Current";
+      tempNote =
+        weather.precipitation === "SNOW" || weather.precipitation === "BLIZZARD"
+          ? "Frozen River"
+          : "River Current";
     }
   } else {
     tempF = 52 + tile.z * 9;
@@ -548,27 +572,44 @@ export function getTileHoverMetadata(
     }
   }
 
+  const isOutdoorSlowed =
+    tile.z === 0 &&
+    tile.walkable &&
+    !isShelteredOrPavedTile(tile) &&
+    weather.surfaceStepInterval > 1;
+
+  const bldgFn = getBuildingTileFunctionInfo(state, tile);
+
   return {
     x: tile.x,
     y: tile.y,
     z: tile.z,
     revealed: true,
-    char: tile.char,
-    fg: tile.fg,
-    terrainLabel: tile.terrain.replaceAll("_", " "),
+    char: weatherVis.char,
+    fg: weatherVis.fg,
+    terrainLabel: weatherVis.weatherNote
+      ? `${tile.terrain.replaceAll("_", " ")} (${weatherVis.weatherNote})`
+      : tile.terrain.replaceAll("_", " "),
     materialType,
     occupancy,
     temperature: `${tempF.toLocaleString("en-US")}°F (${tempNote})`,
     temperatureStatus,
     liquidLevel,
     liquidDepth,
-    walkableLabel: tile.walkable ? "Passable" : "Solid Wall",
+    walkableLabel: !tile.walkable
+      ? "Solid Wall"
+      : isOutdoorSlowed
+        ? `Passable (${weather.surfaceSpeedPct}% Speed · ${weather.shortLabel})`
+        : "Passable (100% Speed)",
     yieldLabel: tile.resourceDrop
       ? `+${tile.resourceDrop.amount} ${tile.resourceDrop.type}`
       : null,
     designationLabel: tile.designation
       ? tile.designation.replaceAll("_", " ")
       : null,
+    buildingFunction: bldgFn ? bldgFn.passiveFunction : null,
+    buildingActionLabel: bldgFn ? bldgFn.actionLabel : null,
   };
 }
+
 

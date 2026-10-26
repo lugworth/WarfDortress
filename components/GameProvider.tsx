@@ -23,9 +23,17 @@ import {
 import {
   claimMilestoneReward,
   fulfillStrangeMood,
+  syncBuildingUnlocks,
   triggerStrangeMood,
 } from '@/lib/progression';
 import {
+  applyWeatherExposureToDwarf,
+  getCurrentWeather,
+  isShelteredOrPavedTile,
+} from '@/lib/weather';
+
+import {
+  activateBuildingTileFunction,
   applyAreaDesignation,
   applyLaborPreset,
   createInitialGameState,
@@ -99,7 +107,10 @@ interface GameContextType {
   claimMilestone: (milestoneId: string) => boolean;
   startStrangeMood: () => boolean;
   completeStrangeMood: () => boolean;
+  cycleSeasonWeather: () => void;
+  activateBuildingFunction: (x: number, y: number, z: number) => { triggered: boolean; message: string };
 }
+
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
@@ -534,10 +545,74 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setGameState((prev) => {
       const res = fulfillStrangeMood(prev);
       fulfilled = res.fulfilled;
-      return res.nextState;
+      return syncBuildingUnlocks(res.nextState).nextState;
     });
     return fulfilled;
   }, []);
+
+  const cycleSeasonWeather = useCallback(() => {
+    const seasons: GameState['season'][] = [
+      'Granite (Spring)',
+      'Slate (Summer)',
+      'Sands (Autumn)',
+      'Timber (Winter)',
+    ];
+    setGameState((prev) => {
+      const idx = Math.max(0, seasons.indexOf(prev.season));
+      const nextSeason = seasons[(idx + 1) % seasons.length];
+      const nextWeather = getCurrentWeather({
+        season: nextSeason,
+        ticks: prev.ticks,
+        weatherOverride: null,
+      });
+
+      const nextDwarves = prev.dwarves.map((d) => {
+        const clone: DwarfEntity = {
+          ...d,
+          labors: { ...d.labors },
+          skills: { ...d.skills },
+          thoughtLog: Array.isArray(d.thoughtLog) ? [...d.thoughtLog] : [],
+        };
+        const tile = prev.grid[clone.z]?.[clone.y]?.[clone.x];
+        applyWeatherExposureToDwarf(clone, nextWeather, {
+          tick: prev.ticks + 1,
+          year: prev.year,
+          season: nextSeason,
+          isSheltered: isShelteredOrPavedTile(tile),
+        });
+        return clone;
+      });
+
+      const entry = {
+        id: `chron-weather-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        tick: prev.ticks,
+        season: nextSeason,
+        year: prev.year,
+        text: `[SEASON & WEATHER] Season shifted to ${nextSeason} — ${nextWeather.glyph} ${nextWeather.label} (${nextWeather.summary}).`,
+        type: 'LORE' as const,
+      };
+
+
+      return {
+        ...prev,
+        season: nextSeason,
+        weatherOverride: null,
+        dwarves: nextDwarves,
+        chronicle: [entry, ...prev.chronicle.slice(0, 59)],
+      };
+    });
+  }, []);
+
+  const activateBuildingFunction = useCallback(
+    (x: number, y: number, z: number) => {
+      const previewRes = activateBuildingTileFunction(gameState, x, y, z);
+      if (previewRes.triggered) {
+        setGameState((prev) => activateBuildingTileFunction(prev, x, y, z).nextState);
+      }
+      return { triggered: previewRes.triggered, message: previewRes.message };
+    },
+    [gameState]
+  );
 
   return (
     <GameContext.Provider
@@ -588,12 +663,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         claimMilestone,
         startStrangeMood,
         completeStrangeMood,
+        cycleSeasonWeather,
+        activateBuildingFunction,
       }}
     >
       {children}
     </GameContext.Provider>
   );
 }
+
 
 export function useGame() {
   const context = useContext(GameContext);

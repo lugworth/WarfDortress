@@ -8,10 +8,15 @@ import {
   MilitiaDoctrine,
 } from '@/lib/types';
 import { QUIRKS } from '@/lib/guild';
-import { scanWorldStrata } from '@/lib/game-engine';
+import {
+  getBuildingTileFunctionInfo,
+  getResourceEconomyBalance,
+  scanWorldStrata,
+} from '@/lib/game-engine';
 import { getFortressProgression } from '@/lib/progression';
 import { formatCost } from '@/lib/tool-catalog';
 import { asciiBar } from '@/lib/ui-model';
+import { getSentimentBadge } from '@/lib/thoughts';
 import { playTactileSfx } from '@/lib/audio';
 import ExpeditionsPanel from './ExpeditionsPanel';
 
@@ -31,6 +36,9 @@ export default function Sidebar() {
     gameState,
     currentZ,
     setCurrentZ,
+    selectedTool,
+    setSelectedTool,
+    setInspectMode,
     selectedDwarfId,
     setSelectedDwarfId,
     toggleDwarfLabor,
@@ -45,7 +53,11 @@ export default function Sidebar() {
     claimMilestone,
     startStrangeMood,
     completeStrangeMood,
+    activateBuildingFunction,
   } = useGame();
+
+  const [buildingActionStatus, setBuildingActionStatus] = useState<string>('');
+
 
   const [activeTab, setActiveTab] = useState<'PROGRESSION' | 'DWARVES' | 'STOCKS' | 'RADAR'>(
     'DWARVES'
@@ -186,14 +198,15 @@ export default function Sidebar() {
               className="p-2.5 bg-[var(--ui-bg)] border border-[var(--ui-accent)] space-y-1.5"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[var(--ui-accent)] font-bold text-xs">
-                  ★ TIER {progression.currentRank.tier}:{' '}
+                <span className="text-[var(--ui-accent)] font-bold text-xs whitespace-nowrap truncate">
+                  * TIER {progression.currentRank.tier}:{' '}
                   {progression.currentRank.title.toUpperCase()}
                 </span>
-                <span className="text-[#00ffff] text-[10px] tabular-nums font-bold">
+                <span className="text-[#00ffff] text-[10px] tabular-nums font-bold shrink-0">
                   SCORE {progression.score}
                 </span>
               </div>
+
               <div className="text-[10px] text-[var(--ui-muted)]">
                 Dwarven Charter: <span className="text-[#d0d0d0]">{progression.currentRank.dwarvenTitle}</span>
               </div>
@@ -280,9 +293,82 @@ export default function Sidebar() {
               )}
             </div>
 
+            {/* 2b. Architectural Blueprints & Building Unlock Progression */}
+            <div className="space-y-1.5" data-testid="building-unlocks-list">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[#ff9900] font-bold text-xs whitespace-nowrap">
+                  +-[ TECH TREE &amp; BLUEPRINTS ]-
+                </span>
+                <span className="text-[10px] text-[#00ffff] tabular-nums whitespace-nowrap shrink-0">
+                  {progression.buildingUnlocks.filter((b) => b.tier > 0 && b.unlocked).length}/
+                  {progression.buildingUnlocks.filter((b) => b.tier > 0).length} UNLOCKED
+                </span>
+              </div>
+              <p className="text-[10px] text-[var(--ui-muted)]">
+                Collect Stone, Wood, Iron Ore, and Steel Bars to unlock advanced workshops and halls.
+              </p>
+              <div className="space-y-1">
+                {progression.buildingUnlocks
+                  .filter((b) => b.tier > 0)
+                  .map((b) => {
+                    const isSelected = selectedTool === b.tool;
+                    return (
+                      <div
+                        key={b.tool}
+                        data-testid={`tech-unlock-${b.tool}`}
+                        className={`p-1.5 border space-y-0.5 ${
+                          b.unlocked
+                            ? isSelected
+                              ? 'border-[#ff0099] bg-[#201018]'
+                              : 'border-[#1f3a1f] bg-[#071207]'
+                            : 'border-[var(--ui-border)] bg-[var(--ui-bg)]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span
+                            className={`font-bold text-[11px] truncate ${
+                              b.unlocked ? 'text-[#33ff00]' : 'text-[#d0d0d0]'
+                            }`}
+                          >
+                            {b.unlocked ? `[+] ${b.glyph}` : `🔒 ${b.glyph}`} {b.title}
+                          </span>
+                          {b.unlocked ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                playTactileSfx('tool');
+                                setInspectMode(false);
+                                setSelectedTool(b.tool);
+                              }}
+                              className="px-1.5 py-0.5 border border-[#33ff00] text-[#33ff00] hover:bg-[#123012] text-[9px] font-bold shrink-0"
+                            >
+                              {isSelected ? '[ ACTIVE ]' : '[ BUILD ]'}
+                            </button>
+                          ) : (
+                            <span className="text-[9px] text-[#ff9900] tabular-nums shrink-0">
+                              {asciiBar(b.progressPercent, 100, 5)} {b.progressPercent}%
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-[10px]">
+                          <span className="text-[var(--ui-muted)] truncate">
+                            {b.unlocked ? `Cost: ${formatCost(b.cost)}` : b.requirementLabel}
+                          </span>
+                          {!b.unlocked && (
+                            <span className="text-[#00ffff] tabular-nums shrink-0">
+                              {b.progressText}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
             {/* 3. Interactive Fortress Milestones (Deeds) */}
             <div className="space-y-1.5" data-testid="milestones-list">
-              <div className="text-[var(--ui-info)] font-bold text-xs">
+              <div className="text-[var(--ui-info)] font-bold text-xs whitespace-nowrap">
                 +-[ FORTRESS MILESTONES &amp; DEEDS ]-
               </div>
               {progression.milestones.map((ms) => (
@@ -298,9 +384,10 @@ export default function Sidebar() {
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="font-bold text-[#ffffff] text-[11px]">
-                      {ms.claimed ? '✓ ' : ms.completed ? '★ ' : '· '}
+                      {ms.claimed ? '[+] ' : ms.completed ? '[*] ' : '· '}
                       {ms.title}
                     </span>
+
                     <span className="text-[10px] tabular-nums text-[#00ffff]">
                       {ms.progress}/{ms.target}
                     </span>
@@ -480,12 +567,59 @@ export default function Sidebar() {
                   </div>
 
                   {dwarf.quirk && <p className="mt-1 text-xs text-[var(--ui-accent)]" title={QUIRKS[dwarf.quirk].description}>{QUIRKS[dwarf.quirk].name}</p>}
-                  {/* Recent Thought */}
-                  {dwarf.thought && (
-                    <div className="text-[10px] text-[var(--ui-muted)] italic mt-1.5 truncate">
-                      &ldquo;{dwarf.thought}&rdquo;
+                  {/* Automated Thoughts & Feelings Log */}
+                  <div
+                    data-testid={`dwarf-thought-log-${dwarf.id}`}
+                    className="mt-1.5 p-1.5 bg-[var(--ui-panel)] border border-[var(--ui-border)]/70 space-y-1"
+                  >
+                    <div className="flex items-center justify-between text-[9px] text-[#ff0099] font-bold">
+                      <span>THOUGHTS &amp; FEELINGS</span>
+                      <span className="text-[var(--ui-muted)] tabular-nums">
+                        {(dwarf.thoughtLog?.length || 1)} MEMORIES
+                      </span>
                     </div>
-                  )}
+                    {(dwarf.thoughtLog && dwarf.thoughtLog.length > 0
+                      ? dwarf.thoughtLog.slice(0, isSelected ? 4 : 2)
+                      : [
+                          {
+                            id: `fallback-${dwarf.id}`,
+                            tick: 0,
+                            year: gameState.year,
+                            season: gameState.season,
+                            text: dwarf.thought,
+                            category: 'CRAFT_DELVE' as const,
+                            sentiment: 'POSITIVE' as const,
+                            moraleDelta: 0,
+                          },
+                        ]
+                    ).map((entry) => {
+                      const badge = getSentimentBadge(entry.sentiment);
+                      return (
+                        <div
+                          key={entry.id}
+                          className="text-[10px] leading-snug flex items-start justify-between gap-1 border-b border-[var(--ui-border)]/40 last:border-b-0 pb-0.5 last:pb-0"
+                        >
+                          <span className="text-[var(--ui-text)] italic">
+                            <span className={`${badge.colorClass} not-italic font-bold mr-1`}>
+                              {badge.glyph}
+                            </span>
+                            &ldquo;{entry.text}&rdquo;
+                          </span>
+                          {entry.moraleDelta !== 0 && (
+                            <span
+                              className={`text-[9px] tabular-nums shrink-0 font-bold ${
+                                entry.moraleDelta > 0 ? 'text-[#33ff00]' : 'text-[#ff0000]'
+                              }`}
+                            >
+                              {entry.moraleDelta > 0
+                                ? `+${entry.moraleDelta}`
+                                : entry.moraleDelta}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
 
                   {/* Labor Toggles (8 Labors) */}
                   <div className="mt-2 pt-1.5 border-t border-[var(--ui-border)]">
@@ -574,6 +708,151 @@ export default function Sidebar() {
                 </div>
               </div>
             </div>
+
+            {/* Provisions Balance & Stockpile Vault Capacity */}
+            {(() => {
+              const econ = getResourceEconomyBalance(gameState);
+              const spoilageRisk = Math.max(
+                0,
+                gameState.resources.food - econ.maxSafeFoodStorage,
+              );
+              return (
+                <div
+                  data-testid="provisions-economy-card"
+                  className="bg-[var(--ui-bg)] border border-[var(--ui-border)] p-2.5 space-y-1.5 text-xs"
+                >
+                  <div className="text-[var(--ui-success)] font-bold border-b border-[var(--ui-border)] pb-1 flex items-center justify-between">
+                    <span>PROVISIONS &amp; STOCKPILE CAPACITY</span>
+                    <span className="text-[10px] text-[var(--ui-info)] tabular-nums">
+                      {econ.stockpileTiles} ≡ TILES ({econ.status})
+                    </span>
+                  </div>
+                  <div className="space-y-1 tabular-nums text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-[var(--ui-muted)]">SAFE FOOD VAULT CAP:</span>
+                      <span
+                        className={
+                          spoilageRisk > 0
+                            ? 'text-[var(--ui-warning)] font-bold'
+                            : 'text-[var(--ui-success)] font-bold'
+                        }
+                      >
+                        {gameState.resources.food}/{econ.maxSafeFoodStorage}
+                        {spoilageRisk > 0 ? ` (+${spoilageRisk} AT RISK)` : ' (SAFE)'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--ui-muted)]">SEASONAL FOOD BURN:</span>
+                      <span className="text-[var(--ui-bright)]">
+                        ~{econ.foodPerSeason}/season ({econ.foodRunwaySeasons} seasons left)
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--ui-muted)]">SEASONAL ALE BURN:</span>
+                      <span className="text-[var(--ui-violet)]">
+                        ~{econ.alePerSeason}/season ({econ.aleRunwaySeasons} seasons left)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Active Stockpile & Building Tile Actuators */}
+            {(() => {
+              const seenTypes = new Set<string>();
+              const activeStructures: Array<{
+                x: number;
+                y: number;
+                z: number;
+                terrain: string;
+                char: string;
+                color: string;
+                fn: NonNullable<ReturnType<typeof getBuildingTileFunctionInfo>>;
+              }> = [];
+              for (let z = 0; z < gameState.world.depth; z++) {
+                const layer = gameState.grid[z];
+                if (!layer) continue;
+                for (let y = 0; y < gameState.world.height; y++) {
+                  for (let x = 0; x < gameState.world.width; x++) {
+                    const tile = layer[y]?.[x];
+                    if (!tile || !tile.revealed || seenTypes.has(tile.terrain)) continue;
+                    const fn = getBuildingTileFunctionInfo(gameState, tile);
+                    if (fn) {
+                      seenTypes.add(tile.terrain);
+                      activeStructures.push({
+                        x,
+                        y,
+                        z,
+                        terrain: tile.terrain,
+                        char: tile.char,
+                        color: tile.fg,
+                        fn,
+                      });
+                    }
+                  }
+                }
+              }
+              return (
+                <div
+                  data-testid="building-actuators-card"
+                  className="bg-[var(--ui-bg)] border border-[var(--ui-border)] p-2.5 space-y-2 text-xs"
+                >
+                  <div className="text-[#00ffff] font-bold border-b border-[var(--ui-border)] pb-1 flex items-center justify-between">
+                    <span>STOCKPILE &amp; BUILDING ACTUATORS</span>
+                    <span className="text-[10px] text-[var(--ui-muted)]">
+                      {activeStructures.length} TYPES
+                    </span>
+                  </div>
+                  {buildingActionStatus && (
+                    <div
+                      data-testid="building-action-status"
+                      className="p-1.5 bg-[#0a200a] border border-[#33ff00] text-[#33ff00] text-[10px]"
+                    >
+                      {buildingActionStatus}
+                    </div>
+                  )}
+                  <div className="space-y-1.5 max-h-60 overflow-y-auto pr-0.5">
+                    {activeStructures.map((item) => (
+                      <div
+                        key={`${item.terrain}-${item.x}-${item.y}-${item.z}`}
+                        className="p-1.5 bg-[var(--ui-panel)] border border-[var(--ui-border)] space-y-1"
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <button
+                            type="button"
+                            onClick={() => jumpToLocation(item.x, item.y, item.z)}
+                            className="text-left font-bold text-[11px] text-[var(--ui-bright)] hover:text-[#00ffff] truncate"
+                          >
+                            <span style={{ color: item.color }}>{item.char}</span>{' '}
+                            {item.fn.title} (Z-{item.z})
+                          </button>
+                          <span className="text-[9px] text-[var(--ui-warning)] shrink-0">
+                            {formatCost(item.fn.cost)}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-[var(--ui-muted)] leading-snug">
+                          {item.fn.passiveFunction}
+                        </div>
+                        <button
+                          type="button"
+                          data-testid={`activate-tile-${item.terrain}`}
+                          disabled={!item.fn.canActivate}
+                          onClick={() => {
+                            playTactileSfx('stamp');
+                            const res = activateBuildingFunction(item.x, item.y, item.z);
+                            setBuildingActionStatus(res.message);
+                          }}
+                          className="w-full py-1 px-2 border border-[#33ff00] bg-[#091c09] text-[#33ff00] hover:bg-[#123212] disabled:opacity-40 disabled:border-[var(--ui-border)] disabled:text-[var(--ui-muted)] font-bold text-[10px] text-center"
+                        >
+                          [ {item.fn.actionLabel} ]
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Active Workshop Work Orders with AUTO-REPEAT Toggles */}
             <div className="bg-[var(--ui-bg)] border border-[var(--ui-border)] p-2.5">

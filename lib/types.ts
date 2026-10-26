@@ -107,6 +107,32 @@ export type DwarfQuirk =
   | 'GREEDY'
   | 'PIOUS';
 
+export type ThoughtSentiment =
+  | 'EUPHORIC'
+  | 'POSITIVE'
+  | 'NEUTRAL'
+  | 'NEGATIVE'
+  | 'TERRIFIED';
+
+export type ThoughtCategory =
+  | 'SUSTENANCE'
+  | 'BEAST_ENCOUNTER'
+  | 'COMBAT'
+  | 'CRAFT_DELVE'
+  | 'FELLOWSHIP'
+  | 'OMEN';
+
+export interface DwarfThoughtEntry {
+  id: string;
+  tick: number;
+  year: number;
+  season: string;
+  text: string;
+  category: ThoughtCategory;
+  sentiment: ThoughtSentiment;
+  moraleDelta: number;
+}
+
 export interface DwarfEntity {
   id: string;
   name: string;
@@ -141,6 +167,7 @@ export interface DwarfEntity {
   };
   labors: Record<DwarfLabor, boolean>;
   thought: string;
+  thoughtLog?: DwarfThoughtEntry[];
   skills: Partial<Record<DwarfLabor, number>>;
   weaponEquipped?: boolean;
   armorEquipped?: boolean;
@@ -369,6 +396,16 @@ export interface StrangeMoodState {
   deadline: number;
 }
 
+export type WeatherConditionId =
+  | 'SPRING_THAW'
+  | 'SPRING_SHOWER'
+  | 'SUMMER_SUN'
+  | 'SUMMER_SQUALL'
+  | 'AUTUMN_MIST'
+  | 'AUTUMN_RAIN'
+  | 'WINTER_SNOW'
+  | 'WINTER_BLIZZARD';
+
 export interface GameState {
   id: string;
   world: WorldData;
@@ -385,6 +422,7 @@ export interface GameState {
   ticks: number;
   year: number;
   season: 'Granite (Spring)' | 'Slate (Summer)' | 'Sands (Autumn)' | 'Timber (Winter)';
+  weatherOverride?: WeatherConditionId | null;
   paused: boolean;
   speed: 1 | 2 | 4;
   guild: GuildState;
@@ -392,5 +430,8 @@ export interface GameState {
     expeditions?: any;
     claimedMilestones?: string[];
     strangeMood?: StrangeMoodState | null;
+    unlockedBuildings?: DesignationType[];
   };
 }
+
+

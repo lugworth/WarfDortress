@@ -6,6 +6,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useGame } from './GameProvider';
 import ReactMarkdown from 'react-markdown';
 import { groupChronicle } from '@/lib/ui-model';
+import { collectClanAnecdotes, getSentimentBadge } from '@/lib/thoughts';
 import type { ChronicleEntry } from '@/lib/types';
 import AsciiSelect from './AsciiSelect';
 
@@ -44,10 +45,37 @@ export default function AdvisorPanel() {
   const [advisorStatus, setAdvisorStatus] = useState('');
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [chronicleFilter, setChronicleFilter] = useState<ChronicleFilter>('ALL');
+  const [thoughtsDwarfFilter, setThoughtsDwarfFilter] = useState<string>('ALL');
   const scrollRef = useRef<HTMLDivElement>(null);
+
   const chronicleEntries = useMemo(
     () => groupChronicle(gameState.chronicle.filter((entry) => chronicleFilter === 'ALL' || entry.type === chronicleFilter)),
     [gameState.chronicle, chronicleFilter]
+  );
+
+  const allClanAnecdotes = useMemo(
+    () => collectClanAnecdotes(gameState.dwarves, { limit: 24 }),
+    [gameState.dwarves]
+  );
+
+  const filteredAnecdotes = useMemo(
+    () =>
+      collectClanAnecdotes(gameState.dwarves, {
+        dwarfId: thoughtsDwarfFilter,
+        limit: 20,
+      }),
+    [gameState.dwarves, thoughtsDwarfFilter]
+  );
+
+  const dwarfFilterOptions = useMemo(
+    () => [
+      { value: 'ALL', label: `All Dwarves (${gameState.dwarves.length})` },
+      ...gameState.dwarves.map((d) => ({
+        value: d.id,
+        label: `${d.name} (${d.thoughtLog?.length || 1})`,
+      })),
+    ],
+    [gameState.dwarves]
   );
 
   useEffect(() => {
@@ -83,12 +111,25 @@ export default function AdvisorPanel() {
         activeCommission: gameState.guild.commissions.find((c) => c.status === 'ACTIVE'),
         factionFavor: gameState.guild.favor,
         carriedRelics: gameState.guild.relics.filter((r) => r.mode === 'EQUIPPED').slice(0, 10).map((r) => ({ name: r.name, ownerId: r.ownerId })),
+        thoughtsAndFeelings: allClanAnecdotes.slice(0, 16).map((a) => ({
+          dwarfName: a.dwarfName,
+          dwarfTitle: a.dwarfTitle,
+          tick: a.tick,
+          year: a.year,
+          season: a.season,
+          category: a.category,
+          sentiment: a.sentiment,
+          moraleDelta: a.moraleDelta,
+          text: a.text.slice(0, 160),
+        })),
         dwarvesStates: gameState.dwarves.slice(0, 20).map((d) => ({
           name: d.name,
           state: d.state,
           quirk: d.quirk,
           z: d.z,
+          happiness: d.happiness,
           thought: d.thought.slice(0, 160),
+          recentThoughts: (d.thoughtLog || []).slice(0, 4).map((t) => t.text.slice(0, 140)),
         })),
       };
 
@@ -169,8 +210,8 @@ export default function AdvisorPanel() {
   return (
     <aside className="w-full h-full bg-[var(--ui-bg)] border-l border-[var(--ui-border)] flex flex-col font-mono text-xs select-none text-[var(--ui-text)]">
       {/* Top Section: Fortress Chronicle */}
-      <div className="h-52 shrink-0 border-b border-[var(--ui-border)] flex flex-col bg-[var(--ui-panel)]">
-        <div className="px-2 py-1.5 border-b border-[var(--ui-border)] flex items-center justify-between gap-1 text-xs">
+      <div className="h-36 shrink-0 border-b border-[var(--ui-border)] flex flex-col bg-[var(--ui-panel)]">
+        <div className="px-2 py-1 border-b border-[var(--ui-border)] flex items-center justify-between gap-1 text-xs">
           <span className="text-[var(--ui-accent)] font-bold truncate whitespace-nowrap">┌─[ CHRONICLE ]</span>
           <button
             type="button"
@@ -192,7 +233,7 @@ export default function AdvisorPanel() {
             onChange={(next) => setChronicleFilter(next)}
           />
         </div>
-        <ol aria-label="Fortress chronicle" className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1 font-mono text-[11px] custom-scrollbar bg-[var(--ui-bg)]">
+        <ol aria-label="Fortress chronicle" className="min-h-0 flex-1 overflow-y-auto p-1.5 space-y-1 font-mono text-[11px] custom-scrollbar bg-[var(--ui-bg)]">
           {chronicleEntries.map((entry) => (
             <li
               key={entry.id}
@@ -210,9 +251,109 @@ export default function AdvisorPanel() {
         </ol>
       </div>
 
+      {/* Middle Section: Automated Dwarf Thoughts & Feelings Log */}
+      <div
+        data-testid="advisor-thoughts-panel"
+        className="h-44 shrink-0 border-b border-[var(--ui-border)] flex flex-col bg-[var(--ui-panel)]"
+      >
+        <div className="px-2 py-1 border-b border-[var(--ui-border)] flex items-center justify-between gap-1 text-xs">
+          <span className="text-[#ff0099] font-bold truncate whitespace-nowrap">
+            ┌─[ THOUGHTS &amp; FEELINGS ]
+          </span>
+          <button
+            type="button"
+            data-testid="advisor-weave-tale-btn"
+            onClick={() => {
+              const top = filteredAnecdotes[0];
+              if (top) {
+                sendMessage(
+                  `Weave a vivid dwarven story from our Thoughts & Feelings log, especially ${top.dwarfName} who "${top.text}"!`
+                );
+              } else {
+                sendMessage('Weave a story from our dwarves’ recent Thoughts & Feelings log!');
+              }
+            }}
+            className="text-[#00ffff] hover:text-[#ffffff] hover:bg-[var(--ui-border)] px-1 transition-colors whitespace-nowrap shrink-0 text-[10px] font-bold"
+            title="Have Advisor Bomrek weave a tale from recent dwarf anecdotes"
+          >
+            [ ☼ WEAVE TALE ]
+          </button>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2 border-b border-[var(--ui-border)] px-2 py-1 text-[var(--ui-muted)]">
+          <span>Dwarf</span>
+          <AsciiSelect<string>
+            ariaLabel="Dwarf thoughts filter"
+            size="sm"
+            className="min-w-0 flex-1"
+            value={thoughtsDwarfFilter}
+            options={dwarfFilterOptions}
+            onChange={(next) => setThoughtsDwarfFilter(next)}
+          />
+        </div>
+
+        <ol
+          aria-label="Dwarf thoughts and feelings"
+          className="min-h-0 flex-1 overflow-y-auto p-1.5 space-y-1 font-mono text-[10px] custom-scrollbar bg-[var(--ui-bg)]"
+        >
+          {filteredAnecdotes.map((anecdote) => {
+            const badge = getSentimentBadge(anecdote.sentiment);
+            return (
+              <li
+                key={anecdote.id}
+                data-testid="advisor-anecdote-item"
+                className="px-1.5 py-1 border border-[var(--ui-border)]/70 bg-[var(--ui-panel)]/50 leading-snug space-y-0.5"
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className={`font-bold ${badge.colorClass}`} title={badge.label}>
+                      {badge.glyph}
+                    </span>
+                    <span className="font-bold truncate" style={{ color: anecdote.dwarfColor }}>
+                      {anecdote.dwarfName}
+                    </span>
+                    <span className="text-[var(--ui-muted)] shrink-0">
+                      [Z-{anecdote.dwarfZ}·T{anecdote.tick}]
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {anecdote.moraleDelta !== 0 && (
+                      <span
+                        className={`tabular-nums font-bold ${
+                          anecdote.moraleDelta > 0 ? 'text-[#33ff00]' : 'text-[#ff0000]'
+                        }`}
+                      >
+                        {anecdote.moraleDelta > 0
+                          ? `+${anecdote.moraleDelta}`
+                          : anecdote.moraleDelta}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        sendMessage(
+                          `Tell a chronicle tale about ${anecdote.dwarfName} (${anecdote.dwarfTitle}), who recently "${anecdote.text}".`
+                        )
+                      }
+                      className="text-[var(--ui-accent)] hover:text-[#ffffff] px-1 border border-[var(--ui-border)] text-[9px]"
+                      title={`Ask Advisor Bomrek about ${anecdote.dwarfName}'s experience`}
+                    >
+                      [TALE]
+                    </button>
+                  </div>
+                </div>
+                <div className="text-[var(--ui-text)] italic">
+                  &ldquo;{anecdote.text}&rdquo;
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
       {/* Bottom Section: Royal Advisor Chat */}
       <div className="flex-1 flex flex-col min-h-0 bg-[var(--ui-bg)]">
-        <div className="px-2 py-1.5 border-b border-[var(--ui-border)] bg-[var(--ui-panel)] flex items-center justify-between gap-1 text-xs">
+        <div className="px-2 py-1 border-b border-[var(--ui-border)] bg-[var(--ui-panel)] flex items-center justify-between gap-1 text-xs">
           <span className="text-[var(--ui-accent)] font-bold truncate whitespace-nowrap">
             ┌─[ ADVISOR BOMREK ]
           </span>
@@ -242,7 +383,7 @@ export default function AdvisorPanel() {
         </div>
 
         {/* Quick Clickable Query Prompts */}
-        <div className="px-2 py-1 bg-[var(--ui-panel)] border-b border-[var(--ui-border)] flex items-center gap-1.5 overflow-x-auto custom-scrollbar text-[10px]">
+        <div className="px-2 py-1 bg-[var(--ui-panel)] border-b border-[var(--ui-border)] flex items-center gap-1 overflow-x-auto custom-scrollbar text-[10px]">
           <button
             type="button"
             onClick={() => sendMessage('What should our first 3 priorities be for this fortress?')}
@@ -263,6 +404,17 @@ export default function AdvisorPanel() {
             className="text-[var(--ui-success)] hover:bg-[var(--ui-border)] px-1 whitespace-nowrap shrink-0"
           >
             [ 3: LORE ]
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              sendMessage(
+                'Weave a vivid tale from our dwarves’ recent Thoughts & Feelings log!'
+              )
+            }
+            className="text-[#ff0099] hover:bg-[var(--ui-border)] px-1 whitespace-nowrap shrink-0 font-bold"
+          >
+            [ 4: TALES ]
           </button>
         </div>
 

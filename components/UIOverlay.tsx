@@ -244,6 +244,16 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
             <label className="flex items-center gap-3">
               <input
                 type="checkbox"
+                checked={preferences.tooltips}
+                onChange={(e) =>
+                  updatePreferences({ tooltips: e.target.checked })
+                }
+              />
+              Show hover tile inspector and tooltips
+            </label>
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
                 checked={preferences.reducedMotion}
                 onChange={(e) =>
                   updatePreferences({ reducedMotion: e.target.checked })

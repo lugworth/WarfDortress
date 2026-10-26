@@ -23,12 +23,49 @@ function buildDeterministicAdvisorReply(
   const iron = res.ironOre ?? 0;
   const steel = res.steelBars ?? 0;
 
+  const anecdotes = Array.isArray(fortressSummary?.thoughtsAndFeelings)
+    ? (fortressSummary.thoughtsAndFeelings as Array<{
+        dwarfName?: string;
+        dwarfTitle?: string;
+        text?: string;
+        sentiment?: string;
+        category?: string;
+        moraleDelta?: number;
+      }>)
+    : [];
+
   const q = lastUserQuestion.toLowerCase();
+  if (
+    q.includes('thought') ||
+    q.includes('feeling') ||
+    q.includes('tale') ||
+    q.includes('anecdote') ||
+    q.includes('story') ||
+    q.includes('plump helmet') ||
+    q.includes('terrifying beast')
+  ) {
+    const featured = anecdotes.slice(0, 3);
+    const lines =
+      featured.length > 0
+        ? featured.map(
+            (a) =>
+              `- **${a.dwarfName || 'Urist'}** (*${a.dwarfTitle || 'Pioneer'}*, ${a.sentiment || 'STEADY'}): "${a.text}"`
+          )
+        : [
+            `- **Urist McPick** (*Expedition Leader*): "Ate a plump helmet roast seasoned with cave-salt beside the embark wagon."`,
+            `- **Mebzuth Stonehand** (*Deep Delver*): "Saw a terrifying beast silhouette stalking the crags above the mountain pass!"`,
+          ];
+    return `**Chronicle of Hearts & Minds in ${name} (Year ${year}, ${season}):**\nFrom the candlelit tables of our halls, I have inscribed the personal joys and terrors of our clan:\n${lines.join('\n')}\n\nKeep the **Hearth Tavern (\`♫\`)** stocked with **${ale} Ale** and **${food} Plump Helmet Roasts**, and station armed militia near the caverns so terrifying beasts never break our pioneers' spirit!`;
+  }
   if (q.includes('z-mining') || q.includes('deeper') || q.includes('cavern') || q.includes('stairs')) {
     return `**Subterranean Excavation Counsel for ${name}:**\n- Select **Carve Stairs [X]** and place a stairway inside your main hall on **Z-0**; this automatically links to **Z-1 (Shallow Copper & Iron Seams)**.\n- Use the **[RADAR]** tab to scan **Z-1 through Z-5** for rich Iron (\`£\`), Gold (\`$\`), and Mithril (\`☼\`) veins before committing miners.\n- Keep your **Militia Doctrine** ready when breaching **Z-3 Fungal Caverns** and **Z-5 Magma Chambers**, where Giant Cave Spiders and Forgotten Beasts guard ancient relics!`;
   }
   if (q.includes('lore') || q.includes('legend') || q.includes('history')) {
-    return `**From the Annals of ${name} (Year ${year}, ${season}):**\nOur seven founding pioneers struck the earth with ${stone} cut stone and ${wood} timber, determined to carve a seat of Mountainhome wealth. Every relic (\`☼\`) recovered from the deep caverns and every masterwork forged on our anvils inscribes a new chapter in the fortress chronicle!`;
+    const topAnecdote = anecdotes[0];
+    const personalNote = topAnecdote
+      ? `\n\nEven today, **${topAnecdote.dwarfName}** is remembered in the rolls: *"${topAnecdote.text}"*`
+      : '';
+    return `**From the Annals of ${name} (Year ${year}, ${season}):**\nOur seven founding pioneers struck the earth with ${stone} cut stone and ${wood} timber, determined to carve a seat of Mountainhome wealth. Every relic (\`☼\`) recovered from the deep caverns and every masterwork forged on our anvils inscribes a new chapter in the fortress chronicle!${personalNote}`;
   }
 
   const priorities: string[] = [];
@@ -56,6 +93,13 @@ function buildDeterministicAdvisorReply(
     `**3. Civic Halls & Trade:** Construct a **Tavern (\`♫\`)**, **Temple (\`Ψ\`)**, and **Trade Depot (\`¤\`)** to boost clan morale and barter surplus crafts with seasonal caravans.`
   );
 
+  if (anecdotes.length > 0) {
+    const recent = anecdotes[0];
+    priorities.push(
+      `**4. Clan Sentiment (${recent.dwarfName}):** *"${recent.text}"* (${recent.sentiment})`
+    );
+  }
+
   return `**High Chronicler Bomrek’s Assessment (${name} · Y${year}):**\n${priorities.join('\n')}`;
 }
 
@@ -75,11 +119,12 @@ export async function POST(req: NextRequest) {
     );
 
     const systemInstruction = `You are High Chronicler & Royal Fortress Advisor Bomrek Anvilward, counseling the Overseer of a Dwarven Fortress.
-Current Fortress Telemetry:
+Current Fortress Telemetry & Dwarven Thoughts/Feelings Log:
 ${JSON.stringify(fortressSummary, null, 2)}
 
 Role & Tone:
-- Speak like a seasoned, pragmatic Dwarven engineer and lorekeeper.
+- Speak like a seasoned, pragmatic Dwarven engineer, chronicler, and storyteller.
+- Weave specific dwarves' names and their recent "thoughtsAndFeelings" anecdotes (such as eating a plump helmet roast, seeing a terrifying beast, quaffing ale, or unearthing ore) directly into your counsel and storytelling.
 - Give concrete, actionable advice tied to the player's actual resources, population, depth Z-level, and workshops.
 - Keep responses concise (2-4 short paragraphs or bullet points) so they are easy to read and listen to via TTS.`;
 
