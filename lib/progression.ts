@@ -49,38 +49,38 @@ export const FORTRESS_RANKS: readonly FortressRankInfo[] = [
     title: "Delver Hamlet",
     dwarvenTitle: "udib-Kazad",
     minScore: 900,
-    nextScore: 1600,
+    nextScore: 3000,
     perk: "+10% Caravan Barter Value · Attracts Skilled Migrant Artisans.",
   },
   {
     tier: 3,
     title: "Subterranean Barony",
     dwarvenTitle: "Barak-Thrund",
-    minScore: 1600,
-    nextScore: 2600,
+    minScore: 3000,
+    nextScore: 7000,
     perk: "Baron's Charter: Royal Commissions & Strange Mood Inspirations.",
   },
   {
     tier: 4,
     title: "Ironclad Earldom",
     dwarvenTitle: "Khazad-Dûr",
-    minScore: 2600,
-    nextScore: 4000,
+    minScore: 7000,
+    nextScore: 14000,
     perk: "Masterwork Forges: +15% Militia Morale & Deep Cavern Expeditions.",
   },
   {
     tier: 5,
     title: "Grand Duchy",
     dwarvenTitle: "Uzbad-Moria",
-    minScore: 4000,
-    nextScore: 6000,
+    minScore: 14000,
+    nextScore: 25000,
     perk: "Ducal Treasury: High-Tier Relics & Elite Veteran Recruits.",
   },
   {
     tier: 6,
     title: "Mountainhome Capital",
     dwarvenTitle: "Khazad-Anvil",
-    minScore: 6000,
+    minScore: 25000,
     nextScore: null,
     perk: "Seat of the High King: Sovereign of the Deep Realm.",
   },
@@ -609,6 +609,72 @@ export function getFortressProgression(
         resources: { wealth: 500, steelBars: 6 },
         migrants: 2,
         relicTemplate: "CROWN_OF_EMBER",
+      },
+    },
+    {
+      id: "ms-magma-core",
+      title: "Delvers of the Magma Core",
+      description:
+        "Carve stairwells into the deepest volcanic strata at Depth Z-4 or Z-5.",
+      category: "DELVING",
+      progress: Math.min(4, deepestRevealedZ),
+      target: 4,
+      completed: deepestRevealedZ >= 4 || claimedSet.has("ms-magma-core"),
+      claimed: claimedSet.has("ms-magma-core"),
+      rewardSummary: "+8 Gold Ore, +8 Steel Bars, +900 Wealth, World-Cleaver Pickaxe",
+      reward: {
+        resources: { goldOre: 8, steelBars: 8, wealth: 900 },
+        relicTemplate: "ANCIENT_PICK",
+      },
+    },
+    {
+      id: "ms-ducal-treasury",
+      title: "Grand Ducal Treasury",
+      description:
+        "Accumulate 6,000+ Fortress Wealth and sustain a clan of 12+ Dwarves.",
+      category: "GRANDEUR",
+      progress: Math.min(
+        100,
+        Math.round(
+          (Math.min(1, state.dwarves.length / 12) * 50) +
+            (Math.min(1, state.resources.wealth / 6000) * 50),
+        ),
+      ),
+      target: 100,
+      completed:
+        (state.dwarves.length >= 12 && state.resources.wealth >= 6000) ||
+        claimedSet.has("ms-ducal-treasury"),
+      claimed: claimedSet.has("ms-ducal-treasury"),
+      rewardSummary: "+2 Migrant Pioneers, +1,500 Wealth, Golden Codex of Kings",
+      reward: {
+        resources: { wealth: 1500, weapons: 3, armor: 3 },
+        migrants: 2,
+        relicTemplate: "CHRONICLE_CODEX",
+      },
+    },
+    {
+      id: "ms-sovereign-capital",
+      title: "Sovereign of the Deep Anvil",
+      description:
+        "Reach 15,000+ Wealth and 16+ Dwarves on the road to the 25,000 Mountainhome Capital.",
+      category: "GRANDEUR",
+      progress: Math.min(
+        100,
+        Math.round(
+          (Math.min(1, state.dwarves.length / 16) * 50) +
+            (Math.min(1, state.resources.wealth / 15000) * 50),
+        ),
+      ),
+      target: 100,
+      completed:
+        (state.dwarves.length >= 16 && state.resources.wealth >= 15000) ||
+        claimedSet.has("ms-sovereign-capital"),
+      claimed: claimedSet.has("ms-sovereign-capital"),
+      rewardSummary: "+3 Migrant Pioneers, +3,000 Wealth, Ever-Full Chalice of Moradin",
+      reward: {
+        resources: { wealth: 3000, goldOre: 10, steelBars: 10 },
+        migrants: 3,
+        relicTemplate: "MITHRIL_CHALICE",
       },
     },
   ];

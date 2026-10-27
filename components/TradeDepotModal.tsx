@@ -53,7 +53,12 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
   if (!isOpen) return null;
 
   const isAutumnCaravan = gameState.season.includes('Autumn') || gameState.season.includes('Summer');
-  const depotBonus = hasBuiltDepot ? 1.15 : 1.0;
+  const hasChronicleCodexDisplayed = gameState.guild.relics.some(
+    (r) => r.mode === 'DISPLAYED' && r.template === 'CHRONICLE_CODEX'
+  );
+  const rankBarterBonus = gameState.resources.wealth >= 900 ? 0.1 : 0;
+  const codexBarterBonus = hasChronicleCodexDisplayed ? 0.2 : 0;
+  const depotBonus = (hasBuiltDepot ? 1.15 : 1.0) + rankBarterBonus + codexBarterBonus;
 
   const offeredValue = Math.floor(
     EXPORT_ITEMS.reduce((acc, item) => {

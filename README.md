@@ -39,7 +39,7 @@ is hidden.
 
 ## Goal and tutorial
 
-Grow the colony into a Mountainhome Capital by reaching 6,000 fortress score.
+Grow the colony into a Mountainhome Capital by reaching 25,000 fortress score.
 The goal beneath the fortress name opens milestones, building unlocks, and rank
 progress. Score comes from wealth, population, workshops, exploration depth, and
 relics.

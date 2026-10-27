@@ -24,7 +24,14 @@ import {
   generateMultiLevelGrid,
   getTerrainVisuals,
 } from './world-gen.ts';
-import { createInitialGuildState } from './guild.ts';
+import {
+  createInitialGuildState,
+  getQuirkCombatModifiers,
+  getQuirkMoraleModifier,
+  getQuirkProductionModifier,
+  getQuirkWorkSpeed,
+  refreshSeasonalCommissions,
+} from './guild.ts';
 import { createExpeditionState } from './expeditions.ts';
 import { isBuildingUnlocked, syncBuildingUnlocks, triggerStrangeMood } from './progression.ts';
 import {
@@ -41,7 +48,6 @@ import {
 import { findPath, nextStepAlongPath } from './pathfinding.ts';
 import { countOf, createGridDraft, getTerrainCounts, WORKSHOP_TERRAINS, type GridDraft } from './grid.ts';
 import { getWeapon, getArmor, weaponTier, armorTier } from './equipment.ts';
-import { getQuirkCombatModifiers } from './guild.ts';
 import { checkMentalBreak, getMentalBreakEntry, isMentalBreakOver, MENTAL_BREAK_INFO } from './mental-breaks.ts';
 import {
   createDefaultMilitiaState,
@@ -1123,6 +1129,44 @@ export function stepSimulationTick(state: GameState): GameState {
   const activeMasons = state.dwarves.filter((d) => d.labors.MASONRY).length;
   const activeCarpenters = state.dwarves.filter((d) => d.labors.CARPENTRY).length;
 
+  // Displayed & Equipped Relic Lookup
+  const displayedRelics = new Set(
+    (state.guild?.relics || []).filter((r) => r.mode === 'DISPLAYED').map((r) => r.template)
+  );
+  const equippedRelicByDwarf = new Map<string, string>();
+  for (const r of state.guild?.relics || []) {
+    if (r.mode === 'EQUIPPED' && r.ownerId) {
+      equippedRelicByDwarf.set(r.ownerId, r.template);
+    }
+  }
+  const hasIronBornSmith = state.dwarves.some(
+    (d) => d.quirk === 'IRON_BORN' && d.labors.SMITHING
+  );
+
+  // Locate nearest civic tiles for physical needs navigation
+  const civicCoords: Partial<Record<TileTerrain, { z: number; y: number; x: number }>> = {};
+  for (let z = 0; z < state.world.depth; z++) {
+    const lvl = draft.grid[z];
+    if (!lvl) continue;
+    for (let y = 0; y < lvl.length; y++) {
+      const row = lvl[y];
+      if (!row) continue;
+      for (let x = 0; x < row.length; x++) {
+        const tr = row[x]?.terrain;
+        if (
+          (tr === 'TAVERN_HALL' ||
+            tr === 'STOCKPILE_TILE' ||
+            tr === 'FARM_PLOT' ||
+            tr === 'BED' ||
+            tr === 'TEMPLE_ALTAR') &&
+          !civicCoords[tr]
+        ) {
+          civicCoords[tr] = { z, y, x };
+        }
+      }
+    }
+  }
+
   // STOCKPILE_TILE Function: Safe storage capacity + Hauling Logistics Bonus
   const maxSafeFood = 24 + stockpileCount * 8;
   if (nextTicks > 0 && nextTicks % 120 === 0 && resources.food > maxSafeFood) {
@@ -1230,14 +1274,27 @@ export function stepSimulationTick(state: GameState): GameState {
   if (nextTicks % 12 === 0 && workOrders.length > 0) {
     for (const order of workOrders) {
       if (order.remaining <= 0 && !order.autoRepeat) continue;
-      if (builtWorkshops.has(order.workshop) && hasResources(resources, order.cost)) {
-        for (const [k, v] of Object.entries(order.cost)) {
+      const effectiveCost: Partial<FortressResources> = { ...order.cost };
+      if (
+        order.workshop === 'WORKSHOP_FORGE' &&
+        displayedRelics.has('RUNIC_ANVIL') &&
+        (effectiveCost.steelBars ?? 0) > 1
+      ) {
+        effectiveCost.steelBars = (effectiveCost.steelBars ?? 0) - 1;
+      }
+      if (builtWorkshops.has(order.workshop) && hasResources(resources, effectiveCost)) {
+        for (const [k, v] of Object.entries(effectiveCost)) {
           const key = k as keyof FortressResources;
           resources[key] = Math.max(0, (resources[key] || 0) - (v || 0));
         }
+        const prodMult = hasIronBornSmith
+          ? getQuirkProductionModifier('IRON_BORN', order.workshop)
+          : 1.0;
         for (const [k, v] of Object.entries(order.produce)) {
           const key = k as keyof FortressResources;
-          resources[key] = (resources[key] || 0) + (v || 0);
+          const amount =
+            key === 'wealth' ? Math.round((v || 0) * prodMult) : v || 0;
+          resources[key] = (resources[key] || 0) + amount;
         }
         if (order.autoRepeat) {
           order.remaining = Math.max(1, order.remaining);
@@ -1253,10 +1310,13 @@ export function stepSimulationTick(state: GameState): GameState {
     }
   }
 
-  // Periodic Goblin Raid check when wealth and seasonal pressure align
+  // Periodic Goblin Raid check when wealth and seasonal pressure align (unless Goblins are Allied)
+  const goblinCivObj = state.world.civilizations.find((c) => c.race === 'Goblins') || state.world.civilizations[3];
+  const goblinsAllied = goblinCivObj?.stance === 'Allied';
   if (
     nextTicks > 0 &&
     nextTicks % 85 === 0 &&
+    !goblinsAllied &&
     hostiles.filter((h) => h.z === 0).length === 0 &&
     resources.wealth >= 600
   ) {
@@ -1407,29 +1467,71 @@ export function stepSimulationTick(state: GameState): GameState {
       currentTask: dwarfRaw.currentTask ? { ...dwarfRaw.currentTask } : undefined,
     };
 
-    // Auto-equip forged weapons & armor from stockpile onto militia dwarves
-    if (!dwarf.weaponEquipped && resources.weapons > 0 && dwarf.labors.COMBAT) {
+    const equippedRelic = equippedRelicByDwarf.get(dwarf.id);
+    if (equippedRelic === 'CROWN_OF_EMBER' && dwarf.maxHp < 130) {
+      const bonus = 130 - dwarf.maxHp;
+      dwarf.maxHp = 130;
+      dwarf.hp = Math.min(dwarf.maxHp, dwarf.hp + bonus);
+    }
+    if (equippedRelic === 'MITHRIL_CHALICE' && dwarf.thirst < 50) {
+      dwarf.thirst = 50;
+    }
+    if (equippedRelic === 'CHRONICLE_CODEX' && dwarf.happiness < 65) {
+      dwarf.happiness = Math.min(100, dwarf.happiness + 4);
+    }
+
+    // Auto-equip or upgrade forged weapons & armor from stockpile onto militia dwarves
+    const mithrilAvailable =
+      state.grid.slice(4).some((lvl) =>
+        lvl?.some((row) => row?.some((t) => t.revealed && t.terrain === 'ROCK_FLOOR'))
+      ) || resources.wealth >= 7000;
+    const bestWeapon = mithrilAvailable
+      ? ('RUNED_MITHRIL_AXE' as const)
+      : resources.steelBars > 0 || resources.wealth >= 1500
+      ? ('STEEL_BATTLEAXE' as const)
+      : ('IRON_AXE' as const);
+    const bestArmor = mithrilAvailable
+      ? ('MITHRIL_MAIL' as const)
+      : resources.steelBars > 0 || resources.wealth >= 1500
+      ? ('STEEL_PLATE' as const)
+      : ('IRON_MAIL' as const);
+
+    if (
+      resources.weapons > 0 &&
+      dwarf.labors.COMBAT &&
+      (!dwarf.weaponEquipped || weaponTier(dwarf.weaponType || 'IRON_AXE') < weaponTier(bestWeapon))
+    ) {
       resources.weapons -= 1;
       dwarf.weaponEquipped = true;
-      dwarf.weaponType = 'IRON_AXE';
+      dwarf.weaponType = bestWeapon;
       appendDwarfThought(dwarf, {
         tick: nextTicks,
         year: nextYear,
         season: nextSeason,
-        text: 'Equipped a newly forged steel battleaxe from the armory!',
+        text: `Equipped a newly forged ${getWeapon(bestWeapon).name.toLowerCase()} from the armory!`,
         category: 'COMBAT',
         sentiment: 'POSITIVE',
         moraleDelta: 5,
       });
     }
-    if (!dwarf.armorEquipped && resources.armor > 0 && dwarf.labors.COMBAT) {
+    if (
+      resources.armor > 0 &&
+      dwarf.labors.COMBAT &&
+      (!dwarf.armorEquipped || armorTier(dwarf.armorType || 'IRON_MAIL') < armorTier(bestArmor))
+    ) {
       resources.armor -= 1;
       dwarf.armorEquipped = true;
+      dwarf.armorType = bestArmor;
+      const armorDef = getArmor(bestArmor);
+      if (armorDef.maxHpBonus > 0 && dwarf.maxHp < 100 + armorDef.maxHpBonus) {
+        dwarf.maxHp = 100 + armorDef.maxHpBonus;
+        dwarf.hp = Math.min(dwarf.maxHp, dwarf.hp + armorDef.maxHpBonus);
+      }
       appendDwarfThought(dwarf, {
         tick: nextTicks,
         year: nextYear,
         season: nextSeason,
-        text: 'Donned forged dwarven mail armor!',
+        text: `Donned forged ${armorDef.name.toLowerCase()}!`,
         category: 'COMBAT',
         sentiment: 'POSITIVE',
         moraleDelta: 5,
@@ -1469,9 +1571,9 @@ export function stepSimulationTick(state: GameState): GameState {
       dwarf.thirst = Math.max(8, dwarf.thirst - 1);
     }
 
-    // Passive civic hall aura functions: TAVERN_HALL, TEMPLE_ALTAR, and BED comfort
-    if (nextTicks % 30 === 0 && tavernCount > 0) {
-      dwarf.happiness = Math.min(100, dwarf.happiness + 2);
+    // Passive civic hall aura functions: TAVERN_HALL, TEMPLE_ALTAR, BED comfort, Relics & Quirks
+    if (nextTicks % 30 === 0 && (tavernCount > 0 || displayedRelics.has('MITHRIL_CHALICE'))) {
+      dwarf.happiness = Math.min(100, dwarf.happiness + (displayedRelics.has('MITHRIL_CHALICE') ? 4 : 2));
     }
     if (nextTicks % 32 === 0 && templeCount > 0) {
       dwarf.happiness = Math.min(100, dwarf.happiness + 2);
@@ -1479,6 +1581,12 @@ export function stepSimulationTick(state: GameState): GameState {
     }
     if (nextTicks % 35 === 0 && bedCount >= Math.ceil(state.dwarves.length / 2)) {
       dwarf.happiness = Math.min(100, dwarf.happiness + 1);
+    }
+    if (nextTicks % 20 === 0 && dwarf.quirk) {
+      const quirkDelta = getQuirkMoraleModifier(dwarf.quirk, resources, dwarf.z, tavernCount);
+      if (quirkDelta !== 0) {
+        dwarf.happiness = Math.max(10, Math.min(100, dwarf.happiness + quirkDelta));
+      }
     }
 
     // Mental break system — dwarves can go mad when stressed
@@ -1498,11 +1606,49 @@ export function stepSimulationTick(state: GameState): GameState {
           moraleDelta: 3,
         });
       } else {
-        // Still in mental break
+        // Active mental break behaviors (TANTRUM, FRENZY, FEAR, DAZE)
         dwarf.state = 'MENTAL_BREAK';
+        const bType = dwarf.mentalBreak.type;
+        if (bType === 'TANTRUM' && nextTicks % 10 === 0 && resources.furniture > 0) {
+          resources.furniture = Math.max(0, resources.furniture - 1);
+          resources.wealth = Math.max(0, resources.wealth - 15);
+          addLog(`[TANTRUM] ${dwarf.name} toppled a piece of fortress furniture in a rage!`, 'ALERT');
+        } else if (bType === 'FRENZY' && nextTicks % 6 === 0) {
+          const dirs = [
+            { dx: 1, dy: 0 },
+            { dx: -1, dy: 0 },
+            { dx: 0, dy: 1 },
+            { dx: 0, dy: -1 },
+          ];
+          const step = dirs[(dwarf.x + dwarf.y + nextTicks) % dirs.length];
+          const nx = dwarf.x + step.dx;
+          const ny = dwarf.y + step.dy;
+          const nt = draft.tile(dwarf.z, ny, nx);
+          if (nt && nt.walkable) {
+            dwarf.x = nx;
+            dwarf.y = ny;
+          }
+        } else if (bType === 'FEAR' && nextTicks % 4 === 0) {
+          const nearestThreat = hostiles.find((h) => h.z === dwarf.z);
+          if (nearestThreat) {
+            const nx = Math.max(
+              0,
+              Math.min(state.world.width - 1, dwarf.x - Math.sign(nearestThreat.x - dwarf.x))
+            );
+            const ny = Math.max(
+              0,
+              Math.min(state.world.height - 1, dwarf.y - Math.sign(nearestThreat.y - dwarf.y))
+            );
+            const nt = draft.tile(dwarf.z, ny, nx);
+            if (nt && nt.walkable) {
+              dwarf.x = nx;
+              dwarf.y = ny;
+            }
+          }
+        }
         return dwarf;
       }
-    } else if (dwarf.happiness < 45) {
+    } else if (dwarf.happiness < 45 && equippedRelic !== 'CROWN_OF_EMBER') {
       // Check if dwarf should have a mental break
       const breakType = checkMentalBreak(dwarf, nextTicks);
       if (breakType) {
@@ -1566,10 +1712,18 @@ export function stepSimulationTick(state: GameState): GameState {
           const weapon = getWeapon(dwarf.weaponType || (dwarf.weaponEquipped ? 'IRON_AXE' : 'BARE_FISTS'));
           const enemyArmor = getArmor(targetHostile.armorType || 'LEATHER');
           const quirkMods = getQuirkCombatModifiers(dwarf.quirk);
+          const anvilStrikeMult = equippedRelic === 'RUNIC_ANVIL' ? 2.0 : 1.0;
+          const hornRallyAtk =
+            equippedRelic === 'HORN_OF_VALOR' || displayedRelics.has('HORN_OF_VALOR') ? 3 : 0;
           const baseDmg = weapon.attackDamage + ((dwarf.skills.COMBAT || 1) * 2);
-          const dmg = Math.floor(baseDmg * quirkMods.attackMultiplier * enemyArmor.defense) + squadMods.cohesionAttackBonus + squadMods.patrolAttackBonus;
+          const dmg =
+            Math.floor(baseDmg * quirkMods.attackMultiplier * anvilStrikeMult * enemyArmor.defense) +
+            squadMods.cohesionAttackBonus +
+            squadMods.patrolAttackBonus +
+            hornRallyAtk;
           targetHostile.hp -= dmg;
           const wallShield = wallCount >= 4 ? 0.85 : 1;
+          const hornShield = displayedRelics.has('HORN_OF_VALOR') ? 0.85 : 1;
           const incomingDmg = Math.max(
             1,
             Math.round(
@@ -1577,6 +1731,7 @@ export function stepSimulationTick(state: GameState): GameState {
                 getArmor(dwarf.armorType || (dwarf.armorEquipped ? 'IRON_MAIL' : 'LEATHER')).defense *
                 quirkMods.defenseMultiplier *
                 wallShield *
+                hornShield *
                 squadMods.stationDefenseMultiplier
             )
           );
@@ -1644,8 +1799,21 @@ export function stepSimulationTick(state: GameState): GameState {
     }
 
 
+    // Helper to step toward a civic structure when fulfilling a physical need
+    const stepTowardCivic = (target?: { z: number; y: number; x: number }) => {
+      if (!target || target.z !== dwarf.z) return;
+      const nx = Math.max(0, Math.min(state.world.width - 1, dwarf.x + Math.sign(target.x - dwarf.x)));
+      const ny = Math.max(0, Math.min(state.world.height - 1, dwarf.y + Math.sign(target.y - dwarf.y)));
+      const nt = draft.tile(dwarf.z, ny, nx);
+      if (nt && nt.walkable) {
+        dwarf.x = nx;
+        dwarf.y = ny;
+      }
+    };
+
     // 2. Thirst & Tavern Buff
     if (dwarf.thirst < 36 && resources.ale > 0) {
+      stepTowardCivic(civicCoords.TAVERN_HALL || civicCoords.STOCKPILE_TILE);
       resources.ale = Math.max(0, resources.ale - 1);
       dwarf.thirst = Math.min(100, dwarf.thirst + 48);
       const tavernBonus = tavernCount > 0 ? 12 : 6;
@@ -1680,6 +1848,7 @@ export function stepSimulationTick(state: GameState): GameState {
 
     // 3. Hunger
     if (dwarf.hunger < 36 && resources.food > 0) {
+      stepTowardCivic(civicCoords.STOCKPILE_TILE || civicCoords.FARM_PLOT);
       resources.food = Math.max(0, resources.food - 1);
       dwarf.hunger = Math.min(100, dwarf.hunger + 48);
       dwarf.state = 'EATING';
@@ -1707,6 +1876,7 @@ export function stepSimulationTick(state: GameState): GameState {
 
     // 4. Energy & Dormitory Bed Rest
     if (dwarf.energy < 28) {
+      stepTowardCivic(civicCoords.BED);
       dwarf.state = 'SLEEPING';
       dwarf.energy = Math.min(100, dwarf.energy + (bedCount > 0 ? 52 : 28));
       dwarf.hp = Math.min(dwarf.maxHp, dwarf.hp + (bedCount > 0 ? 12 : 8));
@@ -1736,6 +1906,7 @@ export function stepSimulationTick(state: GameState): GameState {
 
     // 5. Temple Meditation when Morale dips
     if (dwarf.happiness < 72 && templeCount > 0 && nextTicks % 6 === 0) {
+      stepTowardCivic(civicCoords.TEMPLE_ALTAR);
       dwarf.state = 'PRAYING';
       appendDwarfThought(dwarf, {
         tick: nextTicks,
@@ -1869,10 +2040,52 @@ export function stepSimulationTick(state: GameState): GameState {
     if (!task) return dwarf;
 
     // Follow the precomputed path
-    const nextPos = nextStepAlongPath(
+    let nextPos = nextStepAlongPath(
       task.path || [],
       { z: dwarf.z, y: dwarf.y, x: dwarf.x }
     );
+    const nextStepTile = nextPos ? draft.tile(nextPos.z, nextPos.y, nextPos.x) : undefined;
+
+    // If next step is blocked or path is exhausted while still far from task, recompute A*
+    if (
+      (nextPos && (!nextStepTile || !nextStepTile.walkable)) ||
+      (!nextPos && (dwarf.z !== task.z || Math.max(Math.abs(task.x - dwarf.x), Math.abs(task.y - dwarf.y)) > 1))
+    ) {
+      let pathTarget = { z: task.z, y: task.y, x: task.x };
+      const targetTile = draft.tile(task.z, task.y, task.x);
+      if (targetTile && !targetTile.walkable) {
+        let bestNeighbor = null;
+        let bestDist = Infinity;
+        for (const [dx, dy] of [[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[-1,1],[1,-1],[1,1]]) {
+          const nx = task.x + dx;
+          const ny = task.y + dy;
+          const nt = draft.tile(task.z, ny, nx);
+          if (nt && nt.walkable) {
+            const d = Math.abs(nx - dwarf.x) + Math.abs(ny - dwarf.y);
+            if (d < bestDist) {
+              bestDist = d;
+              bestNeighbor = { z: task.z, y: ny, x: nx };
+            }
+          }
+        }
+        if (bestNeighbor) pathTarget = bestNeighbor;
+      }
+
+      const recomputed = findPath(
+        draft.grid,
+        { z: dwarf.z, y: dwarf.y, x: dwarf.x },
+        pathTarget
+      );
+      if (recomputed && recomputed.length > 1) {
+        task.path = recomputed.map((p) => ({ z: p.z, y: p.y, x: p.x }));
+        nextPos = nextStepAlongPath(task.path, { z: dwarf.z, y: dwarf.y, x: dwarf.x });
+      } else {
+        dwarf.currentTask = undefined;
+        dwarf.state = 'IDLE';
+        dwarf.thought = 'Work blocked: no connected, walkable route.';
+        return dwarf;
+      }
+    }
 
     if (nextPos) {
       if (canDwarfStepThisTick(
@@ -1884,32 +2097,29 @@ export function stepSimulationTick(state: GameState): GameState {
         // Check if this step involves changing Z levels (stair)
         if (nextPos.z !== dwarf.z) {
           dwarf.z = nextPos.z;
-          revealAround(draft, dwarf.z, dwarf.x, dwarf.y, 3);
+          revealAround(draft, dwarf.z, dwarf.x, dwarf.y, displayedRelics.has('CROWN_OF_EMBER') ? 4 : 3);
         }
         dwarf.x = Math.max(0, Math.min(state.world.width - 1, nextPos.x));
         dwarf.y = Math.max(0, Math.min(state.world.height - 1, nextPos.y));
         if (nextPos.z === dwarf.z) {
-          revealAround(draft, dwarf.z, dwarf.x, dwarf.y, 2);
+          revealAround(draft, dwarf.z, dwarf.x, dwarf.y, displayedRelics.has('CROWN_OF_EMBER') ? 3 : 2);
         }
-      }
-    } else {
-      // No path or at goal — fall back to working
-      if (Math.max(Math.abs(task.x - dwarf.x), Math.abs(task.y - dwarf.y)) <= 1) {
-        // Close enough to work
-      } else {
-        // Path failed — recompute or fallback to old behavior
-        return dwarf;
       }
     }
 
     const dist = Math.max(Math.abs(task.x - dwarf.x), Math.abs(task.y - dwarf.y));
-    if (dist > 1) {
+    if (dwarf.z !== task.z || dist > 1) {
       return dwarf;
     }
 
-
     dwarf.state = 'WORKING';
-    task.progress += 1;
+    const workLabor = getRequiredLabor(task.type);
+    const quirkSpeed = getQuirkWorkSpeed(dwarf.quirk, workLabor, dwarf.z);
+    const crownMiningBonus =
+      workLabor === 'MINING' && displayedRelics.has('CROWN_OF_EMBER') ? 0.25 : 0;
+    const instantPick =
+      workLabor === 'MINING' && equippedRelic === 'ANCIENT_PICK' ? 2 : 0;
+    task.progress += quirkSpeed + crownMiningBonus + instantPick;
 
     if (task.progress >= task.totalTicks) {
       const cost = getConstructionCost(task.type);
@@ -1924,15 +2134,17 @@ export function stepSimulationTick(state: GameState): GameState {
         const prevTerrain = targetTile.terrain;
         switch (task.type) {
           case 'MINE': {
+            const oreMult =
+              displayedRelics.has('ANCIENT_PICK') || equippedRelic === 'ANCIENT_PICK' ? 2 : 1;
             if (prevTerrain === 'IRON_VEIN' || prevTerrain === 'COPPER_VEIN') {
-              resources.ironOre += 3;
+              resources.ironOre += 3 * oreMult;
               resources.stone += 1;
-              resources.wealth += 35;
+              resources.wealth += 35 * oreMult;
               addLog(`${dwarf.name} struck rich metallic ore at (${task.x}, ${task.y}, Z-${task.z})!`, 'WORK');
             } else if (prevTerrain === 'GOLD_VEIN' || prevTerrain === 'MITHRIL_VEIN') {
-              resources.goldOre += 3;
-              resources.steelBars += prevTerrain === 'MITHRIL_VEIN' ? 1 : 0;
-              resources.wealth += 120;
+              resources.goldOre += 3 * oreMult;
+              resources.steelBars += (prevTerrain === 'MITHRIL_VEIN' ? 1 : 0) * oreMult;
+              resources.wealth += 120 * oreMult;
               addAlert(
                 prevTerrain === 'MITHRIL_VEIN' ? 'STAR-MITHRIL UNEARTHED' : 'GOLD SEAM MINED',
                 'DISCOVERY',
@@ -2198,13 +2410,21 @@ export function stepSimulationTick(state: GameState): GameState {
     );
   }
 
-  // Seasonal Migrant Wave at season turn when provisions are healthy
+  // Seasonal Migrant Wave at season turn when provisions are healthy (cap scales with wealth up to 24)
+  const maxClanPop =
+    resources.wealth >= 14000
+      ? 24
+      : resources.wealth >= 7000
+      ? 20
+      : resources.wealth >= 3000
+      ? 17
+      : 14;
   if (
     nextTicks > 0 &&
     nextTicks % 120 === 0 &&
     resources.food >= 28 &&
     resources.ale >= 22 &&
-    nextDwarves.length < 14
+    nextDwarves.length < maxClanPop
   ) {
     const seasonalMigrant = createConfiguredMigrantDwarf({
       existingDwarves: nextDwarves,
@@ -2222,6 +2442,18 @@ export function stepSimulationTick(state: GameState): GameState {
       `[MIGRANT WAVE] ${seasonalMigrant.name} (${seasonalMigrant.title}) joined ${state.world.dwarvenName} with pre-configured jobs!`,
       'LORE'
     );
+  }
+
+  // Replenish seasonal Royal Guild Commissions at season turn
+  if (nextTicks > 0 && nextTicks % 120 === 0) {
+    const commRefresh = refreshSeasonalCommissions(nextGuild, nextTicks, nextYear);
+    nextGuild = commRefresh.nextGuild;
+    if (commRefresh.addedTitle) {
+      addLog(
+        `[GUILD HALL] New Royal Commission posted: "${commRefresh.addedTitle}".`,
+        'LORE'
+      );
+    }
   }
 
   // Trigger emergent narrative events every 45 ticks if none is currently awaiting player decision

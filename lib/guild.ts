@@ -199,30 +199,46 @@ export function performGuildAction(
       wealth: state.resources.wealth + commission.reward.wealth,
     };
 
-    const currentFavor = state.guild.favor[commission.patron] || 0;
-    const nextFavor = {
-      ...state.guild.favor,
-      [commission.patron]: Math.min(100, currentFavor + commission.reward.favor),
-    };
+  const currentFavor = state.guild.favor[commission.patron] || 0;
+  const nextFavorVal = Math.min(100, currentFavor + commission.reward.favor);
+  const nextFavor = {
+    ...state.guild.favor,
+    [commission.patron]: nextFavorVal,
+  };
 
-    const nextCommissions = state.guild.commissions.map((c) =>
-      c.id === action.id ? { ...c, status: "COMPLETED" as const } : c
-    );
+  const nextCivilizations = state.world.civilizations.map((civ) => {
+    if (civ.race !== commission.patron) return civ;
+    const nextStance: Civilization["stance"] =
+      nextFavorVal >= 30
+        ? "Allied"
+        : nextFavorVal >= 15
+          ? "Trade Partner"
+          : civ.stance;
+    return { ...civ, stance: nextStance };
+  });
 
-    return {
-      nextState: {
-        ...state,
-        resources: nextResources,
-        guild: {
-          ...state.guild,
-          favor: nextFavor,
-          commissions: nextCommissions,
-          relics: [...state.guild.relics, newRelic],
-        },
+  const nextCommissions = state.guild.commissions.map((c) =>
+    c.id === action.id ? { ...c, status: "COMPLETED" as const } : c
+  );
+
+  return {
+    nextState: {
+      ...state,
+      world: {
+        ...state.world,
+        civilizations: nextCivilizations,
       },
-      success: true,
-    };
-  }
+      resources: nextResources,
+      guild: {
+        ...state.guild,
+        favor: nextFavor,
+        commissions: nextCommissions,
+        relics: [...state.guild.relics, newRelic],
+      },
+    },
+    success: true,
+  };
+}
 
   if (action.type === "SET_RELIC_MODE") {
     const relic = state.guild.relics.find((r) => r.id === action.id);
@@ -271,10 +287,22 @@ export function performGuildAction(
     }
 
     const currentFavor = state.guild.favor[action.patron] || 0;
+    const nextFavorVal = Math.min(100, currentFavor + 15);
     const nextFavor = {
       ...state.guild.favor,
-      [action.patron]: Math.min(100, currentFavor + 15),
+      [action.patron]: nextFavorVal,
     };
+
+    const nextCivilizations = state.world.civilizations.map((civ) => {
+      if (civ.race !== action.patron) return civ;
+      const nextStance: Civilization["stance"] =
+        nextFavorVal >= 30
+          ? "Allied"
+          : nextFavorVal >= 15
+            ? "Trade Partner"
+            : civ.stance;
+      return { ...civ, stance: nextStance };
+    });
 
     const nextRelics = state.guild.relics.map((r) =>
       r.id === action.id
@@ -297,6 +325,10 @@ export function performGuildAction(
     return {
       nextState: {
         ...state,
+        world: {
+          ...state.world,
+          civilizations: nextCivilizations,
+        },
         guild: {
           ...state.guild,
           favor: nextFavor,
@@ -421,4 +453,133 @@ export function getQuirkProductionModifier(
     default:
       return 1.0;
   }
+}
+
+const SEASONAL_COMMISSION_TEMPLATES: ReadonlyArray<{
+  title: string;
+  description: string;
+  patron: Civilization["race"];
+  resource: keyof FortressResources;
+  baseAmount: number;
+  baseWealth: number;
+  favor: number;
+  relic: string;
+}> = [
+  {
+    title: "Dressed Stone for the Royal Bastion",
+    description: "Supply quarried stone blocks to reinforce the Mountainhome citadel.",
+    patron: "Dwarves",
+    resource: "stone",
+    baseAmount: 35,
+    baseWealth: 420,
+    favor: 20,
+    relic: "ANCIENT_PICK",
+  },
+  {
+    title: "Masterwork Furnishings for the High Hall",
+    description: "Deliver carved coffers and thrones for the royal council chambers.",
+    patron: "Dwarves",
+    resource: "furniture",
+    baseAmount: 8,
+    baseWealth: 550,
+    favor: 25,
+    relic: "RUNIC_ANVIL",
+  },
+  {
+    title: "Tempered Steel Ingots for Frontier Watch",
+    description: "Provide smelted steel bars to outfit the northern human watchtowers.",
+    patron: "Humans",
+    resource: "steelBars",
+    baseAmount: 6,
+    baseWealth: 600,
+    favor: 25,
+    relic: "HORN_OF_VALOR",
+  },
+  {
+    title: "Vintage Cavern Ale for the Sylvan Feast",
+    description: "Send casks of aged mushroom ale to the elven diplomatic envoy.",
+    patron: "Elves",
+    resource: "ale",
+    baseAmount: 30,
+    baseWealth: 480,
+    favor: 20,
+    relic: "MITHRIL_CHALICE",
+  },
+  {
+    title: "Plate Mail & Arms for the Iron Legion",
+    description: "Deliver forged armor suits for the sovereign shield-host.",
+    patron: "Humans",
+    resource: "armor",
+    baseAmount: 4,
+    baseWealth: 750,
+    favor: 30,
+    relic: "CROWN_OF_EMBER",
+  },
+  {
+    title: "Bullion Tribute of the Deep Seams",
+    description: "Present unrefined gold ore to the Royal Mint scribes.",
+    patron: "Goblins",
+    resource: "goldOre",
+    baseAmount: 6,
+    baseWealth: 850,
+    favor: 25,
+    relic: "CHRONICLE_CODEX",
+  },
+];
+
+/**
+ * Expire past-deadline commissions and replenish seasonal royal charters when
+ * fewer than 2 offered commissions remain.
+ */
+export function refreshSeasonalCommissions(
+  guild: GuildState,
+  ticks: number,
+  year: number
+): { nextGuild: GuildState; addedTitle: string | null } {
+  let changed = false;
+  const updatedCommissions = guild.commissions.map((c) => {
+    if ((c.status === "OFFERED" || c.status === "ACTIVE") && ticks >= c.deadline) {
+      changed = true;
+      return { ...c, status: "EXPIRED" as const };
+    }
+    return c;
+  });
+
+  const openOffers = updatedCommissions.filter((c) => c.status === "OFFERED");
+  let addedTitle: string | null = null;
+
+  if (openOffers.length < 2) {
+    const tierScale = Math.max(1, 1 + Math.floor((year - 251) * 0.25));
+    const tplIdx = (ticks / 120 + updatedCommissions.length) % SEASONAL_COMMISSION_TEMPLATES.length;
+    const tpl = SEASONAL_COMMISSION_TEMPLATES[Math.floor(tplIdx)];
+    const newComm: Commission = {
+      id: `comm-season-${ticks}-${updatedCommissions.length + 1}`,
+      title: tpl.title,
+      description: tpl.description,
+      patron: tpl.patron,
+      requirement: {
+        resource: tpl.resource,
+        amount: Math.round(tpl.baseAmount * tierScale),
+      },
+      reward: {
+        wealth: Math.round(tpl.baseWealth * tierScale),
+        favor: tpl.favor,
+        relic: tpl.relic,
+      },
+      deadline: ticks + 960,
+      status: "OFFERED",
+    };
+    updatedCommissions.push(newComm);
+    addedTitle = newComm.title;
+    changed = true;
+  }
+
+  if (!changed) return { nextGuild: guild, addedTitle: null };
+  return {
+    nextGuild: {
+      ...guild,
+      commissions: updatedCommissions,
+    },
+    addedTitle,
+  };
 }

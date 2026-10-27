@@ -197,10 +197,10 @@ export default function Sidebar({ activeTab, onTabChange }: { activeTab: Sidebar
         {activeTab === 'PROGRESSION' && (
           <div className="space-y-3" data-testid="progression-panel">
             <section className="mountainhome-goal" aria-label="Mountainhome goal">
-              <h2>{progression.score >= 6000 ? 'Mountainhome Capital reached' : 'Your goal: build a Mountainhome'}</h2>
-              <p>Reach 6,000 fortress score through wealth, population, workshops, deeper exploration, and relics.</p>
-              <progress aria-label="Mountainhome progress" value={Math.min(6000, progression.score)} max={6000} />
-              <strong>{progression.score.toLocaleString()} / 6,000 fortress score</strong>
+              <h2>{progression.score >= 25000 ? 'Mountainhome Capital reached' : 'Your goal: build a Mountainhome'}</h2>
+              <p>Reach 25,000 fortress score through wealth, population, workshops, deeper exploration, and relics.</p>
+              <progress aria-label="Mountainhome progress" value={Math.min(25000, progression.score)} max={25000} />
+              <strong>{progression.score.toLocaleString()} / 25,000 fortress score</strong>
               <p>Claim completed milestones below to earn supplies, migrants, and artifacts.</p>
             </section>
             {/* 1. Fortress Sovereignty Rank Card */}

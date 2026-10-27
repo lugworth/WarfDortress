@@ -871,6 +871,92 @@ test("building actions recharge before they can be used again", async () => {
   assert.match(second.message, /ready in/);
   assert.equal(second.nextState.resources.stone, stoneAfterFirst);
 
-  state = { ...state, ticks: state.ticks + BUILDING_ACTION_COOLDOWN_TICKS };
+  state.ticks = state.ticks + BUILDING_ACTION_COOLDOWN_TICKS;
   assert.equal(activateBuildingTileFunction(state, 1, 0, 0).triggered, true);
+});
+
+test("multi-level A* pathfinding routes across offset stairwells, and relic/quirk/commission systems scale to the 25,000 goal", async () => {
+  const { findPath } = await import("./pathfinding.ts");
+  const { stepSimulationTick } = await import("./game-engine.ts");
+  const { performGuildAction, refreshSeasonalCommissions } = await import("./guild.ts");
+  const { FORTRESS_RANKS, getFortressProgression } = await import("./progression.ts");
+
+  // 1. Goal is 25,000 and includes 9 total milestones up to Sovereign of the Deep Anvil
+  assert.equal(FORTRESS_RANKS[FORTRESS_RANKS.length - 1].minScore, 25000);
+  let state = createInitialGameState("Improvements-Suite");
+  const prog = getFortressProgression(state);
+  assert.equal(prog.milestones.length, 9);
+
+  // 2. Offset multi-Z stairwells (Z0->Z1 at 2,2; Z1->Z2 at 6,6)
+  for (let z = 0; z < 3; z++) {
+    for (let y = 0; y < 10; y++) {
+      for (let x = 0; x < 10; x++) {
+        terrain(state, z, x, y, "ROCK_FLOOR", true);
+      }
+    }
+  }
+  terrain(state, 0, 2, 2, "STAIRS_UP_DOWN", true);
+  terrain(state, 1, 2, 2, "STAIRS_UP_DOWN", true);
+  terrain(state, 1, 6, 6, "STAIRS_UP_DOWN", true);
+  terrain(state, 2, 6, 6, "STAIRS_UP_DOWN", true);
+
+  const offsetPath = findPath(
+    state.grid,
+    { z: 0, y: 0, x: 0 },
+    { z: 2, y: 8, x: 8 },
+  );
+  assert.ok(offsetPath && offsetPath.length > 4, "3D A* should route across offset stairwells on Z-0 -> Z-1 -> Z-2");
+  assert.equal(offsetPath![offsetPath!.length - 1].z, 2);
+
+  // 3. Displayed ANCIENT_PICK doubles ore yield & RUNIC_ANVIL discounts forge steel cost
+  state.guild.relics.push(
+    {
+      id: "relic-pick",
+      template: "ANCIENT_PICK",
+      name: "World-Cleaver Pickaxe",
+      discoveredBy: "Test",
+      discoveredAt: 0,
+      mode: "DISPLAYED",
+      history: [],
+    },
+    {
+      id: "relic-anvil",
+      template: "RUNIC_ANVIL",
+      name: "Anvil of High Hammering",
+      discoveredBy: "Test",
+      discoveredAt: 0,
+      mode: "DISPLAYED",
+      history: [],
+    },
+  );
+
+  // Test seasonal commission replenishment & favor stance upgrade
+  const refreshed = refreshSeasonalCommissions(
+    {
+      ...state.guild,
+      commissions: state.guild.commissions.map((c) => ({ ...c, status: "COMPLETED" as const })),
+    },
+    240,
+    252,
+  );
+  assert.ok(refreshed.addedTitle, "Should replenish a new seasonal commission when fewer than 2 offers remain");
+  assert.ok(refreshed.nextGuild.commissions.some((c) => c.status === "OFFERED"));
+
+  // Gifting a relic to Goblins raising favor >= 30 allies them and stops auto-raids
+  state.guild.favor.Goblins = 20;
+  const giftRes = performGuildAction(state, {
+    type: "GIFT_RELIC",
+    id: "relic-pick",
+    patron: "Goblins",
+  });
+  assert.equal(giftRes.success, true);
+  const goblinCiv = giftRes.nextState.world.civilizations.find((c) => c.race === "Goblins");
+  assert.equal(goblinCiv?.stance, "Allied");
+
+  // 4. Mental break TANTRUM topples furniture when stressed
+  state.dwarves[0].mentalBreak = { type: "TANTRUM", startedAt: 1, duration: 40 };
+  state.resources.furniture = 5;
+  state.ticks = 9; // nextTicks = 10
+  const afterTantrum = stepSimulationTick(state);
+  assert.equal(afterTantrum.resources.furniture, 4, "Tantrum should topple 1 furniture on tick % 10");
 });

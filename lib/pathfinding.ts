@@ -130,57 +130,107 @@ function astarSameLevel(
 }
 
 /**
- * Find path between two 3D grid positions using A*.
- * Handles different Z levels by finding the nearest stairwell,
- * pathing to it, ascending/descending, then pathing to the goal.
+ * Find path between two 3D grid positions using A* across all 3D walkable tiles
+ * and vertical STAIRS_UP_DOWN connections (including offset multi-stairwell routes).
  */
 export function findPath(
   grid: Tile[][][],
   start: Node3D,
   goal: Node3D
 ): Node3D[] | null {
-  // Same level: direct A*
+  // Fast path for same Z level
   if (start.z === goal.z) {
     return astarSameLevel(grid, start, goal);
   }
 
-  // Different levels: find stairs on current level, path to nearest,
-  // then path from stairs on goal level to goal.
-  const stairsOnStartLevel = findStairs(grid, start.z);
-  const stairsOnGoalLevel = findStairs(grid, goal.z);
+  const openList: OpenNode[] = [
+    { ...start, g: 0, h: manhattan3D(start, goal), f: manhattan3D(start, goal), parent: null },
+  ];
+  const closed = new Set<string>();
+  const gScores = new Map<string, number>();
+  gScores.set(nodeKey(start), 0);
 
-  // Try each stair on start level
-  for (const stairStart of stairsOnStartLevel) {
-    // Path to stair on start level
-    const pathToStair = astarSameLevel(grid, start, stairStart);
-    if (!pathToStair) continue;
+  const dirs = [
+    { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+    { dx: -1, dy: 0 },                     { dx: 1, dy: 0 },
+    { dx: -1, dy: 1 },  { dx: 0, dy: 1 },  { dx: 1, dy: 1 },
+  ];
 
-    // Find matching stair on goal level (same x,y)
-    const stairOnGoal = stairsOnGoalLevel.find(s => s.x === stairStart.x && s.y === stairStart.y);
-    if (!stairOnGoal) continue;
+  while (openList.length > 0) {
+    let bestIdx = 0;
+    for (let i = 1; i < openList.length; i++) {
+      if (openList[i].f < openList[bestIdx].f) bestIdx = i;
+    }
+    const current = openList.splice(bestIdx, 1)[0];
 
-    // Path from stair on goal level to goal
-    const pathFromStair = astarSameLevel(grid, stairOnGoal, goal);
-    if (!pathFromStair) continue;
-
-    // Combine: pathToStair (drop last step), all intermediate levels, pathFromStair
-    const fullPath = [...pathToStair];
-
-    // Add intermediate Z levels (stair by stair)
-    const dz = goal.z - start.z;
-    const step = dz > 0 ? 1 : -1;
-    let curZ = start.z;
-    while (curZ !== goal.z) {
-      curZ += step;
-      const stairAtZ = findStairs(grid, curZ).find(s => s.x === stairStart.x && s.y === stairStart.y);
-      if (stairAtZ) {
-        fullPath.push(stairAtZ);
+    if (current.x === goal.x && current.y === goal.y && current.z === goal.z) {
+      const path: Node3D[] = [];
+      let node: OpenNode | null = current;
+      while (node !== null) {
+        path.unshift({ z: node.z, y: node.y, x: node.x });
+        node = node.parent;
       }
+      return path;
     }
 
-    // Drop first step of second path (it's the stair we're already at)
-    fullPath.push(...pathFromStair.slice(1));
-    return fullPath;
+    const ck = nodeKey(current);
+    if (closed.has(ck)) continue;
+    closed.add(ck);
+
+    // 1. Same-Z neighbors
+    for (const d of dirs) {
+      const nx = current.x + d.dx;
+      const ny = current.y + d.dy;
+      const nk = `${current.z}:${ny}:${nx}`;
+      if (closed.has(nk)) continue;
+
+      const tile = getTile(grid, current.z, ny, nx);
+      if (!tile || !tile.walkable) continue;
+
+      const moveCost = d.dx !== 0 && d.dy !== 0 ? 1.414 : 1;
+      const tentativeG = current.g + moveCost;
+      if (gScores.has(nk) && tentativeG >= gScores.get(nk)!) continue;
+
+      const h = manhattan3D({ z: current.z, y: ny, x: nx }, goal);
+      gScores.set(nk, tentativeG);
+      openList.push({
+        z: current.z,
+        y: ny,
+        x: nx,
+        g: tentativeG,
+        h,
+        f: tentativeG + h,
+        parent: current,
+      });
+    }
+
+    // 2. Vertical stair transitions (STAIRS_UP_DOWN on current and adjacent Z)
+    const curTile = getTile(grid, current.z, current.y, current.x);
+    if (curTile && curTile.terrain === 'STAIRS_UP_DOWN') {
+      for (const dz of [-1, 1]) {
+        const nz = current.z + dz;
+        const nk = `${nz}:${current.y}:${current.x}`;
+        if (closed.has(nk)) continue;
+
+        const adjTile = getTile(grid, nz, current.y, current.x);
+        if (!adjTile || !adjTile.walkable || adjTile.terrain !== 'STAIRS_UP_DOWN') continue;
+
+        const tentativeG = current.g + 2;
+        if (gScores.has(nk) && tentativeG >= gScores.get(nk)!) continue;
+
+        const h = manhattan3D({ z: nz, y: current.y, x: current.x }, goal);
+        gScores.set(nk, tentativeG);
+        openList.push({
+          z: nz,
+          y: current.y,
+          x: current.x,
+          g: tentativeG,
+          h,
+          f: tentativeG + h,
+          parent: current,
+        });
+      }
+    }
   }
 
   return null;

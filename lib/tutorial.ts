@@ -8,7 +8,7 @@ export interface TutorialStep {
 export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   {
     title: 'Build a Mountainhome',
-    body: 'Your seven pioneers are the beginning of a future Mountainhome Capital. Reach 6,000 fortress score to earn the highest rank.',
+    body: 'Your seven pioneers are the beginning of a future Mountainhome Capital. Reach 25,000 fortress score to earn the highest rank.',
     entries: [
       { name: 'Your first priorities', text: 'Keep food and ale stocked, mine stone and ore, and establish reliable workshops.' },
       { name: 'How you progress', text: 'Wealth, population, workshops, deeper exploration, and relics all add to your fortress score. Quests offer smaller milestones and rewards along the way.' },
@@ -125,7 +125,7 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   },
   {
     title: 'Your road to the Mountainhome',
-    body: 'Reach 6,000 fortress score to become a Mountainhome Capital. Click the goal beneath the fortress name to see milestones and your next rank.',
+    body: 'Reach 25,000 fortress score to become a Mountainhome Capital. Click the goal beneath the fortress name to see milestones and your next rank.',
     entries: [
       { name: 'Build in stages', text: 'Secure food and ale, establish industry, arm the militia, explore deeper layers, and grow your wealth and population. Claim completed quest rewards to keep advancing.' },
       { name: 'Save your progress', text: 'The full colony autosaves in this browser every 15 seconds and when you leave. Save makes an immediate checkpoint; Continue on the realm screen restores it. Google sign-in enables cloud archives.' },

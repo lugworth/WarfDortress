@@ -334,18 +334,35 @@ export function performMilitiaAction(
       const memberSet = new Set(squad.memberIds);
       const resources = { ...state.resources };
       let equippedCount = 0;
+      const hasMithril = state.grid.slice(4).some((lvl) =>
+        lvl?.some((row) => row?.some((t) => t.revealed && t.terrain === 'ROCK_FLOOR'))
+      ) || state.resources.wealth >= 7000;
+      const bestWeaponType =
+        hasMithril
+          ? ('RUNED_MITHRIL_AXE' as const)
+          : state.resources.steelBars > 0 || state.resources.wealth >= 1500
+          ? ('STEEL_BATTLEAXE' as const)
+          : ('IRON_AXE' as const);
+      const bestArmorType =
+        hasMithril
+          ? ('MITHRIL_MAIL' as const)
+          : state.resources.steelBars > 0 || state.resources.wealth >= 1500
+          ? ('STEEL_PLATE' as const)
+          : ('IRON_MAIL' as const);
 
       const nextDwarves = state.dwarves.map((d) => {
         if (!memberSet.has(d.id) && d.squadId !== squad.id) return d;
         let nextD = { ...d, labors: { ...d.labors, COMBAT: true } };
-        if (!nextD.weaponEquipped && resources.weapons > 0) {
+        if ((!nextD.weaponEquipped || nextD.weaponType !== bestWeaponType) && resources.weapons > 0) {
           resources.weapons -= 1;
           nextD.weaponEquipped = true;
+          nextD.weaponType = bestWeaponType;
           equippedCount++;
         }
-        if (!nextD.armorEquipped && resources.armor > 0) {
+        if ((!nextD.armorEquipped || nextD.armorType !== bestArmorType) && resources.armor > 0) {
           resources.armor -= 1;
           nextD.armorEquipped = true;
+          nextD.armorType = bestArmorType;
           equippedCount++;
         }
         return nextD;
