@@ -39,6 +39,7 @@ import {
   isShelteredOrPavedTile,
 } from './weather.ts';
 import { findPath, nextStepAlongPath } from './pathfinding.ts';
+import { countOf, createGridDraft, getTerrainCounts, WORKSHOP_TERRAINS, type GridDraft } from './grid.ts';
 import { getWeapon, getArmor, weaponTier, armorTier } from './equipment.ts';
 import { getQuirkCombatModifiers } from './guild.ts';
 import { checkMentalBreak, getMentalBreakEntry, isMentalBreakOver, MENTAL_BREAK_INFO } from './mental-breaks.ts';
@@ -92,24 +93,14 @@ export function getSeasonModifiers(season: GameState['season']): {
 }
 
 export function scanWorldStrata(state: GameState): StratumScanSummary[] {
+  const { byLevel } = getTerrainCounts(state.grid);
   return state.world.strata.map((st) => {
     const z = st.zLevel;
-    const level = state.grid[z] || [];
-    let ironTiles = 0;
-    let goldTiles = 0;
-    let mithrilTiles = 0;
-    let relicTiles = 0;
-
-    for (let y = 0; y < level.length; y++) {
-      const row = level[y];
-      for (let x = 0; x < row.length; x++) {
-        const t = row[x].terrain;
-        if (t === 'IRON_VEIN' || t === 'COPPER_VEIN') ironTiles++;
-        else if (t === 'GOLD_VEIN') goldTiles++;
-        else if (t === 'MITHRIL_VEIN') mithrilTiles++;
-        else if (t === 'CAVERN_RELIC') relicTiles++;
-      }
-    }
+    const counts = byLevel[z] ?? new Map();
+    const ironTiles = countOf(counts, 'IRON_VEIN', 'COPPER_VEIN');
+    const goldTiles = countOf(counts, 'GOLD_VEIN');
+    const mithrilTiles = countOf(counts, 'MITHRIL_VEIN');
+    const relicTiles = countOf(counts, 'CAVERN_RELIC');
 
     const hostiles = (state.hostiles || []).filter((h) => h.z === z).length;
     const dwarves = state.dwarves.filter((d) => d.z === z).length;
@@ -1024,16 +1015,11 @@ export function applyAreaDesignation(
   };
 }
 
-function revealAround(grid: Tile[][][], z: number, x: number, y: number, radius = 2) {
-  const height = grid[z].length;
-  const width = grid[z][0].length;
+function revealAround(draft: GridDraft, z: number, x: number, y: number, radius = 2) {
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
-      const ny = y + dy;
-      const nx = x + dx;
-      if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
-        grid[z][ny][nx].revealed = true;
-      }
+      const tile = draft.tile(z, y + dy, x + dx);
+      if (tile && !tile.revealed) draft.edit(z, y + dy, x + dx)!.revealed = true;
     }
   }
 }
@@ -1070,9 +1056,7 @@ export function stepSimulationTick(state: GameState): GameState {
   });
 
 
-  const grid: Tile[][][] = state.grid.map((level) =>
-    level.map((row) => row.map((tile) => ({ ...tile })))
-  );
+  const draft = createGridDraft(state.grid);
   const resources: FortressResources = {
     stone: state.resources.stone ?? 25,
     wood: state.resources.wood ?? 20,
@@ -1124,42 +1108,15 @@ export function stepSimulationTick(state: GameState): GameState {
   };
 
   // Count fortress structures for passive buffs, storage capacity, and workshop processing
-  let farmCount = 0;
-  let bedCount = 0;
-  let tavernCount = 0;
-  let templeCount = 0;
-  let stockpileCount = 0;
-  let wallCount = 0;
-  let doorCount = 0;
-  let depotCount = 0;
-  let trapCount = 0;
-  const builtWorkshops = new Set<TileTerrain>();
-
-  for (let z = 0; z < state.world.depth; z++) {
-    for (let y = 0; y < state.world.height; y++) {
-      for (let x = 0; x < state.world.width; x++) {
-        const t = grid[z][y][x].terrain;
-        if (t === 'FARM_PLOT') farmCount++;
-        else if (t === 'BED') bedCount++;
-        else if (t === 'TAVERN_HALL') tavernCount++;
-        else if (t === 'TEMPLE_ALTAR') templeCount++;
-        else if (t === 'STOCKPILE_TILE') stockpileCount++;
-        else if (t === 'CONSTRUCTED_WALL') wallCount++;
-        else if (t === 'DOOR') doorCount++;
-        else if (t === 'TRADE_DEPOT') depotCount++;
-        else if (t === 'TRAP_STONE') trapCount++;
-        else if (
-          t === 'WORKSHOP_MASON' ||
-          t === 'WORKSHOP_CARPENTER' ||
-          t === 'WORKSHOP_STILL' ||
-          t === 'WORKSHOP_SMELTER' ||
-          t === 'WORKSHOP_FORGE'
-        ) {
-          builtWorkshops.add(t);
-        }
-      }
-    }
-  }
+  const terrainCounts = getTerrainCounts(state.grid).total;
+  const farmCount = countOf(terrainCounts, 'FARM_PLOT');
+  const bedCount = countOf(terrainCounts, 'BED');
+  const tavernCount = countOf(terrainCounts, 'TAVERN_HALL');
+  const templeCount = countOf(terrainCounts, 'TEMPLE_ALTAR');
+  const stockpileCount = countOf(terrainCounts, 'STOCKPILE_TILE');
+  const wallCount = countOf(terrainCounts, 'CONSTRUCTED_WALL');
+  const depotCount = countOf(terrainCounts, 'TRADE_DEPOT');
+  const builtWorkshops = new Set<TileTerrain>(WORKSHOP_TERRAINS.filter((t) => terrainCounts.has(t)));
 
   const activeFarmers = state.dwarves.filter((d) => d.labors.FARMING).length;
   const activeMasons = state.dwarves.filter((d) => d.labors.MASONRY).length;
@@ -1330,7 +1287,7 @@ export function stepSimulationTick(state: GameState): GameState {
   hostiles = hostiles.filter((h) => {
     if (h.hp <= 0) return false;
     // Move every 2 ticks (or every 4 ticks when slowed by a constructed Portal Door +)
-    const onTile = grid[h.z]?.[h.y]?.[h.x];
+    const onTile = draft.tile(h.z, h.y, h.x);
     const slowedByDoor = onTile?.terrain === 'DOOR' && nextTicks % 4 !== 0;
     if (nextTicks % 2 === 0 && !slowedByDoor) {
       let targetX = centerX;
@@ -1351,7 +1308,7 @@ export function stepSimulationTick(state: GameState): GameState {
       if (h.behavior === 'RAID_SEEK' || (h.behavior === 'CAVERN_GUARD' && nearestDist <= 6)) {
         const nx = Math.max(0, Math.min(state.world.width - 1, h.x + Math.sign(targetX - h.x)));
         const ny = Math.max(0, Math.min(state.world.height - 1, h.y + Math.sign(targetY - h.y)));
-        const destTile = grid[h.z]?.[ny]?.[nx];
+        const destTile = draft.tile(h.z, ny, nx);
         if (destTile && destTile.walkable) {
           h.x = nx;
           h.y = ny;
@@ -1366,7 +1323,7 @@ export function stepSimulationTick(state: GameState): GameState {
         const d = dirs[(h.x + h.y + nextTicks) % dirs.length];
         const nx = h.x + d.dx;
         const ny = h.y + d.dy;
-        const destTile = grid[h.z]?.[ny]?.[nx];
+        const destTile = draft.tile(h.z, ny, nx);
         if (destTile && destTile.walkable) {
           h.x = nx;
           h.y = ny;
@@ -1375,10 +1332,9 @@ export function stepSimulationTick(state: GameState): GameState {
     }
 
     // Check if hostile stepped onto a constructed Stone Deadfall Trap (^)
-    const currentTile = grid[h.z]?.[h.y]?.[h.x];
-    if (currentTile && currentTile.terrain === 'TRAP_STONE') {
+    if (draft.tile(h.z, h.y, h.x)?.terrain === 'TRAP_STONE') {
       h.hp -= 45;
-      setTileTerrain(currentTile, 'ROCK_FLOOR');
+      setTileTerrain(draft.edit(h.z, h.y, h.x)!, 'ROCK_FLOOR');
       if (h.hp <= 0) {
         resources.wealth += 50;
         addLog(`Stone deadfall trap crushed ${h.name} at (${h.x}, ${h.y}, Z-${h.z})!`, 'COMBAT');
@@ -1403,7 +1359,7 @@ export function stepSimulationTick(state: GameState): GameState {
   for (let z = 0; z < state.world.depth; z++) {
     for (let y = 0; y < state.world.height; y++) {
       for (let x = 0; x < state.world.width; x++) {
-        const t = grid[z][y][x];
+        const t = draft.grid[z][y][x];
         if (!t.designation || t.designation === 'MILITIA_STATION' || t.designation === 'MILITIA_PATROL') {
           continue;
         }
@@ -1490,7 +1446,7 @@ export function stepSimulationTick(state: GameState): GameState {
     });
 
     // Evaluate seasonal weather mood & thought impact every 10 ticks
-    const currentDwarfTile = grid[dwarf.z]?.[dwarf.y]?.[dwarf.x];
+    const currentDwarfTile = draft.tile(dwarf.z, dwarf.y, dwarf.x);
     if (nextTicks > 0 && nextTicks % 10 === 0) {
       applyWeatherExposureToDwarf(dwarf, activeWeather, {
         tick: nextTicks,
@@ -1793,7 +1749,7 @@ export function stepSimulationTick(state: GameState): GameState {
     }
 
     if (dwarf.currentTask) {
-      const targetTile = grid[dwarf.currentTask.z]?.[dwarf.currentTask.y]?.[dwarf.currentTask.x];
+      const targetTile = draft.tile(dwarf.currentTask.z, dwarf.currentTask.y, dwarf.currentTask.x);
       if (!targetTile || targetTile.designation !== dwarf.currentTask.type) {
         dwarf.currentTask = undefined;
         dwarf.state = 'IDLE';
@@ -1824,7 +1780,7 @@ export function stepSimulationTick(state: GameState): GameState {
             0,
             Math.min(state.world.height - 1, dwarf.y + Math.sign(dest.y - dwarf.y))
           );
-          const destTile = grid[dwarf.z]?.[ny]?.[nx];
+          const destTile = draft.tile(dwarf.z, ny, nx);
           if (destTile && destTile.walkable) {
             dwarf.x = nx;
             dwarf.y = ny;
@@ -1848,7 +1804,7 @@ export function stepSimulationTick(state: GameState): GameState {
         
         // For mining/building on non-walkable terrain, path to adjacent walkable tile
         let pathTarget = { z: bestCandidate.z, y: bestCandidate.y, x: bestCandidate.x };
-        const targetTile = grid[bestCandidate.z]?.[bestCandidate.y]?.[bestCandidate.x];
+        const targetTile = draft.tile(bestCandidate.z, bestCandidate.y, bestCandidate.x);
         if (targetTile && !targetTile.walkable) {
           // Find closest walkable neighbor
           let bestNeighbor = null;
@@ -1856,7 +1812,7 @@ export function stepSimulationTick(state: GameState): GameState {
           for (const [dx, dy] of [[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[-1,1],[1,-1],[1,1]]) {
             const nx = bestCandidate.x + dx;
             const ny = bestCandidate.y + dy;
-            const nt = grid[bestCandidate.z]?.[ny]?.[nx];
+            const nt = draft.tile(bestCandidate.z, ny, nx);
             if (nt && nt.walkable) {
               const dist = Math.abs(dx) + Math.abs(dy);
               if (dist < bestDist) {
@@ -1871,7 +1827,7 @@ export function stepSimulationTick(state: GameState): GameState {
         }
         
         const path = findPath(
-          grid,
+          draft.grid,
           { z: dwarf.z, y: dwarf.y, x: dwarf.x },
           pathTarget
         );
@@ -1898,7 +1854,7 @@ export function stepSimulationTick(state: GameState): GameState {
           const d = dirs[(dwarf.x + dwarf.y + nextTicks) % dirs.length];
           const nx = dwarf.x + d.dx;
           const ny = dwarf.y + d.dy;
-          const nt = grid[dwarf.z]?.[ny]?.[nx];
+          const nt = draft.tile(dwarf.z, ny, nx);
           if (nt && nt.walkable) {
             dwarf.x = nx;
             dwarf.y = ny;
@@ -1912,9 +1868,8 @@ export function stepSimulationTick(state: GameState): GameState {
     if (!task) return dwarf;
 
     // Follow the precomputed path
-    const path = (task as any).path;
     const nextPos = nextStepAlongPath(
-      path || [],
+      task.path || [],
       { z: dwarf.z, y: dwarf.y, x: dwarf.x }
     );
 
@@ -1928,12 +1883,12 @@ export function stepSimulationTick(state: GameState): GameState {
         // Check if this step involves changing Z levels (stair)
         if (nextPos.z !== dwarf.z) {
           dwarf.z = nextPos.z;
-          revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 3);
+          revealAround(draft, dwarf.z, dwarf.x, dwarf.y, 3);
         }
         dwarf.x = Math.max(0, Math.min(state.world.width - 1, nextPos.x));
         dwarf.y = Math.max(0, Math.min(state.world.height - 1, nextPos.y));
         if (nextPos.z === dwarf.z) {
-          revealAround(grid, dwarf.z, dwarf.x, dwarf.y, 2);
+          revealAround(draft, dwarf.z, dwarf.x, dwarf.y, 2);
         }
       }
     } else {
@@ -1956,10 +1911,10 @@ export function stepSimulationTick(state: GameState): GameState {
     task.progress += 1;
 
     if (task.progress >= task.totalTicks) {
-      const targetTile = grid[task.z][task.y][task.x];
       const cost = getConstructionCost(task.type);
 
       if (hasResources(resources, cost)) {
+        const targetTile = draft.edit(task.z, task.y, task.x)!;
         for (const [k, v] of Object.entries(cost)) {
           const key = k as keyof FortressResources;
           resources[key] -= v || 0;
@@ -1993,7 +1948,7 @@ export function stepSimulationTick(state: GameState): GameState {
               resources.wealth += 10;
             }
             setTileTerrain(targetTile, 'ROCK_FLOOR');
-            revealAround(grid, task.z, task.x, task.y, 3);
+            revealAround(draft, task.z, task.x, task.y, 3);
             appendDwarfThought(dwarf, {
               tick: nextTicks,
               year: nextYear,
@@ -2018,7 +1973,7 @@ export function stepSimulationTick(state: GameState): GameState {
             resources.relics += 1;
             resources.wealth += 300;
             setTileTerrain(targetTile, 'ROCK_FLOOR');
-            revealAround(grid, task.z, task.x, task.y, 4);
+            revealAround(draft, task.z, task.x, task.y, 4);
             appendDwarfThought(dwarf, {
               tick: nextTicks,
               year: nextYear,
@@ -2039,11 +1994,10 @@ export function stepSimulationTick(state: GameState): GameState {
             resources.stone += 2;
             resources.wealth += 15;
             setTileTerrain(targetTile, 'STAIRS_UP_DOWN');
-            revealAround(grid, task.z, task.x, task.y, 3);
+            revealAround(draft, task.z, task.x, task.y, 3);
             if (task.z + 1 < state.world.depth) {
-              const belowTile = grid[task.z + 1][task.y][task.x];
-              setTileTerrain(belowTile, 'STAIRS_UP_DOWN');
-              revealAround(grid, task.z + 1, task.x, task.y, 3);
+              setTileTerrain(draft.edit(task.z + 1, task.y, task.x)!, 'STAIRS_UP_DOWN');
+              revealAround(draft, task.z + 1, task.x, task.y, 3);
             }
             appendDwarfThought(dwarf, {
               tick: nextTicks,
@@ -2263,7 +2217,7 @@ export function stepSimulationTick(state: GameState): GameState {
 
   let nextState: GameState = {
     ...state,
-    grid,
+    grid: draft.grid,
     dwarves: nextDwarves,
     hostiles,
     alerts,
@@ -2317,36 +2271,17 @@ export interface ResourceEconomyBalance {
 
 export function getResourceEconomyBalance(state: GameState): ResourceEconomyBalance {
   const seasonMods = getSeasonModifiers(state.season);
-  let stockpileTiles = 0;
-  let farmCount = 0;
-  let bedCount = 0;
-  let wallCount = 0;
-  let doorCount = 0;
-  let trapCount = 0;
-  let tavernCount = 0;
-  let templeCount = 0;
-  let depotCount = 0;
-  let stillCount = 0;
-
-  for (let z = 0; z < state.world.depth; z++) {
-    const level = state.grid[z] || [];
-    for (let y = 0; y < level.length; y++) {
-      const row = level[y] || [];
-      for (let x = 0; x < row.length; x++) {
-        const t = row[x].terrain;
-        if (t === 'STOCKPILE_TILE') stockpileTiles++;
-        else if (t === 'FARM_PLOT') farmCount++;
-        else if (t === 'BED') bedCount++;
-        else if (t === 'CONSTRUCTED_WALL') wallCount++;
-        else if (t === 'DOOR') doorCount++;
-        else if (t === 'TRAP_STONE') trapCount++;
-        else if (t === 'TAVERN_HALL') tavernCount++;
-        else if (t === 'TEMPLE_ALTAR') templeCount++;
-        else if (t === 'TRADE_DEPOT') depotCount++;
-        else if (t === 'WORKSHOP_STILL') stillCount++;
-      }
-    }
-  }
+  const counts = getTerrainCounts(state.grid).total;
+  const stockpileTiles = countOf(counts, 'STOCKPILE_TILE');
+  const farmCount = countOf(counts, 'FARM_PLOT');
+  const bedCount = countOf(counts, 'BED');
+  const wallCount = countOf(counts, 'CONSTRUCTED_WALL');
+  const doorCount = countOf(counts, 'DOOR');
+  const trapCount = countOf(counts, 'TRAP_STONE');
+  const tavernCount = countOf(counts, 'TAVERN_HALL');
+  const templeCount = countOf(counts, 'TEMPLE_ALTAR');
+  const depotCount = countOf(counts, 'TRADE_DEPOT');
+  const stillCount = countOf(counts, 'WORKSHOP_STILL');
 
   const pop = Math.max(1, state.dwarves.length);
   // Each season is 120 ticks; each meal/drink restores 48 points

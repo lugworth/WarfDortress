@@ -7,11 +7,11 @@ import type {
   GameState,
   Relic,
   StrangeMoodState,
-  TileTerrain,
 } from "./types.ts";
 import { RELIC_TEMPLATES } from "./guild.ts";
 import { withDwarfThought } from "./thoughts.ts";
 import { createConfiguredMigrantDwarf } from "./world-gen.ts";
+import { countOf, getTerrainCounts, WORKSHOP_TERRAINS } from "./grid.ts";
 
 export interface BuildingUnlockStatus {
   tool: DesignationType;
@@ -117,40 +117,14 @@ export interface FortressProgressionSummary {
   canFulfillMood: boolean;
 }
 
-function getBuiltTerrainSet(state: GameState): Set<TileTerrain> {
-  const built = new Set<TileTerrain>();
-  for (let z = 0; z < state.grid.length; z++) {
-    const level = state.grid[z] || [];
-    for (let y = 0; y < level.length; y++) {
-      const row = level[y] || [];
-      for (let x = 0; x < row.length; x++) {
-        built.add(row[x].terrain);
-      }
-    }
-  }
-  return built;
-}
-
 function countConstructedWorkshops(state: GameState): number {
-  let count = 0;
-  for (let z = 0; z < state.grid.length; z++) {
-    const level = state.grid[z] || [];
-    for (let y = 0; y < level.length; y++) {
-      const row = level[y] || [];
-      for (let x = 0; x < row.length; x++) {
-        const t = row[x].terrain;
-        if (
-          t.startsWith("WORKSHOP_") ||
-          t === "TAVERN_HALL" ||
-          t === "TEMPLE_ALTAR" ||
-          t === "TRADE_DEPOT"
-        ) {
-          count++;
-        }
-      }
-    }
-  }
-  return count;
+  return countOf(
+    getTerrainCounts(state.grid).total,
+    ...WORKSHOP_TERRAINS,
+    "TAVERN_HALL",
+    "TEMPLE_ALTAR",
+    "TRADE_DEPOT",
+  );
 }
 
 export function getBuildingUnlockStatuses(
@@ -160,7 +134,7 @@ export function getBuildingUnlockStatuses(
   const unlockedSet = new Set<DesignationType>(
     state.activities?.unlockedBuildings || [],
   );
-  const builtTerrains = getBuiltTerrainSet(state);
+  const builtTerrains = getTerrainCounts(state.grid).total;
   const workshopCount = countConstructedWorkshops(state);
 
   const hasMason = builtTerrains.has("WORKSHOP_MASON");
@@ -481,14 +455,10 @@ export function syncBuildingUnlocks(state: GameState): {
 }
 
 function getDeepestRevealedZ(state: GameState): number {
-
+  const { byLevel } = getTerrainCounts(state.grid);
   let deepest = 0;
-  for (let z = 1; z < state.grid.length; z++) {
-    const level = state.grid[z] || [];
-    const hasStairway = level.some((row) =>
-      row.some((tile) => tile.terrain === "STAIRS_UP_DOWN"),
-    );
-    if (hasStairway) deepest = z;
+  for (let z = 1; z < byLevel.length; z++) {
+    if (byLevel[z].has("STAIRS_UP_DOWN")) deepest = z;
   }
   const deepestDwarfZ = state.dwarves.reduce((max, d) => Math.max(max, d.z), 0);
   return Math.max(deepest, deepestDwarfZ);

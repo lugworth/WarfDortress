@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useDialog } from '@/hooks/use-dialog';
 import { usePauseWhileOpen } from '@/hooks/use-pause-while-open';
 import { useGame } from './GameProvider';
 import { FortressResources } from '@/lib/types';
+import { getLevelTerrainCounts } from '@/lib/grid';
 
 interface TradeDepotModalProps {
   isOpen: boolean;
@@ -44,15 +45,7 @@ export function TradeDepotModal({ isOpen, onClose }: TradeDepotModalProps) {
   const [receiveAmounts, setReceiveAmounts] = useState<Partial<Record<keyof FortressResources, number>>>({});
   const [recruitMigrant, setRecruitMigrant] = useState<boolean>(false);
 
-  const hasBuiltDepot = useMemo(() => {
-    const surface = gameState.grid[0] || [];
-    for (let y = 0; y < surface.length; y++) {
-      for (let x = 0; x < (surface[y]?.length || 0); x++) {
-        if (surface[y][x].terrain === 'TRADE_DEPOT') return true;
-      }
-    }
-    return false;
-  }, [gameState.grid]);
+  const hasBuiltDepot = getLevelTerrainCounts(gameState.grid[0]).has('TRADE_DEPOT');
 
   const dialogRef = useDialog(isOpen, onClose);
   usePauseWhileOpen(isOpen);

@@ -433,6 +433,11 @@ export default function ASCIIViewport() {
   ]);
 
 
+  // The simulation copies only the rows it changes, so an underground level keeps
+  // its identity until something on it changes. Surface weather animates per tick.
+  const terrainLevel = gameState.grid[currentZ];
+  const weatherFrame = currentZ === 0 ? gameState : null;
+
   // Draw the ASCII Grid, Designations, Selection Box, Hostiles, and Dwarves
   useEffect(() => {
     if (logicalWidth <= 0 || logicalHeight <= 0) return;
@@ -445,7 +450,7 @@ export default function ASCIIViewport() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const level = gameState.grid[currentZ];
+    const level = terrainLevel;
     if (!level) return;
 
     ctx.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0);
@@ -470,8 +475,7 @@ export default function ASCIIViewport() {
           continue;
         }
 
-        const weatherVis =
-          currentZ === 0 ? getWeatherTileVisuals(gameState, tile) : null;
+        const weatherVis = weatherFrame ? getWeatherTileVisuals(weatherFrame, tile) : null;
         const effectiveBg = weatherVis ? weatherVis.bg : tile.bg;
         const effectiveFg = weatherVis ? weatherVis.fg : STONE_WALL_FOREGROUNDS[tile.terrain] ?? tile.fg;
         const effectiveChar = weatherVis ? weatherVis.char : tile.char;
@@ -531,7 +535,7 @@ export default function ASCIIViewport() {
     }
 
 
-  }, [gameState, currentZ, gridWidth, gridHeight, CELL_W, CELL_H, logicalWidth, logicalHeight, viewport.dpr, scale, palette, preferences.theme, fontReady]);
+  }, [terrainLevel, weatherFrame, gridWidth, gridHeight, CELL_W, CELL_H, logicalWidth, logicalHeight, viewport.dpr, scale, palette, preferences.theme, fontReady]);
 
   // Composite cached terrain with changing creatures, selection, and hover feedback.
   useEffect(() => {
