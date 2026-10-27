@@ -10,7 +10,7 @@ import { collectClanAnecdotes, getSentimentBadge } from '@/lib/thoughts';
 import type { ChronicleEntry } from '@/lib/types';
 import AsciiSelect from './AsciiSelect';
 
-type GeminiModelOption = 'gemini-3.8-flash' | 'gemini-4-argon' | 'gemini-3.1-flash-lite';
+type GeminiModelOption = 'gemini-3.8-flash' | 'gemini-4-argon' | 'gemini-3.5-flash-lite';
 type ChronicleFilter = 'ALL' | ChronicleEntry['type'];
 
 const chronicleCategories: { value: ChronicleFilter; label: string }[] = [
@@ -26,12 +26,12 @@ const chronicleCategories: { value: ChronicleFilter; label: string }[] = [
 const MODEL_OPTIONS: { value: GeminiModelOption; label: string }[] = [
   { value: 'gemini-3.8-flash', label: 'Flash' },
   { value: 'gemini-4-argon', label: 'Argon' },
-  { value: 'gemini-3.1-flash-lite', label: 'Lite' },
+  { value: 'gemini-3.5-flash-lite', label: 'Lite' },
 ];
 
 export default function AdvisorPanel() {
   const { gameState } = useGame();
-  const [selectedModel, setSelectedModel] = useState<GeminiModelOption>('gemini-3.1-flash-lite');
+  const [selectedModel, setSelectedModel] = useState<GeminiModelOption>('gemini-3.5-flash-lite');
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'model'; content: string }>>([
     {
       role: 'model',

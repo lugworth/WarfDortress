@@ -1,6 +1,6 @@
 import { Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
-import { generateWithModelFallback } from '@/lib/gemini-server';
+import { generateWithModelFallback, readJsonBody, textModels } from '@/lib/gemini-server';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       stockpileCount,
       squads,
       goblinCiv,
-    } = await req.json();
+    } = await readJsonBody<Record<string, unknown> & { goblinCiv?: { name?: string; ruler?: string } }>(req, 32_000);
 
     const prompt = `You are the AI Combat Director for a Dwarf Fortress-style simulation at "${dwarvenName}" (Year ${year}, ${season}, Tick ${ticks}).
 Analyze the fortress defenses and generate an AI-driven Goblin Raid Battle Plan for "${goblinCiv?.name || 'The Fang Scourge'}" led by "${goblinCiv?.ruler || 'Warlord Snagtooth'}":
@@ -33,7 +33,7 @@ Select the most fitting raid tactic from:
 Provide a dramatic warlord battle cry, a concise target summary, and a specific tactical counter-recommendation referencing Station (♦) or Patrol (») squad orders.`;
 
     const result = await generateWithModelFallback({
-      models: ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'],
+      models: textModels('gemini-3.8-flash'),
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

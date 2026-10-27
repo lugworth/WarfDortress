@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateWithModelFallback } from '@/lib/gemini-server';
+import { ADVISOR_MODELS, generateWithModelFallback, readJsonBody, textModels } from '@/lib/gemini-server';
 
-const ALLOWED_MODELS = new Set([
-  'gemini-4-argon',
-  'gemini-3.8-flash',
-  'gemini-3.1-flash-lite',
-]);
+const ALLOWED_MODELS = new Set<string>(ADVISOR_MODELS);
+const MAX_MESSAGES = 12;
+const MAX_MESSAGE_CHARS = 2000;
 
 function buildDeterministicAdvisorReply(
   fortressSummary: Record<string, unknown> | undefined,
@@ -111,12 +109,13 @@ export async function POST(req: NextRequest) {
   } = {};
 
   try {
-    body = await req.json();
-    const { messages = [], fortressSummary, model } = body;
-    const preferredModel = ALLOWED_MODELS.has(model || '') ? String(model) : 'gemini-3.1-flash-lite';
-    const fallbackOrder = Array.from(
-      new Set([preferredModel, 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'])
-    );
+    body = await readJsonBody(req, 128_000);
+    const { fortressSummary, model } = body;
+    const messages = (Array.isArray(body.messages) ? body.messages : []).slice(-MAX_MESSAGES).map((m) => ({
+      role: m?.role === 'model' ? 'model' : 'user',
+      parts: [{ text: String(m?.parts?.[0]?.text ?? '').slice(0, MAX_MESSAGE_CHARS) }],
+    }));
+    const fallbackOrder = textModels(ALLOWED_MODELS.has(model || '') ? model : undefined);
 
     const systemInstruction = `You are High Chronicler & Royal Fortress Advisor Bomrek Anvilward, counseling the Overseer of a Dwarven Fortress.
 Current Fortress Telemetry & Dwarven Thoughts/Feelings Log:
@@ -130,7 +129,7 @@ Role & Tone:
 
     const result = await generateWithModelFallback({
       models: fallbackOrder,
-      contents: messages as never,
+      contents: messages,
       config: {
         systemInstruction,
       },
@@ -150,8 +149,9 @@ Role & Tone:
       modelUsed: 'deterministic-chronicler',
     });
   } catch {
-    const lastUserMsg =
-      body.messages?.[body.messages.length - 1]?.parts?.[0]?.text || '';
+    const lastUserMsg = Array.isArray(body.messages)
+      ? String(body.messages[body.messages.length - 1]?.parts?.[0]?.text ?? '').slice(0, MAX_MESSAGE_CHARS)
+      : '';
     return NextResponse.json(
       {
         text: buildDeterministicAdvisorReply(body.fortressSummary, lastUserMsg),

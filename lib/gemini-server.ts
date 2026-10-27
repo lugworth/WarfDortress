@@ -1,4 +1,29 @@
-import { GoogleGenAI, GenerateContentConfig, ContentListUnion } from '@google/genai';
+import { GoogleGenAI, type GenerateContentConfig, type ContentListUnion } from '@google/genai';
+
+// Stable Gemini API model codes, cheapest first. Google recommends 3.5 Flash-Lite
+// or 3.8 Flash for new projects: https://ai.google.dev/gemini-api/docs/models
+export const TEXT_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'] as const;
+export const ADVISOR_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-4-argon'] as const;
+export const TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'] as const;
+
+/** The fallback chain with `preferred` tried first. */
+export function textModels(preferred?: string): string[] {
+  return [...new Set([...(preferred ? [preferred] : []), ...TEXT_MODELS])];
+}
+
+/**
+ * Reads a JSON request body, refusing anything larger than `maxBytes`. These
+ * routes spend the server's Gemini key, so they never accept unbounded input.
+ */
+export async function readJsonBody<T = Record<string, unknown>>(req: Request, maxBytes: number): Promise<T> {
+  const declared = Number(req.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > maxBytes) throw new RangeError('Request body too large');
+  const text = await req.text();
+  if (text.length > maxBytes) throw new RangeError('Request body too large');
+  const body = JSON.parse(text);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new TypeError('Expected a JSON object');
+  return body as T;
+}
 
 let cachedClient: GoogleGenAI | null = null;
 let cachedKey: string | undefined;

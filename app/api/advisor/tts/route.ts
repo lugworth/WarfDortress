@@ -4,13 +4,13 @@ import {
   isModelAvailable,
   isQuotaOrRateLimitError,
   markModelCooldown,
+  readJsonBody,
+  TTS_MODELS,
 } from '@/lib/gemini-server';
-
-const TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
 
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json();
+    const { text } = await readJsonBody(req, 8_000);
     const client = getGeminiClient();
     if (!text || !client) {
       return NextResponse.json({ audio: null, fallback: true }, { status: 200 });

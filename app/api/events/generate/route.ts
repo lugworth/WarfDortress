@@ -1,6 +1,6 @@
 import { Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
-import { generateWithModelFallback } from '@/lib/gemini-server';
+import { generateWithModelFallback, readJsonBody, textModels } from '@/lib/gemini-server';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       history,
       pastEvents,
       requestedSeverity,
-    } = await req.json();
+    } = await readJsonBody(req, 64_000);
 
     const prompt = `Generate a rich, interactive Dwarf Fortress-style narrative event for the fortress "${dwarvenName}" in "${worldName}" (Year ${year}, ${season}, Tick ${ticks}).
 Current Fortress State:
@@ -37,7 +37,7 @@ Requirements:
   3. A free/cautious choice with zero cost so the player is never soft-locked.`;
 
     const result = await generateWithModelFallback({
-      models: ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'],
+      models: textModels(),
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
