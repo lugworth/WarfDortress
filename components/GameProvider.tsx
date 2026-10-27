@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import {
   DesignationType,
@@ -21,6 +21,8 @@ import {
   type ExpeditionAction,
 } from '@/lib/expeditions';
 import {
+  getFortressProgression,
+  type FortressProgressionSummary,
   claimMilestoneReward,
   fulfillStrangeMood,
   syncBuildingUnlocks,
@@ -70,6 +72,7 @@ interface GameContextType {
   screen: ScreenMode;
   setScreen: (s: ScreenMode) => void;
   gameState: GameState;
+  progression: FortressProgressionSummary;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
   currentZ: number;
   setCurrentZ: React.Dispatch<React.SetStateAction<number>>;
@@ -77,8 +80,6 @@ interface GameContextType {
   setSelectedTool: (t: DesignationType) => void;
   selectedDwarfId: string | null;
   setSelectedDwarfId: (id: string | null) => void;
-  hoveredTile: Tile | null;
-  setHoveredTile: (t: Tile | null) => void;
   inspectMode: boolean;
   setInspectMode: React.Dispatch<React.SetStateAction<boolean>>;
   inspectedCoord: { x: number; y: number; z: number } | null;
@@ -130,11 +131,19 @@ const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [screen, setScreenState] = useState<ScreenMode>('title');
-  const [gameState, setGameState] = useState<GameState>(() => createInitialGameState('Khazad-251'));
+  const [gameState, setGameStateInternal] = useState<GameState>(() => createInitialGameState('Khazad-251'));
+  const latestState = useRef(gameState);
+  // Game commands need their result immediately. Evaluate once against the latest
+  // snapshot, then publish it to React; updater replay must not change return values.
+  const setGameState = useCallback<React.Dispatch<React.SetStateAction<GameState>>>((update) => {
+    const next = typeof update === 'function' ? update(latestState.current) : update;
+    latestState.current = next;
+    setGameStateInternal(next);
+  }, []);
+  const progression = useMemo(() => getFortressProgression(gameState), [gameState]);
   const [currentZ, setCurrentZ] = useState<number>(0);
   const [selectedTool, setSelectedTool] = useState<DesignationType>('MINE');
   const [selectedDwarfId, setSelectedDwarfId] = useState<string | null>('dwarf-1');
-  const [hoveredTile, setHoveredTile] = useState<Tile | null>(null);
   const [inspectMode, setInspectMode] = useState<boolean>(false);
   const [inspectedCoord, setInspectedCoord] = useState<{ x: number; y: number; z: number } | null>({
     x: 39,
@@ -153,8 +162,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   const [localSave, setLocalSave] = useState<LocalSaveSummary | null>(null);
-  const latestState = useRef(gameState);
-  useEffect(() => { latestState.current = gameState; }, [gameState]);
   const sessionStarted = useRef(false);
   const persistLocal = useCallback((state: GameState) => {
     try {
@@ -180,11 +187,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const params = new URLSearchParams(window.location.search);
       const autostart = params.get('autostart') === '1';
       const frame = requestAnimationFrame(() => {
-        setGameState(createInitialGameState(freshSeed));
+        let restored: GameState | null = null;
         try {
-          const saved = parseLocalSave(localStorage.getItem(LOCAL_SAVE_KEY));
-          if (saved) setLocalSave(getLocalSaveSummary(saved));
+          restored = parseLocalSave(localStorage.getItem(LOCAL_SAVE_KEY));
+          if (restored) setLocalSave(getLocalSaveSummary(restored));
         } catch { /* Storage can be disabled; the game still runs. */ }
+        setGameState(autostart && restored ? restored : createInitialGameState(freshSeed));
         if (autostart) {
           sessionStarted.current = true;
           setScreenState('playing');
@@ -193,17 +201,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       });
       return () => cancelAnimationFrame(frame);
     }
-  }, []);
+  }, [setGameState]);
 
   useEffect(() => {
     if (screen !== 'playing') return;
-    const save = () => { if (sessionStarted.current) persistLocal(latestState.current); };
-    const timer = window.setInterval(save, 15_000);
+    let lastSaved: GameState | null = null;
+    let idleSave: number | null = null;
+    const save = () => {
+      if (sessionStarted.current && latestState.current !== lastSaved && persistLocal(latestState.current)) lastSaved = latestState.current;
+    };
+    const scheduleSave = () => {
+      if (idleSave !== null) return;
+      if ('requestIdleCallback' in window) idleSave = window.requestIdleCallback(() => { idleSave = null; save(); }, { timeout: 2000 });
+      else save();
+    };
+    const timer = window.setInterval(scheduleSave, 15_000);
     const onVisibility = () => { if (document.hidden) save(); };
     window.addEventListener('pagehide', save);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       clearInterval(timer);
+      if (idleSave !== null) window.cancelIdleCallback(idleSave);
       window.removeEventListener('pagehide', save);
       document.removeEventListener('visibilitychange', onVisibility);
       save();
@@ -249,10 +267,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (screen !== 'playing' || gameState.paused) return;
-    const isHeadless =
-      typeof navigator !== 'undefined' &&
-      (navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent));
-    const baseInterval = isHeadless ? 700 : 480;
+    const baseInterval = 480;
     const intervalMs = Math.max(120, Math.floor(baseInterval / gameState.speed));
 
     const timer = setInterval(() => {
@@ -260,7 +275,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [screen, gameState.paused, gameState.speed]);
+  }, [screen, gameState.paused, gameState.speed, setGameState]);
 
   const jumpToLocation = useCallback((x: number, y: number, z: number) => {
     setCurrentZ(z);
@@ -312,7 +327,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [setScreen, persistLocal]
+    [setScreen, persistLocal, setGameState]
   );
 
   const designateBox = useCallback(
@@ -327,7 +342,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       });
       return modifiedCount;
     },
-    [currentZ, selectedTool]
+    [currentZ, selectedTool, setGameState]
   );
 
   const toggleDwarfLabor = useCallback((dwarfId: string, labor: DwarfLabor) => {
@@ -345,11 +360,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           : d
       ),
     }));
-  }, []);
+  }, [setGameState]);
 
   const applyPreset = useCallback((preset: LaborPresetId) => {
     setGameState((prev) => applyLaborPreset(prev, preset));
-  }, []);
+  }, [setGameState]);
 
   const setMilitiaDoctrine = useCallback((doctrine: MilitiaDoctrine) => {
     setGameState((prev) => ({
@@ -367,11 +382,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev.chronicle.slice(0, 59),
       ],
     }));
-  }, []);
+  }, [setGameState]);
 
   const triggerGoblinRaid = useCallback(() => {
     setGameState((prev) => spawnGoblinRaid(prev));
-  }, []);
+  }, [setGameState]);
 
   const performTradeBarter = useCallback(
     (
@@ -381,7 +396,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     ) => {
       setGameState((prev) => executeTradeBarter(prev, give, receive, recruitMigrant));
     },
-    []
+    [setGameState]
   );
 
   const addWorkOrder = useCallback((order: Omit<WorkOrder, 'id'>) => {
@@ -406,7 +421,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev.chronicle.slice(0, 59),
       ],
     }));
-  }, []);
+  }, [setGameState]);
 
   const toggleWorkOrderAutoRepeat = useCallback((orderId: string) => {
     setGameState((prev) => ({
@@ -415,14 +430,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         o.id === orderId ? { ...o, autoRepeat: !o.autoRepeat, remaining: Math.max(1, o.remaining) } : o
       ),
     }));
-  }, []);
+  }, [setGameState]);
 
   const removeWorkOrder = useCallback((orderId: string) => {
     setGameState((prev) => ({
       ...prev,
       workOrders: prev.workOrders.filter((o) => o.id !== orderId),
     }));
-  }, []);
+  }, [setGameState]);
 
   const triggerNarrativeEvent = useCallback(
     async (severity?: NarrativeEventSeverity, useAI = true) => {
@@ -480,24 +495,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setIsGeneratingEvent(false);
       }
     },
-    [gameState]
+    [gameState, setGameState]
   );
 
   const resolveActiveEvent = useCallback((choiceId: string) => {
     setGameState((prev) => resolveNarrativeEvent(prev, choiceId));
-  }, []);
+  }, [setGameState]);
 
   const stepManualTick = useCallback(() => {
     setGameState((prev) => stepSimulationTick(prev));
-  }, []);
+  }, [setGameState]);
 
   const togglePause = useCallback(() => {
     setGameState((prev) => ({ ...prev, paused: !prev.paused }));
-  }, []);
+  }, [setGameState]);
 
   const setSpeed = useCallback((speed: 1 | 2 | 4) => {
     setGameState((prev) => ({ ...prev, speed }));
-  }, []);
+  }, [setGameState]);
 
   const handleGoogleSignIn = useCallback(async () => {
     try {
@@ -542,12 +557,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setGameState(saved);
       setCurrentZ(0);
       setSelectedDwarfId(saved.dwarves[0]?.id ?? null);
-      setHoveredTile(null);
       setInspectMode(false);
       setScreen("playing");
       setSaveStatus(`Resumed ${saved.world.dwarvenName}. Press Resume when ready.`);
     } catch { setSaveStatus("Browser storage is unavailable."); }
-  }, [setScreen]);
+  }, [setScreen, setGameState]);
 
   const loadCloudSave = useCallback(
     (save: CloudFortressSave) => {
@@ -568,7 +582,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setScreen('playing');
       setSaveStatus(`Loaded ${save.dwarvenName} (Year ${save.year})`);
     },
-    [setScreen]
+    [setScreen, setGameState]
   );
 
   const performGuildAction = useCallback((action: GuildAction): boolean => {
@@ -579,7 +593,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return res.nextState;
     });
     return success;
-  }, []);
+  }, [setGameState]);
 
   const performExpeditionAction = useCallback((action: ExpeditionAction) => {
     let success = false;
@@ -589,7 +603,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return res.nextState;
     });
     return success;
-  }, []);
+  }, [setGameState]);
 
   const claimMilestone = useCallback((milestoneId: string) => {
     let claimed = false;
@@ -599,7 +613,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return res.nextState;
     });
     return claimed;
-  }, []);
+  }, [setGameState]);
 
   const startStrangeMood = useCallback(() => {
     let triggered = false;
@@ -609,7 +623,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return res.nextState;
     });
     return triggered;
-  }, []);
+  }, [setGameState]);
 
   const completeStrangeMood = useCallback(() => {
     let fulfilled = false;
@@ -619,7 +633,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return syncBuildingUnlocks(res.nextState).nextState;
     });
     return fulfilled;
-  }, []);
+  }, [setGameState]);
 
   const cycleSeasonWeather = useCallback(() => {
     const seasons: GameState['season'][] = [
@@ -672,7 +686,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         chronicle: [entry, ...prev.chronicle.slice(0, 59)],
       };
     });
-  }, []);
+  }, [setGameState]);
 
   const activateBuildingFunction = useCallback(
     (x: number, y: number, z: number) => {
@@ -682,7 +696,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
       return { triggered: previewRes.triggered, message: previewRes.message };
     },
-    [gameState]
+    [gameState, setGameState]
   );
 
   const dispatchMilitiaAction = useCallback(
@@ -691,7 +705,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       setGameState((prev) => performMilitiaAction(prev, action).nextState);
       return { success: previewRes.success, message: previewRes.message };
     },
-    [gameState]
+    [gameState, setGameState]
   );
 
   const triggerAIRaidAnalysis = useCallback(
@@ -745,7 +759,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         };
       }
     },
-    [gameState]
+    [gameState, setGameState]
   );
 
   return (
@@ -754,6 +768,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         screen,
         setScreen,
         gameState,
+        progression,
         setGameState,
         currentZ,
         setCurrentZ,
@@ -761,8 +776,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setSelectedTool,
         selectedDwarfId,
         setSelectedDwarfId,
-        hoveredTile,
-        setHoveredTile,
         inspectMode,
         setInspectMode,
         inspectedCoord,

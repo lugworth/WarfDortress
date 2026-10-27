@@ -1,3 +1,4 @@
+import { STONE_WALL_FOREGROUNDS } from './colors.ts';
 import type {
   DwarfEntity,
   GameState,
@@ -233,7 +234,7 @@ export function getWeatherTileVisuals(
 ): WeatherTileVisual {
   const base: WeatherTileVisual = {
     char: tile.char,
-    fg: tile.fg,
+    fg: STONE_WALL_FOREGROUNDS[tile.terrain] ?? tile.fg,
     bg: tile.bg,
     particleChar: null,
     particleFg: null,

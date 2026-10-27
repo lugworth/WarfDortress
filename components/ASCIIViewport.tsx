@@ -8,8 +8,8 @@ import React, {
   useMemo,
 } from "react";
 import { useGame } from "./GameProvider";
-import { DesignationType, DwarfEntity, HostileEntity } from "@/lib/types";
-import { ISOTOPE } from "@/lib/colors";
+import { DesignationType, DwarfEntity, HostileEntity, Tile } from "@/lib/types";
+import { ISOTOPE, STONE_WALL_FOREGROUNDS } from "@/lib/colors";
 import {
   canDesignateTile,
   getBuildingTileFunctionInfo,
@@ -29,10 +29,6 @@ import AsciiSelect from "./AsciiSelect";
 import FortressSupplies from "./FortressSupplies";
 import { playTactileSfx } from "@/lib/audio";
 import { getWeatherTileVisuals } from "@/lib/weather";
-import {
-  getBuildingUnlockStatus,
-  getBuildingUnlockStatuses,
-} from "@/lib/progression";
 import { ensureMilitiaState } from "@/lib/militia";
 
 
@@ -106,14 +102,13 @@ export default function ASCIIViewport() {
   const { preferences, updatePreferences } = useUI();
   const {
     gameState,
+    progression,
     currentZ,
     setCurrentZ,
     selectedTool,
     setSelectedTool,
     selectedDwarfId,
     setSelectedDwarfId,
-    hoveredTile,
-    setHoveredTile,
     inspectMode,
     setInspectMode,
     inspectedCoord,
@@ -128,6 +123,15 @@ export default function ASCIIViewport() {
   } = useGame();
 
 
+  // Hover is view state; it must not invalidate every game-context consumer.
+  const [hoveredCoord, setHoveredCoord] = useState<{ x: number; y: number; z: number } | null>(null);
+  const hoveredTile = hoveredCoord ? gameState.grid[hoveredCoord.z]?.[hoveredCoord.y]?.[hoveredCoord.x] ?? null : null;
+  const setHoveredTile = useCallback((tile: Tile | null) => setHoveredCoord(previous => {
+    if (!tile) return previous === null ? previous : null;
+    return previous?.x === tile.x && previous.y === tile.y && previous.z === tile.z
+      ? previous : { x: tile.x, y: tile.y, z: tile.z };
+  }), []);
+  const terrainCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const suppliesRef = useRef<HTMLDivElement>(null);
@@ -173,6 +177,8 @@ export default function ASCIIViewport() {
     setDragCurrent(null);
   }
 
+  const buildingUnlocks = progression.buildingUnlocks;
+  const unlockByTool = useMemo(() => new Map(buildingUnlocks.map(status => [status.tool, status])), [buildingUnlocks]);
   const gridWidth = gameState.world.width;
   const gridHeight = gameState.world.height;
   const zoom = preferences.mapZoom === "fit" ? null : preferences.mapZoom / 100;
@@ -182,8 +188,8 @@ export default function ASCIIViewport() {
   const logicalWidth = Math.max(viewport.width, CELL_W * gridWidth);
   const logicalHeight = Math.max(viewport.height, CELL_H * gridHeight);
   const points = useMemo(
-    () => getMapPoints(gameState, currentZ),
-    [gameState, currentZ],
+    () => preferences.labels || inspectMode || mapOptions ? getMapPoints(gameState, currentZ) : [],
+    [gameState, currentZ, preferences.labels, inspectMode, mapOptions],
   );
   const selection = useMemo(
     () =>
@@ -276,11 +282,14 @@ export default function ASCIIViewport() {
     const toolbar = toolbarRef.current;
     if (!toolbar) return;
     const update = () => {
-      setDockHeight(toolbar.offsetHeight);
-      if (suppliesRef.current) setSuppliesHeight(suppliesRef.current.offsetHeight);
+      const toolHeight = toolbarRef.current?.offsetHeight;
+      const resourceHeight = suppliesRef.current?.offsetHeight;
+      if (toolHeight) setDockHeight(toolHeight);
+      if (resourceHeight) setSuppliesHeight(resourceHeight);
     };
     const observer = new ResizeObserver(update);
     observer.observe(toolbar);
+    if (scrollRef.current) observer.observe(scrollRef.current);
     if (suppliesRef.current) observer.observe(suppliesRef.current);
     update();
     return () => observer.disconnect();
@@ -400,7 +409,7 @@ export default function ASCIIViewport() {
         setInspectMode((v) => !v);
       } else if (TOOL_KEYS[e.key.toLowerCase()]) {
         const candidateTool = TOOL_KEYS[e.key.toLowerCase()];
-        const unlockInfo = getBuildingUnlockStatus(gameState, candidateTool);
+        const unlockInfo = unlockByTool.get(candidateTool);
         if (unlockInfo && !unlockInfo.unlocked) {
           setOrderStatus(
             `Locked Blueprint: ${unlockInfo.title} requires ${unlockInfo.requirementLabel} (${unlockInfo.progressText}).`,
@@ -420,13 +429,19 @@ export default function ASCIIViewport() {
     setSelectedTool,
     togglePause,
     jumpToLocation,
+    unlockByTool,
   ]);
 
 
   // Draw the ASCII Grid, Designations, Selection Box, Hostiles, and Dwarves
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (logicalWidth <= 0 || logicalHeight <= 0) return;
+    const canvas = terrainCanvasRef.current ?? document.createElement('canvas');
+    terrainCanvasRef.current = canvas;
+    const width = Math.ceil(logicalWidth * viewport.dpr);
+    const height = Math.ceil(logicalHeight * viewport.dpr);
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -458,7 +473,7 @@ export default function ASCIIViewport() {
         const weatherVis =
           currentZ === 0 ? getWeatherTileVisuals(gameState, tile) : null;
         const effectiveBg = weatherVis ? weatherVis.bg : tile.bg;
-        const effectiveFg = weatherVis ? weatherVis.fg : tile.fg;
+        const effectiveFg = weatherVis ? weatherVis.fg : STONE_WALL_FOREGROUNDS[tile.terrain] ?? tile.fg;
         const effectiveChar = weatherVis ? weatherVis.char : tile.char;
 
         // Tile background
@@ -515,6 +530,24 @@ export default function ASCIIViewport() {
       }
     }
 
+
+  }, [gameState, currentZ, gridWidth, gridHeight, CELL_W, CELL_H, logicalWidth, logicalHeight, viewport.dpr, scale, palette, preferences.theme, fontReady]);
+
+  // Composite cached terrain with changing creatures, selection, and hover feedback.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || logicalWidth <= 0 || logicalHeight <= 0) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const level = gameState.grid[currentZ];
+    if (!level) return;
+    ctx.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0);
+    ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+    const terrain = terrainCanvasRef.current;
+    if (terrain?.width && terrain.height) ctx.drawImage(terrain, 0, 0, logicalWidth, logicalHeight);
+    ctx.font = `bold ${13 * scale}px "Fortress Mono", "Courier New", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
     // 2. Render Drag-Selection Box
     if (selection && preview && selection.z === currentZ) {
@@ -844,7 +877,7 @@ export default function ASCIIViewport() {
     const coord = clientToGrid(e.clientX, e.clientY);
     if (!coord) return;
     if (dragStart && !inspectMode) {
-      setDragCurrent(coord);
+      setDragCurrent(previous => previous?.x === coord.x && previous.y === coord.y ? previous : coord);
     }
     const tile = gameState.grid[currentZ]?.[coord.y]?.[coord.x] || null;
     if (e.pointerType !== "touch") setHoveredTile(tile);
@@ -1033,10 +1066,6 @@ export default function ASCIIViewport() {
 
   const isSecondaryToolActive = SECONDARY_FAB_TOOLS.some(
     (t) => t.id === selectedTool,
-  );
-  const buildingUnlocks = useMemo(
-    () => getBuildingUnlockStatuses(gameState),
-    [gameState],
   );
   const unlockedTierBuildingsCount = useMemo(
     () => buildingUnlocks.filter((b) => b.tier > 0 && b.unlocked).length,
@@ -1251,14 +1280,6 @@ export default function ASCIIViewport() {
         </section>
       )}
 
-      {preferences.tooltips && hoverMeta && !dragStart && !preview && !inspectMode && !mapOptions && !showBuildDrawer && (
-        <aside data-testid="hover-tile-inspector" aria-label="Hover tile inspector" className="compact-tile-tooltip">
-          <div><span style={{ color: hoverMeta.fg }}>{hoverMeta.char}</span><strong>{hoverMeta.terrainLabel}</strong>
-            <span className="tooltip-coord">{hoverMeta.x},{hoverMeta.y}</span></div>
-          <p>{hoverMeta.materialType}</p>
-          {hoverMeta.occupancy.some(o => o.startsWith('☺') || o.includes('HP)')) && <p>{hoverMeta.occupancy.join(' · ')}</p>}
-        </aside>
-      )}
       {/* FLOATING ORDER PREVIEW & CONFIRMATION CARD (Above FAB Dock) */}
       {preview && selection && (
         <section
@@ -1590,7 +1611,7 @@ export default function ASCIIViewport() {
               const active = !inspectMode && selectedTool === item.id;
               const cost = getConstructionCost(item.id);
               const costLabel = formatCost(cost);
-              const unlockInfo = getBuildingUnlockStatus(gameState, item.id);
+              const unlockInfo = unlockByTool.get(item.id);
               const isLocked = Boolean(unlockInfo && !unlockInfo.unlocked);
               return (
                 <button
@@ -1655,6 +1676,15 @@ export default function ASCIIViewport() {
       )}
 
       </div>
+      <div className="map-tool-stack">
+      {preferences.tooltips && hoverMeta && !dragStart && !preview && !inspectMode && !mapOptions && !showBuildDrawer && (
+        <aside data-testid="hover-tile-inspector" aria-label="Hover tile inspector" className="compact-tile-tooltip">
+          <div><span style={{ color: hoverMeta.fg }}>{hoverMeta.char}</span><strong>{hoverMeta.terrainLabel}</strong>
+            <span className="tooltip-coord">{hoverMeta.x},{hoverMeta.y}</span></div>
+          <p>{hoverMeta.materialType}</p>
+          {hoverMeta.occupancy.some(o => o.startsWith('☺') || o.includes('HP)')) && <p>{hoverMeta.occupancy.join(' · ')}</p>}
+        </aside>
+      )}
       {/* FLOATING ACTION BUTTON (FAB) TOOL DOCK ON MAP DISPLAY */}
       <div
         ref={toolbarRef}
@@ -1664,7 +1694,7 @@ export default function ASCIIViewport() {
       >
         {PRIMARY_FAB_TOOLS.map((item) => {
           const active = !inspectMode && selectedTool === item.id;
-          const unlockInfo = getBuildingUnlockStatus(gameState, item.id);
+          const unlockInfo = unlockByTool.get(item.id);
           const isLocked = Boolean(unlockInfo && !unlockInfo.unlocked);
           return (
             <button
@@ -1787,6 +1817,7 @@ export default function ASCIIViewport() {
           <span>×</span>
           <span>Clear</span>
         </button>
+      </div>
       </div>
       </div>
       <div className="map-status" role="status">

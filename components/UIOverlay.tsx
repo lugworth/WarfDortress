@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useDialog } from "@/hooks/use-dialog";
 import { FONT_SIZES, MAP_ZOOMS } from "@/lib/ui-preferences";
 import { TOOL_KEYS } from "@/lib/game-rules";
-import { getBuildingUnlockStatus } from "@/lib/progression";
 import { usePauseWhileOpen } from "@/hooks/use-pause-while-open";
 import { getConstructionCost } from "@/lib/game-engine";
 import { TOOL_NAMES } from "@/lib/ui-labels";
@@ -39,7 +38,7 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
     updatePreferences,
     storageError,
   } = useUI();
-  const { gameState, setSelectedTool, setInspectMode } =
+  const { progression, setSelectedTool, setInspectMode } =
     useGame();
   const dialogRef = useDialog(overlay !== null, closeOverlay);
   const [query, setQuery] = useState("");
@@ -53,6 +52,9 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
       ),
     [query],
   );
+  const unlocks = useMemo(() => new Map(
+    progression.buildingUnlocks.map(status => [status.tool, status]),
+  ), [progression.buildingUnlocks]);
   const activeIndex = Math.min(selected, Math.max(0, filtered.length - 1));
 
   useEffect(() => {
@@ -72,7 +74,7 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
   const choose = (index: number) => {
     const tool = filtered[index];
     if (!tool) return;
-    const unlock = getBuildingUnlockStatus(gameState, tool.id);
+    const unlock = unlocks.get(tool.id);
     if (unlock && !unlock.unlocked) return;
     setSelectedTool(tool.id);
     setInspectMode(false);
@@ -158,7 +160,7 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
                 filtered.map((tool, i) => (
                   <button
                     key={tool.id}
-                    disabled={getBuildingUnlockStatus(gameState, tool.id)?.unlocked === false}
+                    disabled={unlocks.get(tool.id)?.unlocked === false}
                     data-command-active={i === activeIndex}
                     className={`${button} command-result w-full ${i === activeIndex ? "border-[var(--ui-accent)] bg-[var(--ui-selection)]" : ""}`}
                     onClick={() => choose(i)}
@@ -177,8 +179,8 @@ export default function UIOverlay({ onShowMap }: { onShowMap: () => void }) {
                     </span>
                     <span className="block text-xs text-[var(--ui-info)]">
                       {tool.group} · {formatCost(getConstructionCost(tool.id))}
-                      {getBuildingUnlockStatus(gameState, tool.id)?.unlocked === false &&
-                        ` · Locked: ${getBuildingUnlockStatus(gameState, tool.id)?.requirementLabel}`}
+                      {unlocks.get(tool.id)?.unlocked === false &&
+                        ` · Locked: ${unlocks.get(tool.id)?.requirementLabel}`}
                     </span>
                     <span className="block text-xs text-[var(--ui-muted)]">
                       {tool.desc}

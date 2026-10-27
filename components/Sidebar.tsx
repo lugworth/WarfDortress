@@ -14,7 +14,6 @@ import {
   getResourceEconomyBalance,
   scanWorldStrata,
 } from '@/lib/game-engine';
-import { getFortressProgression } from '@/lib/progression';
 import { formatCost } from '@/lib/tool-catalog';
 import { asciiBar } from '@/lib/ui-model';
 import { getSentimentBadge } from '@/lib/thoughts';
@@ -33,9 +32,12 @@ const ALL_LABORS: DwarfLabor[] = [
   'HAULING',
 ];
 
-export default function Sidebar() {
+export type SidebarTab = 'PROGRESSION' | 'DWARVES' | 'STOCKS' | 'RADAR';
+
+export default function Sidebar({ activeTab, onTabChange }: { activeTab: SidebarTab; onTabChange: (tab: SidebarTab) => void }) {
   const {
     gameState,
+    progression,
     currentZ,
     setCurrentZ,
     selectedTool,
@@ -65,13 +67,9 @@ export default function Sidebar() {
   const [aiAnalyzeBusy, setAiAnalyzeBusy] = useState<boolean>(false);
 
 
-  const [activeTab, setActiveTab] = useState<'PROGRESSION' | 'DWARVES' | 'STOCKS' | 'RADAR'>(
-    'DWARVES'
-  );
 
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const strataSummaries = useMemo(() => scanWorldStrata(gameState), [gameState]);
-  const progression = useMemo(() => getFortressProgression(gameState), [gameState]);
+  const strataSummaries = useMemo(() => activeTab === 'RADAR' ? scanWorldStrata(gameState) : [], [activeTab, gameState]);
   const claimableCount = progression.milestones.filter(
     (m) => m.completed && !m.claimed
   ).length + (progression.canFulfillMood ? 1 : 0);
@@ -179,7 +177,7 @@ export default function Sidebar() {
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => onTabChange(tab.id)}
             aria-pressed={activeTab === tab.id}
             className={`py-2 px-0.5 text-center transition-colors border-r border-[var(--ui-border)] last:border-r-0 whitespace-nowrap flex items-center justify-center shrink-0 text-[11px] ${
               activeTab === tab.id
@@ -198,6 +196,13 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
         {activeTab === 'PROGRESSION' && (
           <div className="space-y-3" data-testid="progression-panel">
+            <section className="mountainhome-goal" aria-label="Mountainhome goal">
+              <h2>{progression.score >= 6000 ? 'Mountainhome Capital reached' : 'Your goal: build a Mountainhome'}</h2>
+              <p>Reach 6,000 fortress score through wealth, population, workshops, deeper exploration, and relics.</p>
+              <progress aria-label="Mountainhome progress" value={Math.min(6000, progression.score)} max={6000} />
+              <strong>{progression.score.toLocaleString()} / 6,000 fortress score</strong>
+              <p>Claim completed milestones below to earn supplies, migrants, and artifacts.</p>
+            </section>
             {/* 1. Fortress Sovereignty Rank Card */}
             <div
               data-testid="fortress-rank-card"

@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { GameProvider, useGame } from '@/components/GameProvider';
 import { UIProvider } from '@/components/UIProvider';
 import ASCIIViewport from '@/components/ASCIIViewport';
-import Sidebar from '@/components/Sidebar';
+import Sidebar, { type SidebarTab } from '@/components/Sidebar';
+import TutorialPanel from '@/components/TutorialPanel';
+import type { TutorialAction } from '@/lib/tutorial';
 import AdvisorPanel from '@/components/AdvisorPanel';
 import NarrativeEventModal from '@/components/NarrativeEventModal';
 import { TradeDepotModal } from '@/components/TradeDepotModal';
@@ -39,6 +41,10 @@ function FortressShell() {
     screen,
     setScreen,
     gameState,
+    setGameState,
+    setSelectedTool,
+    setInspectMode,
+    handleCloudSave,
     embarkNewWorld,
     triggerNarrativeEvent,
     user,
@@ -56,8 +62,12 @@ function FortressShell() {
   const seedInput = customSeedInput ?? gameState.world.seed ?? 'Khazad-251';
   const [isEmbarking, setIsEmbarking] = useState(false);
   const [panels, setPanels] = useState({ clan: false, chronicle: false });
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('DWARVES');
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideStep, setGuideStep] = useState(0);
   const showMap = () => setPanels({ clan: false, chronicle: false });
   const togglePanel = (panel: 'clan' | 'chronicle') => {
+    setGuideOpen(false);
     const narrow = window.matchMedia('(max-width: 1023px)').matches;
     setPanels(current => {
       if (narrow) {
@@ -72,16 +82,48 @@ function FortressShell() {
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
   const [isGuildModalOpen, setIsGuildModalOpen] = useState(false);
 
-  // Desktop side panel toggles to maximize ASCII map area
+  const openGuide = () => {
+    setPanels(current => ({ ...current, chronicle: false }));
+    setGameState(current => ({ ...current, paused: true }));
+    setGuideOpen(true);
+  };
+  const openGoals = () => {
+    setSidebarTab('PROGRESSION');
+    setPanels(current => ({ ...current, clan: true, chronicle: false }));
+    if (window.matchMedia('(max-width: 1023px)').matches) setGuideOpen(false);
+  };
+  const openDecree = () => {
+    if (!gameState.activeEvent) triggerNarrativeEvent(undefined, true);
+    setIsEventModalOpen(true);
+  };
+  const guideAction = (action: TutorialAction) => {
+    if (action === 'GOALS') { openGoals(); return; }
+    if (action === 'DISPLAY') { openOverlay('settings'); return; }
+    if (action === 'TRADE') { setIsTradeModalOpen(true); return; }
+    if (action === 'GUILD') { setIsGuildModalOpen(true); return; }
+    if (action === 'DECREES') { openDecree(); return; }
+    if (action === 'SAVE') { handleCloudSave(); return; }
+    if (action === 'CHRONICLE') { setGuideOpen(false); setPanels(current => ({ ...current, chronicle: true })); return; }
+    if (action === 'CLAN') {
+      setSidebarTab('DWARVES');
+      setPanels({ clan: true, chronicle: false });
+    } else {
+      setSelectedTool(action === 'MINE' ? 'MINE' : action === 'STAIRS' ? 'STAIRS' : 'BUILD_FARM');
+      setInspectMode(false);
+      setPanels({ clan: false, chronicle: false });
+    }
+    if (window.matchMedia('(max-width: 1023px)').matches) setGuideOpen(false);
+  };
 
-
-
-  const previewWorld = generateDeterministicWorldMeta(seedInput || 'Khazad-251');
+  const previewWorld = useMemo(() => generateDeterministicWorldMeta(seedInput || 'Khazad-251'), [seedInput]);
   const previewArchetype = getSurfaceArchetype(seedInput || 'Khazad-251');
 
   const handleStartEmbark = async () => {
     if (isEmbarking) return;
     setIsEmbarking(true);
+    setGuideStep(0);
+    setGuideOpen(true);
+    setPanels({ clan: false, chronicle: false });
     try { await embarkNewWorld(seedInput, true); } finally { setIsEmbarking(false); }
   };
 
@@ -326,34 +368,33 @@ function FortressShell() {
   // PLAYING SCREEN
   return (
     <div className="game-shell">
-      <GameHeader clanOpen={panels.clan} chronicleOpen={panels.chronicle}
-        onShowMap={showMap} onToggleClan={() => togglePanel('clan')} onToggleChronicle={() => togglePanel('chronicle')}
+      <GameHeader onGuide={openGuide} onGoals={openGoals} clanOpen={panels.clan} chronicleOpen={panels.chronicle}
+        onToggleClan={() => togglePanel('clan')} onToggleChronicle={() => togglePanel('chronicle')}
         onGuild={() => setIsGuildModalOpen(true)} onTrade={() => setIsTradeModalOpen(true)}
-        onDecree={() => {
-          if (!gameState.activeEvent) triggerNarrativeEvent(undefined, true);
-          setIsEventModalOpen(true);
-        }} />
+        onDecree={openDecree} />
       {saveStatus && <div className="save-feedback" role="status">{saveStatus}</div>}
-      <div className="game-workspace" data-chronicle-open={panels.chronicle}>
+      <div className="game-workspace" data-chronicle-open={panels.chronicle || guideOpen}>
         {panels.clan && <aside id="clan-panel" className="workspace-sidebar workspace-sidebar--left" aria-label="Clan and orders">
           <div className="workspace-sidebar-heading">
             <strong>Clan & orders</strong>
             <button onClick={() => setPanels(current => ({ ...current, clan: false }))} aria-label="Close clan panel">×</button>
           </div>
-          <Sidebar />
+          <Sidebar activeTab={sidebarTab} onTabChange={setSidebarTab} />
         </aside>}
-        <main className="game-map" data-panel-open={panels.clan || panels.chronicle} aria-label="Fortress map workspace">
+        <main className="game-map" data-panel-open={panels.clan || panels.chronicle || guideOpen} aria-label="Fortress map workspace">
           <ASCIIViewport />
         </main>
-        {panels.chronicle && <aside id="chronicle-panel" className="workspace-sidebar workspace-sidebar--right" aria-label="Chronicle and advisor">
+        {panels.chronicle && !guideOpen && <aside id="chronicle-panel" className="workspace-sidebar workspace-sidebar--right" aria-label="Chronicle and advisor">
           <div className="workspace-sidebar-heading">
             <strong>Chronicle</strong>
             <button onClick={() => setPanels(current => ({ ...current, chronicle: false }))} aria-label="Close chronicle panel">×</button>
           </div>
           <AdvisorPanel />
         </aside>}
+        {guideOpen && <TutorialPanel step={guideStep} onStep={setGuideStep} onClose={() => setGuideOpen(false)} onAction={guideAction}
+          onFinish={() => { setGuideOpen(false); setGameState(current => ({ ...current, paused: false })); }} />}
       </div>
-      <UIOverlay onShowMap={showMap} />
+      <UIOverlay onShowMap={() => { showMap(); if (window.matchMedia('(max-width: 1023px)').matches) setGuideOpen(false); }} />
 
       {/* Narrative Event & Decree Modal */}
       <NarrativeEventModal

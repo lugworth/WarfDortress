@@ -11,6 +11,7 @@ import type {
   TileTerrain,
   WorldData,
 } from './types.ts';
+import { STONE_WALL_FOREGROUNDS } from './colors.ts';
 import { createInitialThoughtLog } from './thoughts.ts';
 
 export type SurfaceArchetype =
@@ -188,11 +189,11 @@ export function getTerrainVisuals(terrain: TileTerrain): {
     case 'SOIL':
       return { char: '░', fg: '#ff9900', bg: '#101010', walkable: false };
     case 'ROCK_WALL':
-      return { char: '▓', fg: '#d0d0d0', bg: '#101010', walkable: false };
+      return { char: '▓', fg: STONE_WALL_FOREGROUNDS.ROCK_WALL!, bg: '#101010', walkable: false };
     case 'LIMESTONE_WALL':
-      return { char: '▒', fg: '#e0e0e0', bg: '#101010', walkable: false };
+      return { char: '▒', fg: STONE_WALL_FOREGROUNDS.LIMESTONE_WALL!, bg: '#101010', walkable: false };
     case 'GRANITE_WALL':
-      return { char: '█', fg: '#808080', bg: '#000000', walkable: false };
+      return { char: '█', fg: STONE_WALL_FOREGROUNDS.GRANITE_WALL!, bg: '#000000', walkable: false };
     case 'IRON_VEIN':
       return { char: '£', fg: '#ff9900', bg: '#101010', walkable: false };
     case 'COPPER_VEIN':

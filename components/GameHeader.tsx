@@ -3,21 +3,22 @@
 import { useEffect, useRef } from 'react';
 import { useGame } from './GameProvider';
 import { useUI } from './UIProvider';
-import { getFortressProgression } from '@/lib/progression';
+import { FORTRESS_RANKS } from '@/lib/progression';
 
 interface Props {
   clanOpen: boolean;
   chronicleOpen: boolean;
-  onShowMap: () => void;
   onToggleClan: () => void;
   onToggleChronicle: () => void;
+  onGuide: () => void;
+  onGoals: () => void;
   onGuild: () => void;
   onTrade: () => void;
   onDecree: () => void;
 }
 
-export default function GameHeader({ clanOpen, chronicleOpen, onShowMap, onToggleClan, onToggleChronicle, onGuild, onTrade, onDecree }: Props) {
-  const { gameState: state, togglePause, stepManualTick, setSpeed, handleCloudSave, setScreen } = useGame();
+export default function GameHeader({ clanOpen, chronicleOpen, onToggleClan, onToggleChronicle, onGuide, onGoals, onGuild, onTrade, onDecree }: Props) {
+  const { gameState: state, progression, togglePause, stepManualTick, setSpeed, handleCloudSave, setScreen } = useGame();
   const { openOverlay } = useUI();
   const menu = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
@@ -37,7 +38,8 @@ export default function GameHeader({ clanOpen, chronicleOpen, onShowMap, onToggl
       document.removeEventListener('keydown', onKey);
     };
   }, []);
-  const rank = getFortressProgression(state).currentRank;
+  const rank = progression.currentRank;
+  const goalScore = FORTRESS_RANKS[FORTRESS_RANKS.length - 1].minScore;
   const menuAction = (action: () => void) => {
     if (menu.current) menu.current.open = false;
     action();
@@ -50,6 +52,7 @@ export default function GameHeader({ clanOpen, chronicleOpen, onShowMap, onToggl
           <div className="min-w-0">
             <h1>{state.world.dwarvenName}</h1>
             <p>{rank.title}<span className="identity-calendar"> · Y{state.year} · {state.season} · T{state.ticks}</span></p>
+            <button className="fortress-goal-link" onClick={onGoals} title="View your Mountainhome goal and milestones">{progression.score >= goalScore ? 'Mountainhome Capital reached ✓' : `Goal: Mountainhome · ${progression.score.toLocaleString()} / ${goalScore.toLocaleString()}`}</button>
           </div>
         </div>
         <div className="simulation-controls" role="group" aria-label="Simulation controls">
@@ -66,10 +69,7 @@ export default function GameHeader({ clanOpen, chronicleOpen, onShowMap, onToggl
           <details className="fortress-menu" ref={menu}>
             <summary aria-label="Fortress menu">Menu <span aria-hidden="true">⌄</span></summary>
             <nav aria-label="Fortress actions">
-              <button onClick={() => menuAction(onGuild)}>Guild hall</button>
-              <button onClick={() => menuAction(onTrade)}>Trade depot</button>
-              <button onClick={() => menuAction(onDecree)}>Decrees{state.activeEvent ? ' · New' : ''}</button>
-              <hr />
+              <button onClick={() => menuAction(onGuide)}>How to play</button>
               <button onClick={() => menuAction(() => openOverlay('settings'))}>Display settings</button>
               <button onClick={() => menuAction(() => setScreen('title'))}>Return to realm</button>
             </nav>
@@ -78,8 +78,10 @@ export default function GameHeader({ clanOpen, chronicleOpen, onShowMap, onToggl
       </div>
       <div className="workspace-nav">
         <div className="workspace-tabs" role="group" aria-label="Workspace panels">
-          <button aria-pressed={!clanOpen && !chronicleOpen} onClick={onShowMap}>Map</button>
           <button aria-expanded={clanOpen} aria-controls="clan-panel" onClick={onToggleClan}>Clan & orders</button>
+          <button aria-haspopup="dialog" onClick={onGuild}>Guild hall</button>
+          <button aria-haspopup="dialog" onClick={onTrade}>Trade depot</button>
+          <button aria-haspopup="dialog" onClick={onDecree}>Decrees</button>
         </div>
         <div className="workspace-actions">
           <button className="command-search" onClick={() => openOverlay('commands')}>Find command <kbd>/</kbd></button>

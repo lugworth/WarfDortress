@@ -1,3 +1,5 @@
+import type { TileTerrain } from './types.ts';
+
 // Base16 Isotope Dark Palette
 // Author: Jan T. Sott
 export const ISOTOPE = {
@@ -18,3 +20,10 @@ export const ISOTOPE = {
   base0E: '#cc00ff', // Magenta (Ale, Royal Decrees, Workshops)
   base0F: '#3300ff', // Violet/Indigo (Deep strata, Soil)
 } as const;
+
+// Neutral bedrock stays subdued so ore seams and colony activity stand out.
+export const STONE_WALL_FOREGROUNDS: Partial<Record<TileTerrain, string>> = {
+  ROCK_WALL: '#606060',
+  LIMESTONE_WALL: '#707070',
+  GRANITE_WALL: '#484848',
+};

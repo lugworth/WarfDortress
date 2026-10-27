@@ -493,8 +493,8 @@
 .resource-low, .resource-low strong { color: var(--ui-warning); }
 .population-stat { border-right: 1px solid var(--ui-border); padding-right: 18px; color: var(--ui-muted); }
 .resource-weather { color: var(--ui-muted); font-size: 11px; white-space: nowrap; }
-.workspace-nav { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--ui-border); padding: 0 22px; gap: 12px; }
-.workspace-tabs { display: flex; gap: 20px; }
+.workspace-nav { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; border-top: 1px solid var(--ui-border); padding: 0 22px; gap: 12px; }
+.workspace-tabs { display: flex; flex-wrap: wrap; gap: 0 20px; min-width: 0; }
 .workspace-actions { display: flex; align-items: center; gap: 24px; margin-left: auto; }
 .game-header .workspace-tabs button, .game-header .workspace-panel-toggle { min-height: 44px; border: 0; border-radius: 0; padding: 10px 0; border-bottom: 2px solid transparent; color: var(--ui-muted); }
 .game-header .workspace-tabs button[aria-pressed="true"], .game-header .workspace-tabs button[aria-expanded="true"], .game-header .workspace-panel-toggle[aria-expanded="true"] { color: var(--ui-text); border-bottom-color: var(--ui-accent); }
@@ -520,11 +520,12 @@
 .map-stage { position: relative; flex: 1; min-height: 0; min-width: 0; overflow: auto; background: #000; isolation: isolate; }
 .map-status { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 18px; border-top: 1px solid var(--ui-border); color: var(--ui-muted); font-size: 11px; min-width: 0; }
 .map-terrain-readout { flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.designation-toolbar { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 25; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100% - 24px); padding: 0; border: 0; background: transparent; box-shadow: none; pointer-events: none; }
+.map-tool-stack { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 25; display: flex; flex-direction: column; align-items: center; gap: 12px; width: max-content; max-width: calc(100% - 24px); pointer-events: none; }
+.designation-toolbar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: 100%; padding: 0; border: 0; background: transparent; box-shadow: none; pointer-events: none; }
 .fortress-ui .designation-toolbar button { pointer-events: auto; justify-content: center; min-height: 38px; padding: 8px 12px; font-size: 12px; border-color: var(--ui-border); background: var(--ui-panel); box-shadow: none; transform: none; color: var(--ui-text); }
 .fortress-ui .designation-toolbar button[aria-pressed="true"], .fortress-ui .designation-toolbar button[aria-expanded="true"] { border-color: var(--ui-accent); background: var(--ui-selection); color: var(--ui-bright); }
 .fortress-ui .map-context-card { max-width: calc(100% - 24px); max-height: calc(100% - var(--tool-dock-height, 62px) - var(--supplies-hud-height, 42px) - 60px); overflow-y: auto; border: 1px solid var(--ui-border); border-radius: 0; background: var(--ui-panel); padding: 16px; box-shadow: 0 8px 28px #0008; }
-.compact-tile-tooltip { position: absolute; bottom: calc(var(--tool-dock-height, 62px) + 24px); right: 12px; pointer-events: none; z-index: 20; width: 210px; max-width: calc(100% - 24px); padding: 8px 10px; border: 1px solid var(--ui-accent); border-radius: 0; background: var(--ui-panel); box-shadow: 0 4px 14px #0005; }
+.compact-tile-tooltip { flex-shrink: 0; pointer-events: none; width: 210px; max-width: 100%; padding: 8px 10px; border: 1px solid var(--ui-accent); border-radius: 0; background: var(--ui-panel); box-shadow: 0 4px 14px #0005; }
 .compact-tile-tooltip > div { display: flex; align-items: baseline; gap: 6px; font-size: 10px; }
 .compact-tile-tooltip strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ui-bright); }
 .compact-tile-tooltip p { margin-top: 3px; color: var(--ui-muted); font-size: 10px; line-height: 1.4; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -561,7 +562,7 @@
   .population-stat { padding-right: 10px; }
   .resource-stat { gap: 5px; }
   .workspace-nav { padding: 0 12px; gap: 8px; }
-  .workspace-tabs { gap: 16px; }
+  .workspace-tabs { gap: 0 12px; }
   .workspace-actions { gap: 16px; }
   .game-header .workspace-tabs button, .game-header .workspace-panel-toggle { padding: 8px 0; }
   .game-header .command-search { font-size: 0; gap: 0; }
@@ -573,10 +574,10 @@
   .map-topbar > button:last-child { margin-left: auto; padding: 6px 8px; font-size: 11px; }
   .map-depth-controls { gap: 4px; min-width: 0; }
   .map-status { padding: 7px 12px; font-size: 10px; }
-  .designation-toolbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(520px, calc(100% - 24px)); gap: 6px; padding: 0; }
+  .designation-toolbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(520px, calc(100vw - 24px)); gap: 6px; padding: 0; }
   .fortress-ui .designation-toolbar button { padding: 6px 4px; min-width: 0; min-height: 36px; font-size: 11px; gap: 4px; }
   .designation-toolbar button > span.text-\[9px\], .designation-toolbar button > span.text-\[10px\] { display: none; }
-  .compact-tile-tooltip { width: 190px; padding: 6px 8px; right: 8px; }
+  .compact-tile-tooltip { width: 190px; padding: 6px 8px; }
 }
 @media (max-width: 390px) {
   .simulation-controls { width: 100%; justify-content: space-between; }
@@ -605,3 +606,105 @@
   max-height: min(65dvh, calc(100dvh - var(--tool-dock-height, 62px) - 96px));
   z-index: 40;
 }
+
+/* Guild Hall: clear tasks first; background details remain expandable. */
+.guild-hall { display: flex; flex-direction: column; width: 100%; max-width: 800px; max-height: 90dvh; background: var(--ui-bg); border: 1px solid var(--ui-border); font-size: 13px; line-height: 1.6; }
+.guild-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--ui-border); }
+.guild-header h2 { color: var(--ui-accent); font-size: 16px; font-weight: 700; }
+.guild-header p { margin-top: 4px; color: var(--ui-muted); font-size: 12px; }
+.guild-header-actions { display: flex; align-items: center; gap: 16px; }
+.guild-header-actions > span { color: var(--ui-muted); font-size: 11px; white-space: nowrap; }
+.fortress-ui .guild-button { min-height: 38px; padding: 8px 14px; border: 1px solid var(--ui-border); background: var(--ui-panel); color: var(--ui-text); font-size: 12px; }
+.fortress-ui .guild-button:hover:not(:disabled) { border-color: var(--ui-info); color: var(--ui-info); }
+.fortress-ui .guild-primary { border-color: var(--ui-accent); color: var(--ui-accent); }
+.guild-tabs { display: flex; flex-wrap: wrap; gap: 24px; padding: 0 24px; border-bottom: 1px solid var(--ui-border); }
+.fortress-ui .guild-tabs button { padding: 12px 0; border-bottom: 2px solid transparent; color: var(--ui-muted); font-size: 13px; }
+.fortress-ui .guild-tabs button[aria-pressed="true"] { border-bottom-color: var(--ui-accent); color: var(--ui-bright); }
+.guild-body { min-height: 0; overflow-y: auto; padding: 24px; }
+.guild-body > * + * { margin-top: 20px; }
+.guild-intro, .guild-muted { color: var(--ui-muted); font-size: 12px; }
+.guild-section-title { margin-bottom: 12px; font-size: 12px; font-weight: 700; color: var(--ui-muted); }
+.guild-section > article + article { margin-top: 16px; }
+.guild-card { padding: 20px; border: 1px solid var(--ui-border); background: var(--ui-panel); }
+.guild-card-active { border-left: 2px solid var(--ui-accent); }
+.guild-card-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.guild-card-heading h3 { color: var(--ui-bright); font-size: 15px; font-weight: 700; }
+.guild-badge { color: var(--ui-info); font-size: 11px; }
+.guild-ready { color: var(--ui-success); }
+.guild-delivery { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+.guild-delivery > span { color: var(--ui-muted); font-size: 12px; }
+.guild-card progress { display: block; width: 100%; height: 5px; margin: 8px 0 16px; accent-color: var(--ui-success); background: var(--ui-border); border: 0; }
+.guild-reward { color: var(--ui-muted); font-size: 12px; }
+.guild-reward strong { color: var(--ui-text); font-weight: 500; }
+.guild-card-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.guild-card-footer > span { max-width: 30em; }
+.guild-details { margin-top: 14px; font-size: 12px; }
+.guild-details summary { color: var(--ui-info); padding: 4px 0; }
+.guild-details p, .guild-details ol { margin-top: 8px; }
+.guild-details ol { display: grid; gap: 6px; }
+.guild-disclosure { padding: 14px 0; border-top: 1px solid var(--ui-border); }
+.guild-disclosure > summary { color: var(--ui-text); }
+.guild-disclosure > p, .guild-disclosure > dl, .guild-disclosure > ul { margin-top: 12px; }
+.guild-favor-list > div, .guild-history-list li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--ui-border); }
+.guild-favor-list dd { color: var(--ui-info); }
+.guild-favor-list dd span { color: var(--ui-muted); font-size: 11px; }
+.guild-feedback { margin: 16px 24px 0; color: var(--ui-info); font-size: 12px; }
+.guild-empty-state { padding: 36px 24px; border: 1px dashed var(--ui-border); text-align: center; }
+.guild-empty-glyph { display: block; color: var(--ui-accent); font-size: 28px; margin-bottom: 12px; }
+.guild-empty-state h3 { color: var(--ui-bright); font-size: 16px; font-weight: 700; }
+.guild-empty-state p { max-width: 42em; margin: 10px auto 22px; color: var(--ui-muted); }
+.guild-empty-note { padding: 16px; border: 1px solid var(--ui-border); color: var(--ui-muted); }
+.guild-relic-effects { margin: 18px 0; display: grid; gap: 10px; }
+.guild-relic-effects dt { color: var(--ui-muted); font-size: 11px; }
+.guild-control-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 16px; }
+.guild-control-row label { display: flex; flex-direction: column; gap: 6px; color: var(--ui-muted); min-width: 0; }
+.guild-manage { padding-top: 10px; border-top: 1px solid var(--ui-border); }
+.guild-dwarf { border: 1px solid var(--ui-border); background: var(--ui-panel); }
+.guild-dwarf > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; }
+.guild-dwarf summary strong { color: var(--ui-bright); }
+.guild-dwarf-role { display: block; color: var(--ui-muted); font-size: 11px; margin-top: 3px; }
+.guild-dwarf-morale { flex-shrink: 0; color: var(--ui-info); font-size: 11px; }
+.guild-dwarf-story { padding: 0 18px 18px; }
+.guild-dwarf-story h4 { color: var(--ui-accent); font-weight: 700; }
+.guild-dwarf-story blockquote { border-left: 2px solid var(--ui-border); padding-left: 12px; margin: 16px 0; color: var(--ui-muted); font-style: italic; }
+.guild-bonds li { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--ui-border); }
+.guild-bonds p { color: var(--ui-muted); font-size: 12px; }
+.guild-friend { color: var(--ui-success); }
+.guild-rival { color: var(--ui-warning); }
+@media (max-width: 640px) {
+  .guild-header-actions > span { display: none; }
+  .guild-tabs { padding: 0 16px; gap: 20px; }
+  .guild-body { padding: 16px; }
+  .guild-card { padding: 16px; }
+  .guild-card-heading h3 { font-size: 14px; }
+  .guild-feedback { margin: 12px 16px 0; }
+  .guild-dwarf > summary { padding: 14px; gap: 10px; }
+}
+
+.game-header .fortress-goal-link { display: block; min-height: 0; margin-top: 5px; padding: 0; border: 0; font-size: 10px; color: var(--ui-accent); text-align: left; }
+.game-header .fortress-goal-link:hover { background: transparent; text-decoration: underline; }
+.mountainhome-goal { padding: 16px; border: 1px solid var(--ui-accent); background: var(--ui-bg); }
+.mountainhome-goal h2 { color: var(--ui-accent); font-size: 14px; font-weight: 700; }
+.mountainhome-goal p { margin-top: 10px; color: var(--ui-muted); font-size: 12px; line-height: 1.6; }
+.mountainhome-goal progress, .tutorial-goal progress { display: block; width: 100%; height: 6px; margin: 14px 0 8px; accent-color: var(--ui-accent); }
+.mountainhome-goal > strong { font-size: 12px; color: var(--ui-info); }
+.tutorial-panel { width: 370px; }
+.tutorial-topic { padding: 16px; border-bottom: 1px solid var(--ui-border); }
+.tutorial-topic label { display: block; margin-bottom: 7px; color: var(--ui-muted); font-size: 11px; }
+.tutorial-topic select { width: 100%; font-size: 12px; }
+.tutorial-body { overflow-y: auto; min-height: 0; flex: 1; padding: 20px; font-size: 13px; line-height: 1.65; }
+.tutorial-position { margin-bottom: 12px; color: var(--ui-info); font-size: 11px; }
+.tutorial-body h2 { font-size: 18px; line-height: 1.4; font-weight: 700; color: var(--ui-bright); }
+.tutorial-intro { margin-top: 12px; }
+.tutorial-body dl > div { margin-top: 20px; }
+.tutorial-body dt { color: var(--ui-accent); font-weight: 700; margin-bottom: 5px; }
+.tutorial-body dd { color: var(--ui-muted); }
+.tutorial-goal { margin-top: 20px; padding: 14px; border: 1px solid var(--ui-border); background: var(--ui-bg); }
+.tutorial-goal strong { font-size: 12px; color: var(--ui-accent); }
+.tutorial-goal span { color: var(--ui-info); font-size: 11px; }
+.fortress-ui .tutorial-action { margin-top: 24px; white-space: normal; text-align: left; }
+.tutorial-footer { padding: 16px; border-top: 1px solid var(--ui-border); }
+.tutorial-footer > div { display: flex; justify-content: space-between; gap: 12px; }
+.fortress-ui .tutorial-next { border-color: var(--ui-accent); color: var(--ui-accent); }
+.tutorial-footer p { margin-top: 12px; font-size: 10px; line-height: 1.5; color: var(--ui-muted); }
+@media (max-width: 1023px) { .tutorial-panel { width: 100%; } }

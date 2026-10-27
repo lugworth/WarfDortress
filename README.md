@@ -35,12 +35,26 @@ New colonies start paused. Decision dialogs pause the simulation and restore its
 previous state when closed. The simulation stops advancing while the browser tab
 is hidden.
 
+## Goal and tutorial
+
+Grow the colony into a Mountainhome Capital by reaching 6,000 fortress score.
+The goal beneath the fortress name opens milestones, building unlocks, and rank
+progress. Score comes from wealth, population, workshops, exploration depth, and
+relics.
+
+New colonies open a 13-topic guide covering map controls, all building categories,
+workers and defenses, trade, Decrees, Guild Hall, expeditions, and saving. Use
+Menu → How to play to resume or replay any topic. The guide starts paused; Finish
+& resume starts the simulation.
+
 ## Saving
 
 The game saves the complete fortress to this browser every 15 seconds, when
 leaving the game, and when the tab is hidden or closed. Save also writes a local
 checkpoint immediately. Continue on the realm screen restores the saved map,
 dwarves, orders, resources, and guild progress, and starts paused.
+
+Opening `?autostart=1` restores the existing local checkpoint if available.
 
 Browser storage is tied to the site's address. A local preview and the deployed
 site have separate saves. Clearing browser data removes local saves.
