@@ -9,3 +9,6 @@ coverage/
 !.env.example
 
 *.tsbuildinfo
+
+# AI Studio agent scratch artifacts
+.aistudio/
