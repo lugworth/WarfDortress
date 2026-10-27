@@ -117,7 +117,6 @@ export default function ASCIIViewport() {
     designateBox,
     toggleDwarfLabor,
     togglePause,
-    jumpToLocation,
     cycleSeasonWeather,
     activateBuildingFunction,
   } = useGame();
@@ -423,12 +422,11 @@ export default function ASCIIViewport() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
-    gameState,
+    gameState.world.depth,
     setCurrentZ,
     setInspectMode,
     setSelectedTool,
     togglePause,
-    jumpToLocation,
     unlockByTool,
   ]);
 

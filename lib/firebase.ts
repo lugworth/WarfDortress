@@ -115,13 +115,18 @@ export interface CloudFortressSave {
   world: GameState['world'];
 }
 
+/** Firestore document id for a fortress (the rules allow 1-64 of [A-Za-z0-9_-]). */
+export function getCloudSaveId(state: Pick<GameState, 'id'>): string {
+  return state.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+}
+
 export async function saveFortressToCloud(state: GameState): Promise<string> {
   const user = auth.currentUser;
   if (!user) {
     throw new Error('Sign in with Google to save fortresses to the cloud.');
   }
 
-  const saveId = state.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || `fort-${Date.now()}`;
+  const saveId = getCloudSaveId(state) || `fort-${Date.now()}`;
   const path = `saves/${saveId}`;
 
   try {

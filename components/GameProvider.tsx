@@ -57,6 +57,7 @@ import { generateRandomWorldSeed } from '@/lib/world-gen';
 import {
   auth,
   CloudFortressSave,
+  getCloudSaveId,
   listUserCloudSaves,
   saveFortressToCloud,
   signInWithGoogle,
@@ -235,13 +236,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [saveStatus]);
 
   useEffect(() => {
-    testFirestoreConnection();
     if (typeof document !== 'undefined') {
       document.body.dataset.state = screen;
     }
   }, [screen]);
 
   useEffect(() => {
+    testFirestoreConnection();
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
@@ -441,8 +442,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const triggerNarrativeEvent = useCallback(
     async (severity?: NarrativeEventSeverity, useAI = true) => {
+      let placeholderId = '';
       setGameState((prev) => {
         const deterministicEvt = generateContextAwareEvent(prev, severity);
+        placeholderId = deterministicEvt.id;
         return {
           ...prev,
           activeEvent: deterministicEvt,
@@ -462,6 +465,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       if (!useAI) return;
 
+      // Commands read the live snapshot; the render-time gameState can be ticks old.
+      const gameState = latestState.current;
       setIsGeneratingEvent(true);
       try {
         const res = await fetch('/api/events/generate', {
@@ -486,8 +491,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           }),
         });
         const data = await res.json();
-        if (data?.event) {
-          setGameState((prev) => (prev.activeEvent ? { ...prev, activeEvent: data.event } : prev));
+        const event = data?.event;
+        if (event && typeof event.title === 'string' && Array.isArray(event.choices) && event.choices.length > 0) {
+          // Only replace the placeholder; the player may already have answered it.
+          setGameState((prev) => (prev.activeEvent?.id === placeholderId ? { ...prev, activeEvent: event } : prev));
         }
       } catch {
         // Keep the instant context-aware event if network/API is unavailable
@@ -495,7 +502,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setIsGeneratingEvent(false);
       }
     },
-    [gameState, setGameState]
+    [setGameState]
   );
 
   const resolveActiveEvent = useCallback((choiceId: string) => {
@@ -533,6 +540,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleCloudSave = useCallback(async () => {
+    const gameState = latestState.current;
     try {
       const savedLocally = persistLocal(gameState);
       if (!auth.currentUser) {
@@ -547,27 +555,38 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       setSaveStatus(e instanceof Error ? e.message : 'Cloud save failed');
     }
-  }, [gameState, persistLocal]);
+  }, [persistLocal]);
+
+  const startSession = useCallback((state: GameState, status: string) => {
+    sessionStarted.current = true;
+    setGameState(state);
+    setCurrentZ(0);
+    setSelectedDwarfId(state.dwarves[0]?.id ?? null);
+    setInspectMode(false);
+    setScreen('playing');
+    setSaveStatus(status);
+  }, [setScreen, setGameState]);
 
   const resumeLocalSave = useCallback(() => {
     try {
       const saved = parseLocalSave(localStorage.getItem(LOCAL_SAVE_KEY));
       if (!saved) { setSaveStatus("The local save could not be read."); return; }
-      sessionStarted.current = true;
-      setGameState(saved);
-      setCurrentZ(0);
-      setSelectedDwarfId(saved.dwarves[0]?.id ?? null);
-      setInspectMode(false);
-      setScreen("playing");
-      setSaveStatus(`Resumed ${saved.world.dwarvenName}. Press Resume when ready.`);
+      startSession(saved, `Resumed ${saved.world.dwarvenName}. Press Resume when ready.`);
     } catch { setSaveStatus("Browser storage is unavailable."); }
-  }, [setScreen, setGameState]);
+  }, [startSession]);
 
   const loadCloudSave = useCallback(
     (save: CloudFortressSave) => {
+      // Cloud archives hold a summary. This browser's checkpoint of the same
+      // fortress has the full map and clan, so prefer it when it is as recent.
+      let local: GameState | null = null;
+      try { local = parseLocalSave(localStorage.getItem(LOCAL_SAVE_KEY)); } catch { /* storage disabled */ }
+      if (local && getCloudSaveId(local) === save.id && local.ticks >= save.ticks) {
+        startSession(local, `Resumed ${save.dwarvenName} with its full map from this browser. Press Resume when ready.`);
+        return;
+      }
       const restored = createInitialGameState(save.seed);
-      sessionStarted.current = true;
-      setGameState({
+      startSession({
         ...restored,
         id: save.id,
         ticks: save.ticks,
@@ -577,12 +596,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           ...restored.resources,
           ...(save.resources || {}),
         },
-      });
-      setCurrentZ(0);
-      setScreen('playing');
-      setSaveStatus(`Loaded ${save.dwarvenName} (Year ${save.year})`);
+        paused: true,
+      }, `Loaded ${save.dwarvenName} (Year ${save.year}). Cloud archives keep stockpiles and the calendar; the map and clan start fresh from the seed.`);
     },
-    [setScreen, setGameState]
+    [startSession]
   );
 
   const performGuildAction = useCallback((action: GuildAction): boolean => {
@@ -690,26 +707,33 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const activateBuildingFunction = useCallback(
     (x: number, y: number, z: number) => {
-      const previewRes = activateBuildingTileFunction(gameState, x, y, z);
-      if (previewRes.triggered) {
-        setGameState((prev) => activateBuildingTileFunction(prev, x, y, z).nextState);
-      }
-      return { triggered: previewRes.triggered, message: previewRes.message };
+      let result = { triggered: false, message: '' };
+      setGameState((prev) => {
+        const { nextState, ...outcome } = activateBuildingTileFunction(prev, x, y, z);
+        result = outcome;
+        return nextState;
+      });
+      return result;
     },
-    [gameState, setGameState]
+    [setGameState]
   );
 
   const dispatchMilitiaAction = useCallback(
     (action: MilitiaAction) => {
-      const previewRes = performMilitiaAction(gameState, action);
-      setGameState((prev) => performMilitiaAction(prev, action).nextState);
-      return { success: previewRes.success, message: previewRes.message };
+      let result = { success: false, message: '' };
+      setGameState((prev) => {
+        const { nextState, success, message } = performMilitiaAction(prev, action);
+        result = { success, message };
+        return nextState;
+      });
+      return result;
     },
-    [gameState, setGameState]
+    [setGameState]
   );
 
   const triggerAIRaidAnalysis = useCallback(
     async (spawnRaid = false) => {
+      const gameState = latestState.current;
       const profile = evaluateFortressDefenseProfile(gameState);
       const militia = ensureMilitiaState(gameState);
       const goblinCiv =
@@ -759,7 +783,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         };
       }
     },
-    [gameState, setGameState]
+    [setGameState]
   );
 
   return (
