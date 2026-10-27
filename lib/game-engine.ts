@@ -268,7 +268,8 @@ export function generateContextAwareEvent(
   const dwarfCiv = world.civilizations[0]?.name || `The Mountainhome of ${world.dwarvenName}`;
   const elfCiv = world.civilizations[1]?.name || 'The Emerald Canopy';
   const goblinCiv = world.civilizations[3]?.name || 'The Fang Scourge';
-  const leadDwarf = dwarves[ticks % dwarves.length] || dwarves[0];
+  const leadDwarf: Pick<DwarfEntity, 'name' | 'title'> =
+    dwarves[ticks % Math.max(1, dwarves.length)] ?? { name: 'A wandering artisan', title: 'Visitor' };
 
   const avgMorale = Math.round(
     dwarves.reduce((sum, d) => sum + d.happiness, 0) / Math.max(1, dwarves.length)
@@ -648,12 +649,12 @@ export function createInitialGameState(seed = 'Khazad-251'): GameState {
   // Locate Z-3 relic tile for initial discovery alert
   let relicX = Math.max(4, centerX - 8);
   let relicY = Math.min(world.height - 5, centerY + 6);
-  for (let y = 0; y < world.height; y++) {
+  findRelic: for (let y = 0; y < world.height; y++) {
     for (let x = 0; x < world.width; x++) {
       if (grid[3]?.[y]?.[x]?.terrain === 'CAVERN_RELIC') {
         relicX = x;
         relicY = y;
-        break;
+        break findRelic;
       }
     }
   }
@@ -1396,6 +1397,7 @@ export function stepSimulationTick(state: GameState): GameState {
     claimedTargets.add(`${task.z}:${task.x}:${task.y}`);
   }
 
+  const militiaState = ensureMilitiaState(state);
   let nextDwarves: DwarfEntity[] = state.dwarves.map((dwarfRaw) => {
     const dwarf: DwarfEntity = {
       ...dwarfRaw,
@@ -1526,7 +1528,6 @@ export function stepSimulationTick(state: GameState): GameState {
     }
 
     // 1. Check Militia Combat Intercept against Hostiles on the same Z-level
-    const militiaState = ensureMilitiaState(state);
     const squadMods = getSquadCombatModifiers(state.dwarves, dwarf, militiaState);
     const activeSquad = squadMods.squad;
     const baseDoctrineRadius =
@@ -2148,8 +2149,30 @@ export function stepSimulationTick(state: GameState): GameState {
   // Remove defeated hostiles
   hostiles = hostiles.filter((h) => h.hp > 0);
 
-  // Handle Strange Mood deadline expiration
+  // Dwarves who fell in combat leave the clan; each death was chronicled above.
+  const fallenIds = new Set(nextDwarves.filter((d) => d.hp <= 0).map((d) => d.id));
+  let nextGuild = state.guild;
   let nextActivities = state.activities ? { ...state.activities } : {};
+  if (fallenIds.size > 0) {
+    nextDwarves = nextDwarves.filter((d) => !fallenIds.has(d.id));
+    nextGuild = {
+      ...state.guild,
+      relationships: state.guild.relationships.filter((r) => !fallenIds.has(r.a) && !fallenIds.has(r.b)),
+      relics: state.guild.relics.map((r) =>
+        r.ownerId && fallenIds.has(r.ownerId) ? { ...r, mode: 'STORED' as const, ownerId: undefined } : r
+      ),
+    };
+    const mood = nextActivities.strangeMood;
+    if (mood && fallenIds.has(mood.dwarfId)) {
+      nextActivities.strangeMood = null;
+      addLog(`[STRANGE MOOD] ${mood.dwarfName}'s unfinished "${mood.artifactName}" was lost with them.`, 'ALERT');
+    }
+    if (nextDwarves.length === 0) {
+      addLog(`The last dwarf of ${state.world.dwarvenName} has fallen. Only migrants can relight the forges.`, 'ALERT');
+    }
+  }
+
+  // Handle Strange Mood deadline expiration
   if (
     nextActivities.strangeMood &&
     nextTicks >= nextActivities.strangeMood.deadline
@@ -2226,6 +2249,7 @@ export function stepSimulationTick(state: GameState): GameState {
     chronicle,
     activeEvent: nextActiveEvent,
     activities: nextActivities,
+    guild: nextGuild,
     ticks: nextTicks,
     year: nextYear,
     season: nextSeason,

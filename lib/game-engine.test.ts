@@ -379,3 +379,43 @@ test('dwarves use pathfinding when assigned tasks (integration)', () => {
   // (either moved or arrived and started working)
   assert.ok(dwarfMoved, 'Dwarf should have moved toward the mine task using pathfinding');
 });
+
+test('a dwarf who falls in combat leaves the roster, squads, bonds, and relic bearer slots', () => {
+  let state = createInitialGameState('Fallen-Test');
+  const victim = state.dwarves.find((d) => d.squadId === 'squad-1')!;
+  assert.ok(victim, 'the starting militia squad has a member');
+  state = {
+    ...state,
+    hostiles: [{
+      id: 'test-troll', name: 'Test Troll', kind: 'TROLL_BREAKER', char: 'T', color: '#ff0000',
+      x: victim.x + 1, y: victim.y, z: victim.z, hp: 900, maxHp: 900, attack: 60, behavior: 'RAID_SEEK',
+    }],
+    dwarves: state.dwarves.map((d) => (d.id === victim.id ? { ...d, hp: 1, happiness: 90 } : d)),
+    guild: {
+      ...state.guild,
+      relationships: [...state.guild.relationships, { a: victim.id, b: 'dwarf-2', score: 6, reason: 'Shared a cask.' }],
+      relics: [{
+        id: 'relic-test', template: 'test', name: 'Test Relic', discoveredBy: 'Test', discoveredAt: 0,
+        mode: 'EQUIPPED', ownerId: victim.id, history: [],
+      }],
+    },
+  };
+
+  state = stepSimulationTick(state);
+
+  assert.ok(!state.dwarves.some((d) => d.id === victim.id), 'the fallen dwarf is removed');
+  assert.ok(state.chronicle.some((e) => e.text.includes(`${victim.name} fell in combat`)), 'the death is chronicled');
+  assert.ok(!state.guild.relationships.some((r) => r.a === victim.id || r.b === victim.id));
+  assert.equal(state.guild.relics[0].mode, 'STORED');
+  assert.equal(state.guild.relics[0].ownerId, undefined);
+
+  const fallenAgain = stepSimulationTick(state).chronicle.filter((e) => e.text.includes(`${victim.name} fell in combat`));
+  assert.equal(fallenAgain.length, 1, 'a death is only chronicled once');
+});
+
+test('an empty fortress keeps simulating without crashing', () => {
+  let state = { ...createInitialGameState('Empty-Halls'), dwarves: [] };
+  assert.doesNotThrow(() => generateContextAwareEvent(state, 'STRANGE_MOOD'));
+  for (let i = 0; i < 130; i++) state = stepSimulationTick({ ...state, activeEvent: null });
+  assert.ok(state.ticks === 130);
+});
