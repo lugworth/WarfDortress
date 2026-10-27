@@ -115,28 +115,35 @@ Requirements:
         raw.triggerReason ||
         `AI Storyteller analyzed Year ${year} (${season}) stockpiles and world history.`,
       tickTriggered: ticks || 0,
-      choices: raw.choices.map((c: Record<string, unknown>, idx: number) => {
+      choices: raw.choices.slice(0, 4).map((c: Record<string, unknown>, idx: number) => {
+        // Model output is untrusted: keep costs, rewards, and migrants in game-sized ranges.
+        const amount = (value: unknown, max: number) =>
+          typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(max, Math.round(value))) : 0;
         const cost: Record<string, number> = {};
-        if (typeof c.stoneCost === 'number' && c.stoneCost > 0 && idx < 2) cost.stone = c.stoneCost;
-        if (typeof c.woodCost === 'number' && c.woodCost > 0 && idx < 2) cost.wood = c.woodCost;
-        if (typeof c.foodCost === 'number' && c.foodCost > 0 && idx < 2) cost.food = c.foodCost;
+        if (idx < 2) {
+          if (amount(c.stoneCost, 30)) cost.stone = amount(c.stoneCost, 30);
+          if (amount(c.woodCost, 30)) cost.wood = amount(c.woodCost, 30);
+          if (amount(c.foodCost, 30)) cost.food = amount(c.foodCost, 30);
+        }
 
         const reward: Record<string, number> = {};
-        if (typeof c.stoneReward === 'number' && c.stoneReward > 0) reward.stone = c.stoneReward;
-        if (typeof c.foodReward === 'number' && c.foodReward > 0) reward.food = c.foodReward;
-        if (typeof c.aleReward === 'number' && c.aleReward > 0) reward.ale = c.aleReward;
-        if (typeof c.wealthReward === 'number' && c.wealthReward > 0)
-          reward.wealth = c.wealthReward;
+        if (amount(c.stoneReward, 40)) reward.stone = amount(c.stoneReward, 40);
+        if (amount(c.foodReward, 40)) reward.food = amount(c.foodReward, 40);
+        if (amount(c.aleReward, 40)) reward.ale = amount(c.aleReward, 40);
+        if (amount(c.wealthReward, 400)) reward.wealth = amount(c.wealthReward, 400);
 
         return {
-          id: String(c.id || `choice-${idx}`),
-          label: String(c.label || `Decree Option ${idx + 1}`),
-          description: String(c.description || ''),
+          id: String(c.id || `choice-${idx}`).slice(0, 60),
+          label: String(c.label || `Decree Option ${idx + 1}`).slice(0, 160),
+          description: String(c.description || '').slice(0, 400),
           cost: Object.keys(cost).length > 0 ? cost : undefined,
           reward: Object.keys(reward).length > 0 ? reward : { wealth: 50 },
-          moraleDelta: typeof c.moraleDelta === 'number' ? c.moraleDelta : 5,
-          spawnMigrants: typeof c.spawnMigrants === 'number' ? c.spawnMigrants : 0,
-          outcomeLog: String(c.outcomeLog || 'The Overseer’s decree was carried out.'),
+          moraleDelta:
+            typeof c.moraleDelta === 'number' && Number.isFinite(c.moraleDelta)
+              ? Math.max(-15, Math.min(15, Math.round(c.moraleDelta)))
+              : 5,
+          spawnMigrants: amount(c.spawnMigrants, 2),
+          outcomeLog: String(c.outcomeLog || 'The Overseer’s decree was carried out.').slice(0, 400),
         };
       }),
     };

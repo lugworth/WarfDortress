@@ -74,6 +74,7 @@ test("construction preview quotes completion costs without rejecting an unafford
   terrain(state, 0, 2, 0, "WATER");
   state.resources.stone = 3;
   state.resources.ironOre = 0;
+  state.activities = { ...state.activities, unlockedBuildings: ["BUILD_FORGE"] };
   const before = JSON.stringify(state.resources);
   const preview = getDesignationPreview(state, 0, 2, 0, 0, 0, "BUILD_FORGE");
   assert.equal(preview.accepted, 2);
@@ -837,3 +838,39 @@ test("thought log IDs stay strictly unique past MAX_THOUGHT_LOG_ENTRIES cap and 
   assert.ok(state.dwarves.length > 0);
 });
 
+
+test("locked blueprints cannot be queued from any entry point", () => {
+  const state = createInitialGameState("Locked-blueprint");
+  terrain(state, 0, 0, 0, "GRASS");
+  const preview = getDesignationPreview(state, 0, 0, 0, 0, 0, "BUILD_SMELTER");
+  assert.equal(preview.accepted, 0);
+  assert.match(preview.tiles[0].reason ?? "", /Locked blueprint/);
+  assert.equal(applyAreaDesignation(state, 0, 0, 0, 0, 0, "BUILD_SMELTER").count, 0);
+
+  state.activities = { ...state.activities, unlockedBuildings: ["BUILD_SMELTER"] };
+  assert.equal(applyAreaDesignation(state, 0, 0, 0, 0, 0, "BUILD_SMELTER").count, 1);
+});
+
+test("building actions recharge before they can be used again", async () => {
+  const { activateBuildingTileFunction, getBuildingTileFunctionInfo, BUILDING_ACTION_COOLDOWN_TICKS } =
+    await import("./game-engine.ts");
+  let state = createInitialGameState("Actuator-cooldown");
+  terrain(state, 0, 0, 0, "STOCKPILE_TILE");
+  terrain(state, 0, 1, 0, "STOCKPILE_TILE");
+
+  const first = activateBuildingTileFunction(state, 0, 0, 0);
+  assert.equal(first.triggered, true);
+  state = first.nextState;
+  const stoneAfterFirst = state.resources.stone;
+
+  const info = getBuildingTileFunctionInfo(state, state.grid[0][0][1])!;
+  assert.equal(info.canActivate, false, "another tile of the same type shares the cooldown");
+  assert.equal(info.readyInTicks, BUILDING_ACTION_COOLDOWN_TICKS);
+  const second = activateBuildingTileFunction(state, 1, 0, 0);
+  assert.equal(second.triggered, false);
+  assert.match(second.message, /ready in/);
+  assert.equal(second.nextState.resources.stone, stoneAfterFirst);
+
+  state = { ...state, ticks: state.ticks + BUILDING_ACTION_COOLDOWN_TICKS };
+  assert.equal(activateBuildingTileFunction(state, 1, 0, 0).triggered, true);
+});

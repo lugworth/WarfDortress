@@ -931,11 +931,41 @@ export default function ASCIIViewport() {
           Math.abs(a.y - cy) -
           (Math.abs(b.x - cx) + Math.abs(b.y - cy)),
       );
-    (["BUILD_SMELTER", "BUILD_FORGE", "BUILD_TAVERN"] as const).forEach(
-      (tool, index) => {
-        const site = sites[index];
-        if (site) designateBox(site.x, site.y, site.x, site.y, tool, 0);
-      },
+    const tools = (["BUILD_SMELTER", "BUILD_FORGE", "BUILD_TAVERN"] as const).filter(
+      (tool) => unlockByTool.get(tool)?.unlocked !== false,
+    );
+    const queued = tools.filter((tool, index) => {
+      const site = sites[index];
+      return site ? designateBox(site.x, site.y, site.x, site.y, tool, 0) > 0 : false;
+    });
+    setOrderStatus(
+      queued.length
+        ? `Queued ${queued.map((tool) => TOOL_NAMES[tool]).join(", ")} near the clan.`
+        : "No starter workshop blueprints are unlocked yet. Open Goals to see requirements.",
+    );
+  };
+
+  // One-tile orders from the inspector explain why they were refused.
+  const designateFromInspector = (
+    tool: DesignationType,
+    x: number,
+    y: number,
+    z: number,
+    x2 = x,
+  ) => {
+    const unlockInfo = unlockByTool.get(tool);
+    if (unlockInfo && !unlockInfo.unlocked) {
+      setOrderStatus(
+        `Locked Blueprint: ${unlockInfo.title} requires ${unlockInfo.requirementLabel} (${unlockInfo.progressText}).`,
+      );
+      return;
+    }
+    playTactileSfx("stamp");
+    const count = designateBox(x, y, x2, y, tool, z);
+    setOrderStatus(
+      count > 0
+        ? `Queued ${TOOL_NAMES[tool]} at (${x},${y},Z-${z}).`
+        : `${TOOL_NAMES[tool]} cannot be placed on this tile.`,
     );
   };
 
@@ -1376,17 +1406,14 @@ export default function ASCIIViewport() {
                 activeInspect.tile.terrain === "CAVERN_RELIC" && (
                   <button
                     type="button"
-                    onClick={() => {
-                      playTactileSfx("stamp");
-                      designateBox(
-                        activeInspect.coord.x,
-                        activeInspect.coord.y,
-                        activeInspect.coord.x,
-                        activeInspect.coord.y,
+                    onClick={() =>
+                      designateFromInspector(
                         "RECLAIM_RELIC",
+                        activeInspect.coord.x,
+                        activeInspect.coord.y,
                         activeInspect.coord.z,
-                      );
-                    }}
+                      )
+                    }
                     className="px-1.5 py-0.5 border border-[#33ff00] text-[#33ff00] hover:bg-[#202020] font-bold"
                   >
                     [ ☼ RECLAIM RELIC ]
@@ -1394,17 +1421,14 @@ export default function ASCIIViewport() {
                 )}
               <button
                 type="button"
-                onClick={() => {
-                  playTactileSfx("stamp");
-                  designateBox(
-                    activeInspect.coord.x,
-                    activeInspect.coord.y,
-                    activeInspect.coord.x,
-                    activeInspect.coord.y,
+                onClick={() =>
+                  designateFromInspector(
                     "MINE",
+                    activeInspect.coord.x,
+                    activeInspect.coord.y,
                     activeInspect.coord.z,
-                  );
-                }}
+                  )
+                }
                 className="px-1.5 py-0.5 border border-[#2a2a2a] text-[#ff9900] hover:border-[#ff9900]"
               >
                 [ ⛏ MINE ]
@@ -1412,12 +1436,10 @@ export default function ASCIIViewport() {
               <button
                 type="button"
                 onClick={() =>
-                  designateBox(
-                    activeInspect.coord.x,
-                    activeInspect.coord.y,
-                    activeInspect.coord.x,
-                    activeInspect.coord.y,
+                  designateFromInspector(
                     "BUILD_TRAP",
+                    activeInspect.coord.x,
+                    activeInspect.coord.y,
                     activeInspect.coord.z,
                   )
                 }
@@ -1428,17 +1450,14 @@ export default function ASCIIViewport() {
               <button
                 type="button"
                 data-testid="inspect-station-squad-btn"
-                onClick={() => {
-                  playTactileSfx("stamp");
-                  designateBox(
-                    activeInspect.coord.x,
-                    activeInspect.coord.y,
-                    activeInspect.coord.x,
-                    activeInspect.coord.y,
+                onClick={() =>
+                  designateFromInspector(
                     "MILITIA_STATION",
+                    activeInspect.coord.x,
+                    activeInspect.coord.y,
                     activeInspect.coord.z,
-                  );
-                }}
+                  )
+                }
                 className="px-1.5 py-0.5 border border-[#2a2a2a] text-[#ff0000] hover:border-[#ff0000]"
               >
                 [ ♦ STATION SQUAD ]
@@ -1446,17 +1465,15 @@ export default function ASCIIViewport() {
               <button
                 type="button"
                 data-testid="inspect-patrol-squad-btn"
-                onClick={() => {
-                  playTactileSfx("stamp");
-                  designateBox(
+                onClick={() =>
+                  designateFromInspector(
+                    "MILITIA_PATROL",
                     activeInspect.coord.x,
                     activeInspect.coord.y,
-                    Math.min(gridWidth - 1, activeInspect.coord.x + 5),
-                    activeInspect.coord.y,
-                    "MILITIA_PATROL",
                     activeInspect.coord.z,
-                  );
-                }}
+                    Math.min(gridWidth - 1, activeInspect.coord.x + 5),
+                  )
+                }
                 className="px-1.5 py-0.5 border border-[#2a2a2a] text-[#00ffff] hover:border-[#00ffff]"
               >
                 [ » PATROL HERE ]
@@ -1575,7 +1592,7 @@ export default function ASCIIViewport() {
                   }}
                   className="px-2.5 py-1 border border-[#33ff00] bg-[#0a220a] text-[#33ff00] hover:bg-[#143814] disabled:opacity-40 disabled:border-[#444444] disabled:text-[#808080] font-bold text-[11px] shrink-0"
                 >
-                  [ {buildingFn.actionLabel} ]
+                  [ {buildingFn.actionLabel}{buildingFn.readyInTicks > 0 ? ` · ready in ${buildingFn.readyInTicks}t` : ""} ]
                 </button>
               </div>
             );

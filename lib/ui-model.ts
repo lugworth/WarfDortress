@@ -16,6 +16,7 @@ import {
   getWeatherTileVisuals,
   isShelteredOrPavedTile,
 } from "./weather.ts";
+import { getBuildingUnlockStatus } from "./progression.ts";
 
 
 export interface PreviewTile {
@@ -72,6 +73,11 @@ export function getDesignationPreview(
     z >= state.world.depth
   )
     return preview;
+  const unlock = getBuildingUnlockStatus(state, type);
+  const lockedReason =
+    unlock && !unlock.unlocked
+      ? `Locked blueprint: ${unlock.requirementLabel}.`
+      : null;
   // The engine compares integer tile indices against the clipped rectangle.
   const minX = Math.ceil(Math.max(0, Math.min(x1, x2)));
   const maxX = Math.floor(Math.min(state.world.width - 1, Math.max(x1, x2)));
@@ -81,7 +87,7 @@ export function getDesignationPreview(
     for (let x = minX; x <= maxX; x++) {
       const tile = state.grid[z]?.[y]?.[x];
       if (!tile) continue;
-      const valid = canDesignateTile(tile, type);
+      const valid = !lockedReason && canDesignateTile(tile, type);
       const alreadyDesignated =
         valid && type !== "CANCEL" && tile.designation === type;
       preview.tiles.push({
@@ -96,7 +102,7 @@ export function getDesignationPreview(
                 "This order is already queued; it will not be duplicated.",
             }
           : !valid
-            ? { reason: rejectionReason(tile, type) }
+            ? { reason: lockedReason ?? rejectionReason(tile, type) }
             : {}),
       });
       if (valid) preview.accepted++;

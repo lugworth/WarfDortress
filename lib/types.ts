@@ -544,6 +544,8 @@ export interface GameState {
     claimedMilestones?: string[];
     strangeMood?: StrangeMoodState | null;
     unlockedBuildings?: DesignationType[];
+    /** Tick at which each building type's manual action can be used again. */
+    buildingReadyAt?: Partial<Record<TileTerrain, number>>;
     militia?: MilitiaState;
   };
 }

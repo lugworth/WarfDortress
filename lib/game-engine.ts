@@ -26,7 +26,7 @@ import {
 } from './world-gen.ts';
 import { createInitialGuildState } from './guild.ts';
 import { createExpeditionState } from './expeditions.ts';
-import { syncBuildingUnlocks, triggerStrangeMood } from './progression.ts';
+import { isBuildingUnlocked, syncBuildingUnlocks, triggerStrangeMood } from './progression.ts';
 import {
   appendDwarfThought,
   evaluateAmbientDwarfThoughts,
@@ -921,7 +921,7 @@ export function applyAreaDesignation(
   const minY = Math.max(0, Math.min(y1, y2));
   const maxY = Math.min(state.world.height - 1, Math.max(y1, y2));
 
-  if (z < 0 || z >= state.world.depth) {
+  if (z < 0 || z >= state.world.depth || !isBuildingUnlocked(state, type)) {
     return { nextState: state, count: 0 };
   }
 
@@ -2382,12 +2382,28 @@ export interface BuildingTileFunctionInfo {
   actionDescription: string;
   cost: Partial<FortressResources>;
   canActivate: boolean;
+  /** Ticks until this building type's action can be used again (0 = ready). */
+  readyInTicks: number;
 }
+
+/** Each building type's manual action recharges for this many ticks after use. */
+export const BUILDING_ACTION_COOLDOWN_TICKS = 24;
 
 export function getBuildingTileFunctionInfo(
   state: GameState,
   tile: Tile
 ): BuildingTileFunctionInfo | null {
+  const info = describeBuildingTileFunction(state, tile);
+  if (!info) return null;
+  const readyAt = state.activities?.buildingReadyAt?.[tile.terrain] ?? 0;
+  const readyInTicks = Math.max(0, readyAt - state.ticks);
+  return { ...info, readyInTicks, canActivate: info.canActivate && readyInTicks === 0 };
+}
+
+function describeBuildingTileFunction(
+  state: GameState,
+  tile: Tile
+): Omit<BuildingTileFunctionInfo, 'readyInTicks'> | null {
   if (!tile.revealed) return null;
   const econ = getResourceEconomyBalance(state);
   const res = state.resources;
@@ -2566,6 +2582,13 @@ export function activateBuildingTileFunction(
   if (!fnInfo) {
     return { nextState: state, triggered: false, message: 'No active building function on this tile.' };
   }
+  if (fnInfo.readyInTicks > 0) {
+    return {
+      nextState: state,
+      triggered: false,
+      message: `${fnInfo.title} is recovering — ready in ${fnInfo.readyInTicks} ticks.`,
+    };
+  }
   if (!fnInfo.canActivate || !hasResources(state.resources, fnInfo.cost)) {
     return {
       nextState: state,
@@ -2734,6 +2757,13 @@ export function activateBuildingTileFunction(
     resources,
     dwarves,
     chronicle: [entry, ...state.chronicle.slice(0, 59)],
+    activities: {
+      ...state.activities,
+      buildingReadyAt: {
+        ...state.activities?.buildingReadyAt,
+        [tile.terrain]: state.ticks + BUILDING_ACTION_COOLDOWN_TICKS,
+      },
+    },
   };
   nextState = syncBuildingUnlocks(nextState).nextState;
 

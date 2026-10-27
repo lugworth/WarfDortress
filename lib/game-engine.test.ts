@@ -13,7 +13,7 @@ import {
 } from './game-engine.ts';
 import { generateRandomWorldSeed, getSurfaceArchetype } from './world-gen.ts';
 import { findPath, nextStepAlongPath } from './pathfinding.ts';
-import type { Tile } from './types.ts';
+import type { GameState, Tile } from './types.ts';
 
 test('deterministic world generation creates multi-level strata, biomes, cavern relics, and 7 pioneers', () => {
   const state1 = createInitialGameState('Moria-777');
@@ -414,7 +414,7 @@ test('a dwarf who falls in combat leaves the roster, squads, bonds, and relic be
 });
 
 test('an empty fortress keeps simulating without crashing', () => {
-  let state = { ...createInitialGameState('Empty-Halls'), dwarves: [] };
+  let state: GameState = { ...createInitialGameState('Empty-Halls'), dwarves: [] };
   assert.doesNotThrow(() => generateContextAwareEvent(state, 'STRANGE_MOOD'));
   for (let i = 0; i < 130; i++) state = stepSimulationTick({ ...state, activeEvent: null });
   assert.ok(state.ticks === 130);

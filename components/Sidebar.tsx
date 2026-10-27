@@ -1175,7 +1175,7 @@ export default function Sidebar({ activeTab, onTabChange }: { activeTab: Sidebar
                           }}
                           className="w-full py-1 px-2 border border-[#33ff00] bg-[#091c09] text-[#33ff00] hover:bg-[#123212] disabled:opacity-40 disabled:border-[var(--ui-border)] disabled:text-[var(--ui-muted)] font-bold text-[10px] text-center"
                         >
-                          [ {item.fn.actionLabel} ]
+                          [ {item.fn.actionLabel}{item.fn.readyInTicks > 0 ? ` · ready in ${item.fn.readyInTicks}t` : ''} ]
                         </button>
                       </div>
                     ))}
