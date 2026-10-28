@@ -157,3 +157,53 @@ export function dwarfAnimation(state: string, armed: boolean, moving: boolean): 
 export function dwarfSpriteName(anim: DwarfAnim, helmet: boolean): SpriteName {
   return `${helmet ? 'dwarf_helm' : 'dwarf'}_${anim}` as SpriteName;
 }
+
+/** One color per terrain for the minimap. */
+export const MINIMAP_COLORS: Record<TileTerrain, string> = {
+  EMPTY_AIR: '#0d0a12',
+  WATER: '#2b6ea8',
+  GRASS: '#4f9a45',
+  TREE: '#2f6a3b',
+  SHRUB: '#4f9a45',
+  SAND: '#d9b679',
+  SOIL: '#74452a',
+  ROCK_WALL: '#524658',
+  LIMESTONE_WALL: '#6e6172',
+  GRANITE_WALL: '#3b3145',
+  IRON_VEIN: '#e5533d',
+  COPPER_VEIN: '#5fc4ad',
+  GOLD_VEIN: '#f5c542',
+  MITHRIL_VEIN: '#9ee3ff',
+  MAGMA: '#ff8e3c',
+  ROCK_FLOOR: '#3f3236',
+  CONSTRUCTED_WALL: '#8f8191',
+  DOOR: '#a06a3d',
+  BED: '#9a55c9',
+  WORKSHOP_MASON: '#d7a0ff',
+  WORKSHOP_CARPENTER: '#d7a0ff',
+  WORKSHOP_STILL: '#d7a0ff',
+  WORKSHOP_SMELTER: '#d7a0ff',
+  WORKSHOP_FORGE: '#d7a0ff',
+  TAVERN_HALL: '#d7a0ff',
+  TEMPLE_ALTAR: '#d7a0ff',
+  TRADE_DEPOT: '#d7a0ff',
+  TRAP_STONE: '#a82a2f',
+  CAVERN_RELIC: '#e0fbff',
+  FARM_PLOT: '#8fcf5c',
+  STAIRS_UP_DOWN: '#f0d9a0',
+  STOCKPILE_TILE: '#c88a1e',
+};
+
+/** Icon for the current surface weather. */
+export function weatherIcon(id: WeatherConditionId): SpriteName {
+  switch (id) {
+    case 'SUMMER_SUN':
+    case 'SPRING_THAW': return 'icon_sun';
+    case 'SPRING_SHOWER':
+    case 'AUTUMN_RAIN': return 'icon_rain';
+    case 'SUMMER_SQUALL':
+    case 'WINTER_BLIZZARD': return 'icon_storm';
+    case 'AUTUMN_MIST': return 'icon_mist';
+    case 'WINTER_SNOW': return 'icon_snow';
+  }
+}

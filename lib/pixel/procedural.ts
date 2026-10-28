@@ -94,8 +94,12 @@ export function rockTile(seed: number, face: 'top' | 'front', tones = { dark: '1
 }
 
 /** Unexplored rock: near-black with a faint dither so the void reads as solid. */
+/** Unexplored rock: a dim, cracked mass, darker than any wall the dwarves have seen. */
 export function fogTile(seed: number): Frame {
-  return generate((x, y) => ((x + y) % 4 === 0 && hash01(x, y, seed) > 0.55 ? 'K' : 'k'));
+  return generate((x, y) => {
+    if ((x + y * 3) % 7 === 0 && hash01(x, y, seed) > 0.62) return '2';
+    return tileNoise(x, y, seed, 4) < 0.32 ? 'K' : '1';
+  });
 }
 
 /** One frame of rippling water. */

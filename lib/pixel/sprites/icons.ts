@@ -781,6 +781,59 @@ export const ICON_SPRITES = {
     ....k55555k.
     ....kkkkkkk.
     ............`),
+  // ---------------------------------------------------------- map controls
+  icon_hand: icon(`
+    ....kk......
+    ...kxZkkk...
+    ...kxZkxZkk.
+    .kkkxZkxZkZk
+    kxZkxZkxZkZk
+    kxZkxZZZZZZk
+    .kZZZZZZZZZk
+    .kZZZZZZZZk.
+    ..kZZZZZZzk.
+    ..kzZZZZzk..
+    ...kzzzzk...
+    ....kkkk....`),
+  icon_tag: icon(`
+    ............
+    .kkkkkk.....
+    .kAAAAAk....
+    .kAkkaaak...
+    .kAkkaaaak..
+    .kAaaaaaaak.
+    .kaaaaaaaaak
+    .kDaaaaaaak.
+    ..kDaaaaak..
+    ...kDaaak...
+    ....kDDk....
+    .....kk.....`),
+  icon_target: icon(`
+    .....kk.....
+    ...kkeekk...
+    ..kRk..kRk..
+    .kRk....kRk.
+    .ke..kk..ek.
+    kek.keek.kek
+    kek.keek.kek
+    .ke..kk..ek.
+    .kRk....kRk.
+    ..kRk..kRk..
+    ...kkeekk...
+    .....kk.....`),
+  icon_hammer: icon(`
+    ............
+    ..kkkkk.....
+    .kiiiVVk....
+    kiVVVvvvk...
+    kVvvkkWbk...
+    .kkk.kWbbk..
+    ......kWbk..
+    .......kWbk.
+    ........kWbk
+    .........kWk
+    ..........k.
+    ............`),
 } satisfies Record<string, SpriteDef>;
 
 function recolorArt(text: string, map: Record<string, string>): string {
