@@ -16,6 +16,12 @@ export function isModalOpen(): boolean {
 
 const supportsClosedBy = typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype;
 
+/** True when a pointer event lands outside the dialog box, i.e. on its backdrop. */
+function outside(e: React.PointerEvent<HTMLDialogElement>) {
+  const r = e.currentTarget.getBoundingClientRect();
+  return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+}
+
 /**
  * A native modal dialog: the browser supplies the focus trap, Escape to close,
  * an inert page behind it, and the top layer. Decision dialogs pause the clock.
@@ -34,6 +40,7 @@ export function PixelDialog({ open, onClose, title, subtitle, icon, children, fo
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const pressedOutside = useRef(false);
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   usePauseWhileOpen(open && pause);
@@ -63,11 +70,11 @@ export function PixelDialog({ open, onClose, title, subtitle, icon, children, fo
       aria-labelledby={titleId}
       {...{ closedby: 'any' }}
       style={width ? ({ '--dialog-width': `${width}px` } as React.CSSProperties) : undefined}
-      onClick={(event) => {
-        // Light dismiss for browsers without closedby: a click on the dialog
-        // element itself landed on its backdrop.
-        if (!supportsClosedBy && event.target === event.currentTarget) ref.current?.close();
-      }}
+      // Light dismiss where closedby is unsupported. Both the press and the
+      // release must land on the backdrop, so a text selection dragged out of
+      // the dialog does not close it.
+      onPointerDown={(e) => { pressedOutside.current = !supportsClosedBy && outside(e); }}
+      onPointerUp={(e) => { if (pressedOutside.current && outside(e)) ref.current?.close(); }}
     >
       <header className="dialog-head">
         {icon && <PixelIcon name={icon} scale={2} />}

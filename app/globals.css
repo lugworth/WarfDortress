@@ -389,7 +389,7 @@ textarea.px-input {
   background-size: 100% 100%;
 }
 .px-sprite-strip { background-size: calc(var(--frames) * 100%) 100%; }
-.px-sprite-anim { animation: px-sprite var(--duration, 600ms) steps(var(--frames)) infinite; }
+.px-sprite-anim { animation: px-sprite var(--duration, 600ms) steps(var(--frames)) infinite; @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; } }
 @keyframes px-sprite {
   from { background-position: 0 0; }
   to { background-position: calc(var(--w) * var(--frames) * -1) 0; }
@@ -407,6 +407,8 @@ details > summary::before {
 details[open] > summary::before { rotate: 90deg; }
 
 /* ---------------------------------------------------------------- shell */
+/* Every animated rule in this file turns its motion off under the system
+   reduced-motion setting and under the in-game "Reduce motion" setting. */
 
 .app {
   min-height: 100dvh;
@@ -486,10 +488,10 @@ details[open] > summary::before { rotate: 90deg; }
   font-variant-numeric: tabular-nums;
 }
 .resource strong { display: inline-block; font-weight: 700; min-width: 2ch; text-align: right; }
-.resource[data-low] { box-shadow: 0 0 0 var(--u) var(--red); animation: low-blink 1.2s steps(2) infinite; }
+.resource[data-low] { box-shadow: 0 0 0 var(--u) var(--red); animation: low-blink 1.2s steps(2) infinite; @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; } }
 .resource[data-low] strong { color: var(--red); }
-.resource[data-bump="up"] strong { animation: bump-up 420ms steps(3); }
-.resource[data-bump="down"] strong { animation: bump-down 420ms steps(3); }
+.resource[data-bump="up"] strong { animation: bump-up 420ms steps(3); @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; } }
+.resource[data-bump="down"] strong { animation: bump-down 420ms steps(3); @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; } }
 @keyframes bump-up { 0% { color: var(--green); translate: 0 calc(var(--u) * -2); } 100% { translate: 0 0; } }
 @keyframes bump-down { 0% { color: var(--red); translate: 0 var(--u); } 100% { translate: 0 0; } }
 @keyframes low-blink { 50% { background: #3a1218; } }
@@ -569,6 +571,7 @@ details[open] > summary::before { rotate: 90deg; }
   font-size: 0.95em;
   box-shadow: 0 0 0 var(--u) var(--edge);
   animation: badge-pop 1.2s steps(2) infinite;
+  @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; }
 }
 @keyframes badge-pop { 50% { translate: 0 calc(var(--u) * -1); } }
 .rail-sep { height: var(--u); margin: calc(var(--u) * 2) calc(var(--u) * 3); background: var(--edge-light); flex: none; }
@@ -583,6 +586,7 @@ details[open] > summary::before { rotate: 90deg; }
   background: var(--panel);
   box-shadow: var(--u) 0 0 0 var(--edge), calc(var(--u) * 2) 0 0 0 var(--edge-light);
   animation: drawer-in 160ms steps(4);
+  @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; }
 }
 .drawer--right {
   box-shadow: calc(var(--u) * -1) 0 0 0 var(--edge), calc(var(--u) * -2) 0 0 0 var(--edge-light);
@@ -651,6 +655,7 @@ details[open] > summary::before { rotate: 90deg; }
     calc(var(--u) * -1) 0 0 0 var(--gold-2), var(--u) 0 0 0 var(--gold-2),
     0 calc(var(--u) * 4) 0 0 rgb(0 0 0 / 0.4);
   animation: banner-in 320ms steps(4), banner-glow 1.6s steps(2) 320ms infinite;
+  @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; }
 }
 .event-banner[data-danger] { box-shadow: 0 calc(var(--u) * -1) 0 0 var(--red), 0 var(--u) 0 0 var(--red), calc(var(--u) * -1) 0 0 0 var(--red), var(--u) 0 0 0 var(--red), 0 calc(var(--u) * 4) 0 0 rgb(0 0 0 / 0.4); }
 .event-banner strong { color: var(--gold); white-space: nowrap; }
@@ -756,6 +761,7 @@ details[open] > summary::before { rotate: 90deg; }
   line-height: 1;
   box-shadow: inset 0 var(--u) 0 var(--edge-light), 0 var(--u) 0 var(--edge);
   transition: translate 80ms steps(2);
+  @media (prefers-reduced-motion: reduce) { transition: none; } .app[data-reduced-motion="true"] & { transition: none; }
 }
 .tool-btn:hover:not(:disabled) { color: var(--text); translate: 0 calc(var(--u) * -1); }
 .tool-btn[aria-pressed="true"], .tool-btn[aria-expanded="true"] {
@@ -810,6 +816,7 @@ details[open] > summary::before { rotate: 90deg; }
   overflow-y: auto;
   padding: calc(var(--u) * 5) calc(var(--u) * 6);
   animation: card-in 160ms steps(3);
+  @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; }
 }
 @keyframes card-in { from { translate: -50% calc(var(--u) * 8); opacity: 0; } }
 .map-options {
@@ -922,7 +929,9 @@ details[open] > summary::before { rotate: 90deg; }
 .advisor-input { display: flex; align-items: center; gap: calc(var(--u) * 2); padding: calc(var(--u) * 3) calc(var(--u) * 4); background: var(--panel-2); box-shadow: 0 calc(var(--u) * -1) 0 var(--edge); }
 .advisor-input .px-input { flex: 1; }
 .typing { margin: 0; }
-.dots::after { content: "..."; display: inline-block; width: 3ch; text-align: left; animation: dots 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; }
+.dots::after { content: "..."; display: inline-block; width: 3ch; text-align: left; animation: dots 1.2s steps(4) infinite; overflow: hidden; vertical-align: bottom; @media (prefers-reduced-motion: reduce) { animation: none; } }
+/* A nesting selector cannot stand for a pseudo-element, so this one is spelled out. */
+.app[data-reduced-motion="true"] .dots::after { animation: none; }
 @keyframes dots { from { width: 0; } to { width: 4ch; } }
 
 .tutorial-steps { display: flex; gap: var(--u); }
@@ -947,7 +956,7 @@ dialog.px-dialog {
   background: var(--panel);
   overflow: hidden;
 }
-dialog.px-dialog[open] { display: flex; flex-direction: column; animation: dialog-in 200ms steps(4); }
+dialog.px-dialog[open] { display: flex; flex-direction: column; animation: dialog-in 200ms steps(4); @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; } }
 dialog.px-dialog:modal { overscroll-behavior: contain; }
 dialog.px-dialog::backdrop {
   background: rgb(9 6 14 / 0.78);
@@ -1041,6 +1050,7 @@ dialog.px-dialog::backdrop {
   pointer-events: auto;
   cursor: pointer;
   animation: toast-in 220ms steps(4);
+  @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; }
 }
 .toast[data-tone="danger"] { --panel: #3a1218; }
 .toast[data-tone="good"] { --panel: #16301a; }
@@ -1081,12 +1091,13 @@ dialog.px-dialog::backdrop {
   color: var(--gold);
   text-shadow: 0 var(--u) 0 var(--gold-2), 0 calc(var(--u) * 2) 0 var(--gold-3), calc(var(--u) * 2) calc(var(--u) * 4) 0 var(--edge);
   animation: logo-float 2.4s steps(2) infinite;
+  @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; }
 }
 .title-logo small { display: block; margin-top: calc(var(--u) * 5); font-size: 0.26em; color: var(--text); text-shadow: var(--u) var(--u) 0 var(--edge); letter-spacing: 0.15em; text-transform: uppercase; }
 @keyframes logo-float { 50% { translate: 0 calc(var(--u) * -2); } }
 .title-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: calc(var(--u) * 8); align-items: start; }
 .title-card { display: grid; gap: calc(var(--u) * 5); padding: calc(var(--u) * 7); background: color-mix(in srgb, var(--panel) 94%, transparent); }
-.title-start { font-size: 1.1em; min-height: calc(var(--u) * 24); animation: start-glow 1.4s steps(2) infinite; }
+.title-start { font-size: 1.1em; min-height: calc(var(--u) * 24); animation: start-glow 1.4s steps(2) infinite; @media (prefers-reduced-motion: reduce) { animation: none; } .app[data-reduced-motion="true"] & { animation: none; } }
 @keyframes start-glow { 50% { filter: brightness(1.18); } }
 .realm-facts { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * 2) calc(var(--u) * 6); margin: 0; padding: calc(var(--u) * 4); background: var(--inset); }
 .realm-facts div { min-width: 0; }
@@ -1187,19 +1198,4 @@ dialog.px-dialog::backdrop {
   .title-screen { padding: calc(var(--u) * 4); }
   .title-card { padding: calc(var(--u) * 5); }
   .toasts { top: calc(var(--u) * 24); }
-}
-
-/* ------------------------------------------------------- reduced motion */
-
-.app[data-reduced-motion="true"] *,
-.app[data-reduced-motion="true"] *::before,
-.app[data-reduced-motion="true"] *::after {
-  animation: none !important;
-  transition: none !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .px-sprite-anim, .title-logo, .title-start, .rail-btn .badge, .event-banner, .resource[data-low], .dots::after { animation: none; }
-  .resource strong, .drawer, .map-card, dialog.px-dialog[open], .toast { animation: none; }
-  .px-meter > span, .tool-btn, .px-btn { transition: none; }
 }
