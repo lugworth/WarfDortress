@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "test": "node --test --experimental-strip-types lib/*.test.ts",
+    "test": "node --test --experimental-strip-types 'lib/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run lint && npm test",
     "build": "NODE_ENV=production next build",

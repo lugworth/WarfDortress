@@ -306,38 +306,6 @@ export function groupChronicle(
     .map(({ entry, count }) => ({ ...entry, count }));
 }
 
-export function asciiBar(value: number, max = 100, width = 6): string {
-  const safeMax = Math.max(1, max);
-  const ratio = Math.max(0, Math.min(1, value / safeMax));
-  const filled = Math.round(ratio * width);
-  return `[${'█'.repeat(filled)}${'░'.repeat(Math.max(0, width - filled))}]`;
-}
-
-export const TOOL_GLYPHS: Record<DesignationType, string> = {
-  MINE: '⛏',
-  CHOP: '♠',
-  GATHER: '"',
-  STAIRS: 'X',
-  STOCKPILE: '≡',
-  RECLAIM_RELIC: '☼',
-  BUILD_WALL: '#',
-  BUILD_DOOR: '+',
-  BUILD_TRAP: '^',
-  BUILD_BED: '⌂',
-  BUILD_MASON: 'M',
-  BUILD_CARPENTER: 'C',
-  BUILD_STILL: 'S',
-  BUILD_SMELTER: '£',
-  BUILD_FORGE: '⚒',
-  BUILD_TAVERN: '♫',
-  BUILD_TEMPLE: 'Ψ',
-  BUILD_DEPOT: '¤',
-  BUILD_FARM: '≈',
-  MILITIA_STATION: '♦',
-  MILITIA_PATROL: '»',
-  CANCEL: '×',
-};
-
 export interface TileHoverMetadata {
   x: number;
   y: number;

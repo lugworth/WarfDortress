@@ -6,6 +6,7 @@ import React, {
   useContext,
   useEffect,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { DesignationType } from "@/lib/types";
 import {
@@ -26,8 +27,17 @@ interface UIContextValue {
   openOverlay: (overlay: Exclude<Overlay, null>) => void;
   closeOverlay: () => void;
   storageError: string;
+  /** The in-game setting or the system preference asks for less motion. */
+  reducedMotion: boolean;
 }
 const UIContext = createContext<UIContextValue | null>(null);
+
+const REDUCE_QUERY = "(prefers-reduced-motion: reduce)";
+function subscribeReducedMotion(onChange: () => void) {
+  const query = window.matchMedia(REDUCE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
 
 export function UIProvider({ children }: { children: React.ReactNode }) {
   const [preferences, setPreferences] = useState<UIPreferences>(DEFAULT_UI);
@@ -83,6 +93,12 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
     [],
   );
   const closeOverlay = useCallback(() => setOverlay(null), []);
+  const systemReducedMotion = useSyncExternalStore(
+    subscribeReducedMotion,
+    () => window.matchMedia(REDUCE_QUERY).matches,
+    () => false,
+  );
+  const reducedMotion = preferences.reducedMotion || systemReducedMotion;
   return (
     <UIContext.Provider
       value={{
@@ -93,10 +109,11 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
         openOverlay,
         closeOverlay,
         storageError,
+        reducedMotion,
       }}
     >
       <div
-        className="fortress-ui"
+        className="app"
         data-theme={preferences.theme}
         data-reduced-motion={preferences.reducedMotion}
         onClickCapture={(e) => {
@@ -107,7 +124,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
         }}
         style={
           {
-            "--ui-font-size": `${preferences.fontSize}px`,
+            fontSize: `${preferences.fontSize}px`,
           } as React.CSSProperties
         }
       >

@@ -1,12 +1,13 @@
 import type { DesignationType } from "./types";
 
-export const FONT_SIZES = [12, 14, 16, 18, 20] as const;
-export const MAP_ZOOMS = [50, 75, 100, 125, 150, 200] as const;
+export const FONT_SIZES = [14, 16, 18, 20, 22] as const;
+/** Map zoom presets: percent of one sprite pixel per CSS pixel. */
+export const MAP_ZOOMS = [100, 150, 200, 300, 400] as const;
 
-export const UI_STORAGE_KEY = "ascii_fortress_ui_prefs_v1";
+export const UI_STORAGE_KEY = "deep_anvil_ui_prefs_v2";
 
 export interface UIPreferences {
-  theme: "terminal" | "contrast";
+  theme: "pixel" | "contrast";
   fontSize: number;
   mapZoom: number | "fit";
   reducedMotion: boolean;
@@ -16,9 +17,9 @@ export interface UIPreferences {
 }
 
 export const DEFAULT_UI: UIPreferences = {
-  theme: "terminal",
-  fontSize: 14,
-  mapZoom: "fit",
+  theme: "pixel",
+  fontSize: 16,
+  mapZoom: 200,
   reducedMotion: false,
   labels: false,
   tooltips: true,
@@ -30,11 +31,11 @@ export function parseUIPreferences(raw: string | null): UIPreferences {
   try {
     const parsed = JSON.parse(raw);
     return {
-      theme: parsed.theme === "contrast" ? "contrast" : "terminal",
-      fontSize: typeof parsed.fontSize === "number" && FONT_SIZES.includes(parsed.fontSize as any)
+      theme: parsed.theme === "contrast" ? "contrast" : "pixel",
+      fontSize: typeof parsed.fontSize === "number" && FONT_SIZES.includes(parsed.fontSize)
         ? parsed.fontSize
         : DEFAULT_UI.fontSize,
-      mapZoom: parsed.mapZoom === "fit" || (typeof parsed.mapZoom === "number" && parsed.mapZoom >= 20 && parsed.mapZoom <= 300)
+      mapZoom: parsed.mapZoom === "fit" || MAP_ZOOMS.includes(parsed.mapZoom)
         ? parsed.mapZoom
         : DEFAULT_UI.mapZoom,
       reducedMotion: Boolean(parsed.reducedMotion),
