@@ -21,7 +21,6 @@ export interface ToolDefinition {
   label: string;
   desc: string;
   group: ToolGroup;
-  color: string;
 }
 
 export const TOOLS: ToolDefinition[] = [
@@ -30,154 +29,132 @@ export const TOOLS: ToolDefinition[] = [
     label: TOOL_NAMES.MINE,
     desc: "Dig into subterranean rock walls and mine ore deposits.",
     group: "Excavation & Harvest",
-    color: "text-[var(--ui-warning)]",
   },
   {
     id: "CHOP",
     label: TOOL_NAMES.CHOP,
     desc: "Fell surface trees to supply the carpenter with timber.",
     group: "Excavation & Harvest",
-    color: "text-[var(--ui-success)]",
   },
   {
     id: "GATHER",
     label: TOOL_NAMES.GATHER,
     desc: "Gather surface shrubs, roots, and wild plants for brewing.",
     group: "Excavation & Harvest",
-    color: "text-[var(--ui-success)]",
   },
   {
     id: "STAIRS",
     label: TOOL_NAMES.STAIRS,
     desc: "Carve stairways to connect surface strata with subterranean depths.",
     group: "Excavation & Harvest",
-    color: "text-[var(--ui-warning)]",
   },
   {
     id: "STOCKPILE",
     label: TOOL_NAMES.STOCKPILE,
     desc: "Zone dedicated floor space to haul and organize fortress supplies.",
     group: "Orders",
-    color: "text-[var(--ui-info)]",
   },
   {
     id: "RECLAIM_RELIC",
     label: TOOL_NAMES.RECLAIM_RELIC,
     desc: "Recover ancient cavern relics and bring them to your vaults.",
     group: "Excavation & Harvest",
-    color: "text-[var(--ui-accent)]",
   },
   {
     id: "BUILD_WALL",
     label: TOOL_NAMES.BUILD_WALL,
     desc: "Erect cut-stone walls to fortify corridors and defend the entrance.",
     group: "Architecture",
-    color: "text-[var(--ui-bright)]",
   },
   {
     id: "BUILD_DOOR",
     label: TOOL_NAMES.BUILD_DOOR,
     desc: "Construct reinforced wooden or stone doors with lock mechanisms.",
     group: "Architecture",
-    color: "text-[var(--ui-warning)]",
   },
   {
     id: "BUILD_TRAP",
     label: TOOL_NAMES.BUILD_TRAP,
     desc: "Set lethal falling-stone mechanisms triggered by intruder steps.",
     group: "Architecture",
-    color: "text-[var(--ui-danger)]",
   },
   {
     id: "BUILD_BED",
     label: TOOL_NAMES.BUILD_BED,
     desc: "Place carved beds in pioneer quarters to restore energy and mood.",
     group: "Architecture",
-    color: "text-[var(--ui-info)]",
   },
   {
     id: "BUILD_FARM",
     label: TOOL_NAMES.BUILD_FARM,
     desc: "Establish subterranean plump helmet farms on rich muddy loam.",
     group: "Workshops",
-    color: "text-[var(--ui-success)]",
   },
   {
     id: "BUILD_MASON",
     label: TOOL_NAMES.BUILD_MASON,
     desc: "Construct a stoneworker bench for blocks, statues, and furniture.",
     group: "Workshops",
-    color: "text-[var(--ui-bright)]",
   },
   {
     id: "BUILD_CARPENTER",
     label: TOOL_NAMES.BUILD_CARPENTER,
     desc: "Construct a woodworking shop for barrels, bins, and weapon racks.",
     group: "Workshops",
-    color: "text-[var(--ui-warning)]",
   },
   {
     id: "BUILD_STILL",
     label: TOOL_NAMES.BUILD_STILL,
     desc: "Construct a copper still to brew sweet dwarven ale from harvested plants.",
     group: "Workshops",
-    color: "text-[var(--ui-violet)]",
   },
   {
     id: "BUILD_SMELTER",
     label: TOOL_NAMES.BUILD_SMELTER,
     desc: "Construct a clay smeltery to process iron ore into gleaming steel.",
     group: "Workshops",
-    color: "text-[var(--ui-warning)]",
   },
   {
     id: "BUILD_FORGE",
     label: TOOL_NAMES.BUILD_FORGE,
     desc: "Construct an anvil forge to hammer steel battleaxes and chainmail.",
     group: "Workshops",
-    color: "text-[var(--ui-accent)]",
   },
   {
     id: "BUILD_TAVERN",
     label: TOOL_NAMES.BUILD_TAVERN,
     desc: "Designate a warm social gathering hall for tales, songs, and camaraderie.",
     group: "Civic & Community",
-    color: "text-[var(--ui-violet)]",
   },
   {
     id: "BUILD_TEMPLE",
     label: TOOL_NAMES.BUILD_TEMPLE,
     desc: "Consecrate an altar to ancestral mountain deities to lift clan spirits.",
     group: "Civic & Community",
-    color: "text-[var(--ui-warning)]",
   },
   {
     id: "BUILD_DEPOT",
     label: TOOL_NAMES.BUILD_DEPOT,
     desc: "Erect a broad merchant platform to barter with visiting seasonal caravans.",
     group: "Civic & Community",
-    color: "text-[var(--ui-accent)]",
   },
   {
     id: "MILITIA_STATION",
     label: TOOL_NAMES.MILITIA_STATION,
     desc: "Order the active militia squad to form a fortified shield-wall station on the designated floor.",
     group: "Orders",
-    color: "text-[var(--ui-danger)]",
   },
   {
     id: "MILITIA_PATROL",
     label: TOOL_NAMES.MILITIA_PATROL,
     desc: "Order the active militia squad to march a continuous patrol route between the start and end corners.",
     group: "Orders",
-    color: "text-[var(--ui-info)]",
   },
   {
     id: "CANCEL",
     label: TOOL_NAMES.CANCEL,
     desc: "Cancel queued designations and release assigned tasks.",
     group: "Orders",
-    color: "text-[var(--ui-danger)]",
   },
 ];
 
@@ -189,7 +166,6 @@ export function getTool(id: DesignationType): ToolDefinition {
       label: TOOL_NAMES[id] || id,
       desc: "Fortress command order",
       group: "Orders",
-      color: "text-[var(--ui-bright)]",
     }
   );
 }
