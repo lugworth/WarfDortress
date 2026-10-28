@@ -66,11 +66,23 @@ Opening `?autostart=1` restores the existing local checkpoint if available.
 Browser storage is tied to the site's address. A local preview and the deployed
 site have separate saves. Clearing browser data removes local saves.
 
-Cloud archives (Sign in with Google) store a summary: stockpiles, calendar, and
-seed. Loading one resumes this browser's full checkpoint of the same fortress
-when it is at least as recent; otherwise the map and clan start fresh from the
-seed with the archived stockpiles. Storing full snapshots in the cloud would
-need new Firestore rules (`firestore.rules`) deployed to the Firebase project.
+Cloud saves (Sign in with Google, then Save) store the whole fortress: a summary
+in `saves/{id}` for the archive list, and a gzip-compressed snapshot of the full
+game in `snapshots/{id}`, written together in one batch. A late-game fortress
+compresses to under 100 KB. Loading an archive resumes whichever full copy is
+newer, the cloud snapshot or this browser's checkpoint of the same fortress.
+Archives saved before snapshots existed still load: the map and clan restart
+from the seed with the archived stockpiles and calendar. Archive ids are
+namespaced per player, so two players who choose the same seed no longer
+collide; archives a player already owns keep their old id.
+
+Full cloud saves need the Firestore rules in `firestore.rules` deployed to the
+app's database. Until they are, Save keeps working and stores a summary only.
+
+```sh
+npx firebase-tools login
+npx firebase-tools deploy --only firestore:rules   # uses firebase.json and .firebaserc
+```
 
 ## Checks
 
@@ -80,8 +92,8 @@ npm run build
 ```
 
 Tests cover the simulation, pathfinding, UI models, progression, the
-copy-on-write grid, AI route input limits, and local save round trips, including
-compatibility with original unversioned saves.
+copy-on-write grid, AI route input limits, cloud snapshot round trips, and local
+save round trips, including compatibility with original unversioned saves.
 
 The simulation never mutates a published grid: `stepSimulationTick` edits a
 draft that copies only the rows it changes (`lib/grid.ts`). Terrain counts are

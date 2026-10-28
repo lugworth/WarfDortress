@@ -45,6 +45,31 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
+    // Gzip-compressed full fortress (lib/cloud-snapshot.ts), written in the same
+    // batch as the summary in /saves. Firestore caps a field near 1 MiB.
+    function isValidSnapshot(saveId, data) {
+      return data.keys().hasAll(['userId', 'format', 'ticks', 'data', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'format', 'ticks', 'data', 'updatedAt'])
+        && data.userId == request.auth.uid
+        && data.format is int && data.format >= 1 && data.format <= 16
+        && data.ticks is int && data.ticks >= 0
+        && data.data is bytes && data.data.size() > 0 && data.data.size() <= 900000
+        && data.updatedAt == request.time
+        // A snapshot only exists beside its owner's summary after the write.
+        && getAfter(/databases/$(database)/documents/saves/$(saveId)).data.userId == request.auth.uid;
+    }
+
+    match /snapshots/{saveId} {
+      allow get: if isSignedIn() && isValidId(saveId)
+        && (resource == null || existing().userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(saveId) && isValidSnapshot(saveId, incoming());
+      allow update: if isSignedIn()
+        && isValidId(saveId)
+        && existing().userId == request.auth.uid
+        && isValidSnapshot(saveId, incoming());
+      allow delete: if isSignedIn() && isValidId(saveId) && existing().userId == request.auth.uid;
+    }
+
     match /saves/{saveId} {
       allow get: if isSignedIn() && isValidId(saveId) && existing().userId == request.auth.uid;
       allow list: if isSignedIn() && existing().userId == request.auth.uid;

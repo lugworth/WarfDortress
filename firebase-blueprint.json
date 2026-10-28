@@ -19,12 +19,29 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "worldName", "dwarvenName", "seed", "ticks", "year", "season", "wealth", "population", "resources", "updatedAt"]
+    },
+    "FortressSnapshot": {
+      "title": "Fortress Snapshot",
+      "description": "Gzip-compressed full fortress state for a cloud save, stored beside its summary in /saves.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "format": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "ticks": { "type": "integer", "minimum": 0 },
+        "data": { "type": "string", "contentEncoding": "bytes", "maxLength": 900000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "format", "ticks", "data", "updatedAt"]
     }
   },
   "firestore": {
     "/saves/{saveId}": {
       "schema": "CloudFortressSave",
       "description": "Player fortress save slots"
+    },
+    "/snapshots/{saveId}": {
+      "schema": "FortressSnapshot",
+      "description": "Full fortress snapshot for the save with the same id"
     }
   }
 }

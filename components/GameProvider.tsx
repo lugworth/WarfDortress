@@ -57,8 +57,8 @@ import { generateRandomWorldSeed } from '@/lib/world-gen';
 import {
   auth,
   CloudFortressSave,
-  getCloudSaveId,
   listUserCloudSaves,
+  loadFortressSnapshot,
   saveFortressToCloud,
   signInWithGoogle,
   signOutUser,
@@ -115,7 +115,7 @@ interface GameContextType {
   handleCloudSave: () => Promise<void>;
   handleGoogleSignIn: () => Promise<void>;
   handleSignOut: () => Promise<void>;
-  loadCloudSave: (save: CloudFortressSave) => void;
+  loadCloudSave: (save: CloudFortressSave) => Promise<void>;
   performGuildAction: (action: GuildAction) => boolean;
   performExpeditionAction: (action: ExpeditionAction) => boolean;
   claimMilestone: (milestoneId: string) => boolean;
@@ -547,11 +547,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (savedLocally) setSaveStatus('Fortress saved in this browser.');
         return;
       }
-      setSaveStatus('Syncing fortress to Firestore...');
-      await saveFortressToCloud(gameState);
+      setSaveStatus('Syncing fortress to the cloud...');
+      const { full } = await saveFortressToCloud(gameState);
       const saves = await listUserCloudSaves();
       setCloudSaves(saves);
-      setSaveStatus(`Saved ${gameState.world.dwarvenName} to Firestore Cloud!`);
+      setSaveStatus(full
+        ? `Saved all of ${gameState.world.dwarvenName} to the cloud.`
+        : `Saved ${gameState.world.dwarvenName}'s stockpiles and calendar to the cloud. This server does not accept full fortress archives yet.`);
     } catch (e) {
       setSaveStatus(e instanceof Error ? e.message : 'Cloud save failed');
     }
@@ -575,29 +577,44 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } catch { setSaveStatus("Browser storage is unavailable."); }
   }, [startSession]);
 
+  const loadingCloudSave = useRef(false);
   const loadCloudSave = useCallback(
-    (save: CloudFortressSave) => {
-      // Cloud archives hold a summary. This browser's checkpoint of the same
-      // fortress has the full map and clan, so prefer it when it is as recent.
-      let local: GameState | null = null;
-      try { local = parseLocalSave(localStorage.getItem(LOCAL_SAVE_KEY)); } catch { /* storage disabled */ }
-      if (local && getCloudSaveId(local) === save.id && local.ticks >= save.ticks) {
-        startSession(local, `Resumed ${save.dwarvenName} with its full map from this browser. Press Resume when ready.`);
-        return;
+    async (save: CloudFortressSave) => {
+      if (loadingCloudSave.current) return;
+      loadingCloudSave.current = true;
+      setSaveStatus(`Opening ${save.dwarvenName}...`);
+      try {
+        // Resume whichever full copy is newest: the cloud snapshot or this
+        // browser's checkpoint of the same fortress.
+        let local: GameState | null = null;
+        try { local = parseLocalSave(localStorage.getItem(LOCAL_SAVE_KEY)); } catch { /* storage disabled */ }
+        const sameFortress = local && local.world.seed === save.seed ? local : null;
+        const archived = await loadFortressSnapshot(save.id);
+        const newest = [archived, sameFortress]
+          .filter((state): state is GameState => state !== null)
+          .sort((a, b) => b.ticks - a.ticks)[0];
+        if (newest) {
+          startSession(newest, newest === archived
+            ? `Loaded ${save.dwarvenName} from the cloud. Press Resume when ready.`
+            : `Resumed ${save.dwarvenName} from this browser, which is newer than the cloud archive. Press Resume when ready.`);
+          return;
+        }
+        // Summary-only archive: rebuild the world from its seed.
+        const restored = createInitialGameState(save.seed);
+        startSession({
+          ...restored,
+          ticks: save.ticks,
+          year: save.year,
+          season: (save.season as GameState['season']) || 'Granite (Spring)',
+          resources: {
+            ...restored.resources,
+            ...(save.resources || {}),
+          },
+          paused: true,
+        }, `Loaded ${save.dwarvenName} (Year ${save.year}). This archive only kept stockpiles and the calendar, so the map and clan start fresh from the seed.`);
+      } finally {
+        loadingCloudSave.current = false;
       }
-      const restored = createInitialGameState(save.seed);
-      startSession({
-        ...restored,
-        id: save.id,
-        ticks: save.ticks,
-        year: save.year,
-        season: (save.season as GameState['season']) || 'Granite (Spring)',
-        resources: {
-          ...restored.resources,
-          ...(save.resources || {}),
-        },
-        paused: true,
-      }, `Loaded ${save.dwarvenName} (Year ${save.year}). Cloud archives keep stockpiles and the calendar; the map and clan start fresh from the seed.`);
     },
     [startSession]
   );
